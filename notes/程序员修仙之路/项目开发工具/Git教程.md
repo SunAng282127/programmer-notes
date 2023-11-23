@@ -56,6 +56,9 @@
 - git config --global --list：查看全局配置
 - git config --global user.name ""：设置用户名
 - git config --global user.email ""：设置邮箱
+- git int：初始化仓库
+- git clone url：拉取远程仓库
+- git status 文件名称.后缀名：查看文件状态
 
 # 五、Git基础理论
 
@@ -66,6 +69,14 @@ Git本地有三个工作区域：工作目录(Working Directory)、暂存区(Sta
 大概的过程就是首先用git add将代码放到暂存区中，这个时候只是暂存，然后用git commit将代码发送到本地仓库中，最后用git push代码放置到github远程库中。git管理的文件有三种状态：已修改、已暂存、已提交
 
  <img src="D:\Program Files\TyporaData\TyporaImage\v2-51e676ef74e2d4cf8e63215811944766_720w.webp" alt="img" style="zoom:80%;" /> 
+
+#  六、Git项目创建以及克隆
+
+1. git init：初始化本地仓库
+2. git clone：从远程仓库拉取
+3. git add .：提交全部文件到暂存区，“.”可以换成具体的文件名称以及后缀名
+4. git commit -m "说明"：提交
+5. git push url：提交到远程仓库
 
 
 
