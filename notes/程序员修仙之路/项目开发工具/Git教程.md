@@ -59,6 +59,9 @@
 - git int：初始化仓库
 - git clone url：拉取远程仓库
 - git status 文件名称.后缀名：查看文件状态
+- git commit -m "说明"：提交到本地仓库
+- git push url：提交到远程仓库
+- [Git命令大全](https://gitee.com/all-about-git)
 
 # 五、Git基础理论
 
@@ -73,10 +76,47 @@ Git本地有三个工作区域：工作目录(Working Directory)、暂存区(Sta
 #  六、Git项目创建以及克隆
 
 1. git init：初始化本地仓库
+
 2. git clone：从远程仓库拉取
+
 3. git add .：提交全部文件到暂存区，“.”可以换成具体的文件名称以及后缀名
-4. git commit -m "说明"：提交
+
+4. git commit -m "说明"：提交到本地仓库
+
 5. git push url：提交到远程仓库
+
+6. 忽略文件，在主目录下建立“.gitignore”文件，规则如下
+
+   ```
+   .gitignore文件中的目录名称或文件名称都是相对于.gitignore来说的
+   忽略文件中的空行或以 # 开始的行将会被忽略
+   可以使用Linux通配符。例如 * 代表任意多个字符；? 代表一个字符；[] 代表可选字符范围；{} 代表可选的字符串
+   如果名称最前面有一个 !，表示例外规则，将不被忽略
+   如果名称最前面是一个路径分隔符（/）,表示要忽略的文件在此目录下，而子目录中的文件不忽略
+   如果名称最后面是一个路径分隔符（/）,表示要忽略的是此目录下该名称的子目录，而非文件（默认文件或目录都忽略）
+   ```
+
+   ```
+   # 为注释
+   *.txt		#忽略所有.txt结尾的文件
+   !lib.txtx	#lib.txt不忽略
+   /temp		#仅忽略项目根目录下的TODD文件，不包括其他目录temp
+   build/		#忽略build/目录下的所有文件
+   doc/*.txtx	#忽略doc/notes.txt 但是不包括doc/server/arch.txt
+   ```
+
+7. Gitee ssh免登录操作（可以存储在自创的文件夹中）
+
+   ```
+   ssh-keygen -t rsa		#rsa是常用的加密算法
+   将生成的公钥填入Gitee公钥中
+   ```
+
+8. git pull url：拉取代码
+
+#  七、同项目同时同步到Gitee和GitHub
+
+
 
 
 
