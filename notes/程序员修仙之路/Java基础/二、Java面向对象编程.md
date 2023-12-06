@@ -453,7 +453,7 @@ class B extends A{
 
 # 九、构造器
 
-#### 一、构造器的作用
+### 一、构造器的作用
 
 - 搭配new关键字，创建类的对象
 - 在创建对象的同时，可以给对象的相关属性赋值
@@ -754,6 +754,9 @@ class B extends A{
       computer.print(new USB(){
           // 方法
       });
+  
+  5. 若实现类与接口中的默认方法有重名的方法名，则使用以下格式去调用接口的默认方法
+      接口名.super.方法名();
   ```
 
 ### 六、抽象类和接口的区别
@@ -807,3 +810,278 @@ class B extends A{
    -  private+static修饰方法， 私有静态方法可以被接口中的默认方法和静态方法调用 
    -  private修饰方法时，此方法不能被abstract修饰 
 
+# 十七、内部类
+
+### 一、内部类的概念
+
+- 将一个类A定义在另一个类B里面，里面的那个类就称为内部类（InnerClass）,类B则称为外部类（OuterClass）
+
+### 二、内部类的使用原则
+
+- 当一个事物A的内部，还有一个部分需要一个完整的结构B进行描述，而这个内部的完整的结构B又只为外部事物A提供服务，不在其他地方单独使用，那么整个内部的完整结构B最好使用内部类
+- 遵循高内聚、低耦合原则
+
+### 三、内部类的分类
+
+1. 成员内部类：直接声明在外部类的里面
+   - 使用static修饰的静态的成员内部类
+   - 不使用static修饰的非静态的成员内部类
+2. 局部内部类：声明在方法内、构造器内、代码块内的内部类
+   - 匿名局部内部类
+   - 非匿名局部内部类
+
+### 三、成员内部类
+
+1. 从类的角度解释
+   - 内部类内部可以声明属性、方法、构造器、代码块、内部类等结构
+   - 此内部类可以声明父类，可以实现结构
+   - 可以使用final修饰
+   - 可以使用abstract修饰
+2. 从外部类的成员的角度解释
+   - 在内部类可以调用外部类的结构。比如属性、方法等
+   - 内部类可以使用四种权限修饰符进行修饰
+   - 可以使用static进行修饰内部类
+
+### 四、内部类的使用
+
+1. 创建静态的成员内部类的实例
+
+   ```java
+   class Person {
+   
+       //静态内部类
+       static class Dog {
+           public void eat() {
+               System.out.println("啃骨头");
+           }
+       }
+   }
+   
+   public class HelloWorld {
+       public static void main(String[] args) {
+           // 创建静态内部类的实例
+           Person.Dog dog = new Person.Dog();
+           dog.eat();
+       }
+   }
+   ```
+
+2. 创建非静态的成员内部类的实例
+
+   ```java
+   class Person {
+       
+       private String name;
+   
+       // 非静态内部类
+       class Bird {
+           
+           private String name;
+           
+           public void eat() {
+               // 内部类调用外部类的属性
+               System.out.println(Person.this.name);
+               System.out.println("吃虫子");
+           }
+       }
+   
+   }
+   
+   public class HelloWorld {
+       public static void main(String[] args) {
+           // 创建非静态内部类的实例
+           Person person = new Person();
+           Person.Bird bird = person.new Bird();
+           bird.eat();
+       }
+   }
+   
+   ```
+
+3. 创建局部内部类的实例
+
+   ```java
+   class Student{
+   
+       public Comparable method1(){
+           // 方式1：提供了接口的实现类的对象
+           class MyComparable implements Comparable{
+   
+               @Override
+               public int compareTo(Object o) {
+                   return 0;
+               }
+           }
+           MyComparable myComparable = new MyComparable();
+           return myComparable;
+       }
+   
+       public Comparable method2(){
+           // 方式2：提供了接口的实现类的匿名对象
+           class MyComparable implements Comparable{
+   
+               @Override
+               public int compareTo(Object o) {
+                   return 0;
+               }
+           }
+           return new MyComparable();
+       }
+   
+       public Comparable method3() {
+           // 方式3：提供了接口的匿名实现类的对象
+           Comparable comparable = new Comparable() {
+   
+               @Override
+               public int compareTo(Object o) {
+                   return 0;
+               }
+           };
+           return comparable;
+       }
+   
+       public Comparable method4(){
+           // 方式4：提供了接口的匿名实现类的匿名对象
+           return new Comparable() {
+               @Override
+               public int compareTo(Object o) {
+                   return 0;
+               }
+           };
+       }
+   }
+   
+   public class HelloWorld {
+       public static void main(String[] args) {
+           Student student = new Student();
+           student.method1().compareTo(45);
+           student.method2();
+           student.method3();
+           student.method4();
+       }
+   }
+   
+   ```
+
+# 十八、枚举类
+
+### 一、枚举类的理解
+
+- 枚举类型本质上也是一种类，只不过是这个类的对象是有限的、固定的几个，不能让用户随意创建
+
+### 二、枚举类的举例
+
+- 性别：Man(男)、Woman(女)
+- 三原色：Red(红色)、Green(绿色)、Blue(蓝色)
+
+### 三、枚举类的使用
+
+1. 若枚举只有一个对象，则可以作为一种单例模式的实现方式
+
+2. 使用enum关键字定义的枚举类，默认其父类是java.lang.Enum类，所以使用enum定义类时不能再使用继承。
+
+3. 使用enum关键字定义的枚举类可以实现接口中的抽象方法，通过枚举类的对象调用即可，当通过不同的枚举类对象调用此方法时执行的是同一个方法；让枚举类的每一个对象重写接口中的抽象方法，当通过不同的枚举类对象调用此方法时，执行的是不同的实现方法，也就是相当于匿名的实现类
+
+4. Enum类中常用的方法
+
+   - Season.Spring.toString：默认输出常量的名称
+   - Season.Spring..name：默认输出常量的名称
+   - Season.values：输出所有的常量
+   - Season.valueOf(常量名称)：输出特定常量名称的常量对象。找不到此值的则报错
+
+5. 枚举类的实现
+
+   - 在jdk5之前，需要程序员自定义枚举类型
+
+     ```java
+     class Season{
+     
+         // 将属性设置为私有的，防止修改数据
+         private final String seasonName;
+     
+         private final String seasonDesc;
+     
+         // 将构造器私有化，防止修改数据
+         private Season(String seasonName, String seasonDesc) {
+             this.seasonName = seasonName;
+             this.seasonDesc = seasonDesc;
+         }
+     
+         // 只提供get方法
+         public String getSeasonName() {
+             return seasonName;
+         }
+     
+         public String getSeasonDesc() {
+             return seasonDesc;
+         }
+     
+         // 创建固定个数的实例对象并设置为常量
+         public static final Season SPRING = new Season("Spring","春暖花开");
+         public static final Season SUMMER = new Season("Summer","夏日炎炎");
+         public static final Season AUTUMN = new Season("Autumn","秋高气爽");
+         public static final Season WINTER = new Season("Winter","白雪皑皑");
+     
+         @Override
+         public String toString() {
+             return "Season{" +
+                     "seasonName='" + seasonName + '\'' +
+                     ", seasonDesc='" + seasonDesc + '\'' +
+                     '}';
+         }
+     }
+     
+     ```
+
+   - 在jdk5之后，Java支持enum关键字来快速定义枚举类型
+
+     ```java
+     public enum Season {
+     
+         // 必须在枚举类的开头声明多个对象，对象之间使用"，"隔开，并且不能使用 public static final修饰
+         // 这些都是实例化的对象
+         SPRING("Spring","春暖花开"){
+             @Override
+             public void show() {
+                 System.out.println("春");
+             }
+         },
+         SUMMER("Summer","夏日炎炎"){
+             @Override
+             public void show() {
+                 System.out.println("夏");
+             }
+         },
+         AUTUMN("Autumn","秋高气爽"){
+             @Override
+             public void show() {
+                 System.out.println("秋");
+             }
+         },
+         WINTER("Winter","白雪皑皑"){
+             @Override
+             public void show() {
+                 System.out.println("冬");
+             }
+         };
+     
+         // 声明当前类的对象的实例变量，使用private final修饰
+         private final String seasonName;
+     
+         private final String seasonDesc;
+     
+         // 私有化构造器
+         private Season(String seasonName, String seasonDesc) {
+             this.seasonName = seasonName;
+             this.seasonDesc = seasonDesc;
+         }
+     
+         public String getSeasonName() {
+             return seasonName;
+         }
+     
+         public String getSeasonDesc() {
+             return seasonDesc;
+         }
+     }
+     ```
