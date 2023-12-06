@@ -1070,7 +1070,7 @@ class B extends A{
      
          private final String seasonDesc;
      
-         // 私有化构造器
+         // 私有化构造器，如果该枚举类属性为空，则使用默认的空参构造器即可，也不需要声明为私有化，因为对象		 没有任何属性可改
          private Season(String seasonName, String seasonDesc) {
              this.seasonName = seasonName;
              this.seasonDesc = seasonDesc;
@@ -1083,5 +1083,11 @@ class B extends A{
          public String getSeasonDesc() {
              return seasonDesc;
          }
+     }
+     
+     
+     // 或者枚举类中没有任何属性，只有对象名称
+     public enum Status{
+         BUSY,FREE;
      }
      ```
