@@ -1070,7 +1070,7 @@ class B extends A{
      
          private final String seasonDesc;
      
-         // 私有化构造器，如果该枚举类属性为空，则使用默认的空参构造器即可，也不需要声明为私有化，因为enum	   默认构造器私有
+         // 私有化构造器，如果该枚举类属性为空，则使用默认的空参构造器即可，也不需要声明为私有化，	  // 因为enum默认构造器私有
          private Season(String seasonName, String seasonDesc) {
              this.seasonName = seasonName;
              this.seasonDesc = seasonDesc;
@@ -1091,3 +1091,55 @@ class B extends A{
          BUSY,FREE;
      }
      ```
+
+# 十九、注解（Annotation）
+
+### 一、注解的概念
+
+- 注解是从jdk5开始引入的，以“@注解名”在代码中存在
+- 注解可以像修饰符一样被使用，可用于修饰包、类、构造器、方法、成员变量、参数、局部变量的声明
+- 注解可以添加一些参数值，这些信息被保存在Annotation的“name=value”对中
+- 注解可以在类编译、运行时进行加载，体现不同的功能
+
+### 二、注释与注解
+
+- 注解可以看作是一种注释，通过使用Annotation，程序员可以在不改变原有逻辑的情况下，在源文件中嵌入一些补充的信息。但是注解不同于单行注释和多行注释
+- 对于单行注释和多行注释是给程序员看的
+- 注解是可以被编译器或其他程序读取的。程序可根据注解的不同做出相应的处理
+
+### 三、自定义注解
+
+```java
+public @interface MyAnnotation{
+    
+    // 注解属性，需要结合反射使用。数组属性
+    String[] names;
+    
+    // 注解属性，需要结合反射使用。String属性
+    String value;
+}
+```
+
+### 四、元注解
+
+1. 元注解的理解：对现有注解进行解释说明的注解
+2. 元注解的例子
+	- @Target：用于描述注解的使用范围，可以使用枚举类型ElementType的10个常量对象来指定
+	- @Retention：用于描述注解的声明周期，可以通过枚举类型RetentionPolicy的3个常量对象来指定，分别为SOURCE（源代码）、CLASS（字节码）、RUNTIME（运行时）。唯有RUNTIME阶段才能被反射读取到
+	- @Document：表明这个注解应该被javadoc工具记录
+	- @Inherited：允许子类继承父类的注解
+
+# 二十、单元测试
+
+### 一、测试分类
+
+- 黑盒测试：不需要写代码，给输入值，看程序是否能够输出期望的值
+- 白盒测试：需要写代码。关注程序具体的执行流程
+
+### 二、JUnit单元测试介绍及使用
+
+1. JUnit单元测试是程序员测试，即所谓白盒测试，因为程序员知道被测试的软件如何完成功能和完成什么样的功能
+2. JUnit单元测试的使用
+	- 需要导入的包为：junit-4.12.jar、hamcrest-core-1.3.jar
+	- 所在的类必须是public的，非抽象的，包含唯一的无参构造器
+	- @Test标记的方法本身必须是public的，非抽象的，非静态的，void无返回值，（）无参数的
