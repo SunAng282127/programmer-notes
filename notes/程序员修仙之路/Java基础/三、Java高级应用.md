@@ -170,3 +170,64 @@
 
 1. 并行（parallel）：指两个或多个事件在同一时刻发生（同时发生）。指在同一时刻，有多条指令在多个CPU上同时执行
 2. 并发（concurrency）：指两个或多个事件在同一时间段内发生。即在一段时间内，有多条指令在单个CPU上快速轮换、交替执行，使得在宏观上具有多个进程同时执行的效果
+
+### 三、创建和启动线程
+
+##### 一、概述
+
+1. Java语言的JVM允许程序运行多个线程，使用java.lang.Thread类代表线程，所有的线程对象都必须是Thread类或其子类的实例
+2. Thread类的特性
+   - 每个线程都是通过某个特定的Thread对象的run()方法来完成操作的，因此把run()方法称为线程执行体
+   - 通过该Thread对象的start()方法来启动这个线程，而非直接调用run()
+   - 要想实现多线程，必须在主线程中创建新的线程对象
+
+##### 二、继承Thread类
+
+1. 定义Thread类的子类，并重写该类的run()方法，该run()方法的方法体就代表了线程需要完成的任务。执行不同逻辑的线程定义不同的子类，分别调用即可
+
+2. 创建Thread子类的实例，即创建了线程对象
+
+3. 调用线程对象的start()方法来启动该线程
+
+4. 通过对象调用start()的作用：启动线程；调用当前线程的run()
+
+5. 不能让已经start()的线程，再次执行start()，否则报异常
+
+   ```java
+   // 定义Thread类的子类
+   class Father extends Thread{
+   
+       // 重写run()方法，实现业务逻辑
+       @Override
+       public void run() {
+           for(int i=0;i<100;i++){
+               if(i%2==0){
+                   System.out.println(i+"");
+               }
+           }
+       }
+       
+       public static void main(String[] args) {
+           // 直接创建Thread子类的实例
+           Father father = new Father();
+           // 调用线程对象的start()方法来唤醒线程
+           father.start();
+           
+           // 创建Thread类的匿名子类的匿名对象
+           new Thread(){
+               @Override
+       		public void run() {
+           		for(int i=0;i<100;i++){
+               		if(i%2==0){
+                   		System.out.println(i+"");
+               		}
+           		}
+       		}
+           }
+       }
+   }
+   
+   ```
+
+   
+
