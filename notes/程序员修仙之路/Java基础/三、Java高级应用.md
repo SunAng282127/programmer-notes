@@ -193,6 +193,8 @@
 
 5. 不能让已经start()的线程，再次执行start()，否则报异常
 
+6. 如果Thread类的实例调用start()方法，放在的最后，则先会执行完main方法的逻辑，再开启线程
+
    ```java
    // 定义Thread类的子类
    class Father extends Thread{
@@ -229,5 +231,74 @@
    
    ```
 
-   
 
+##### 三、实现Runnable
+
+1. 创建一个实现Runnable接口的类
+
+2. 实现接口中run方法
+
+3. 创建当前类的对象
+
+4. 将此对象作为参数传递到Thread类的构造器中，创建Thread类的实例
+
+5. Thread类的实例调用start()方法。这里的start()同上面用继承方式实现的start()方法
+
+6. 如果Thread类的实例调用start()方法，放在的最后，则先会执行完main方法的逻辑，再开启线程
+
+   ```java
+   // 创建实现Runnable的类
+   class Son implements Runnable {
+   
+       // 实现run方法
+       @Override
+       public void run() {
+           for (int i = 0; i < 100; i++) {
+               if (i % 2 == 0) {
+                   System.out.println(Thread.currentThread().getName() + "->" + i);
+               }
+           }
+       }
+       
+       public static void main(String[] args) {
+           // 创建当前类的对象
+           Son son = new Son();
+           // 将此对象作为参数传递到Thread类的构造器中，创建Thread类的实例
+           Thread thread = new Thread(son);
+           // Thread类的实例调用start()方法
+           thread.start();
+           
+           // 匿名实现类的匿名对象
+           new Thread(new Runnable() {
+               @Override
+               public void run() {
+                   for (int i = 0; i < 1000; i++) {
+                       if (i % 2 == 0) {
+                           System.out.println(Thread.currentThread().getName() + "->" + i);
+                       }
+                   }
+               }
+           }).start();
+       }
+   }
+   
+   
+   ```
+
+7. 继承Thread和实现Runnable的共同点和不同点
+
+   - 共同点：
+
+     1、启动线程，使用的都是Thread类中定义的start()
+
+     2、创建的线程对象，都是Thread类或其子类的实例
+
+   - 不同点：
+
+     1、一个类的继承，一个是接口的实现。建议使用Runnable的方式
+
+     2、实现Runnable的好处有：实现的方式避免类的单继承的局限性；更适合处理有共享数据的问题；实现了代码和数据的分离
+
+   - 联系：
+
+     public class Thread implements Runnable{} 顾名思义，Thread也是实现Runnable接口，此处就用到了代理模式
