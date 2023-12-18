@@ -691,4 +691,59 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
 3. 调用字符串的intern()：返回的是字符串常量池中字面量的地址。常量池中有此字面量则直接返回，无此字面量则创建新的再返回其新建字面量的地址
 4. concat(参数)：不管是常量调用此方法，还是变量调用，同样不管参数是常量还是变量，总之，调用完concat()方法都返回一个新new的对象
 
-##### 七、String的构造器和常用方法
+##### 七、字符集问题
+
+1. Unicode包罗万象，以下得字符集都包含
+2. 在UTF-8中，一个汉字占用3个字节，一个字母占用1个字节
+3. 在GDK中，一个汉字占用2个字节，一个字母占用1个字节
+4. UTF-8、GDK等字符集中都向下兼容了ASCII码
+5. 编码与解码
+   - 编码：String转为字节或字节数组
+   - 解码：字节或字节数组转为String
+   - 解码时使用的字符集必须要与编码时使用的字符集一致，不一致就会乱码
+
+##### 八、String的构造器和常用方法
+
+1. public String()：初始化新创建的String对象，以使其表示空字符序列
+2. public String(String original) ：初始化一个新创建的String对象，使其表示一个与参数相同的字符序列。换而言之，新创建的字符串是该参数字符串的副本
+3. public String(char[] value)：通过当前参数中的字符数组来构造新的String
+4. public String(char[] value,int offset,int count)：通过字符数组的一部分来构造新的String
+5. public String(byte[] bytes)：通过使用平台的默认字符集解码当前参数中的字节数组来构造新的String
+6. public String(byte[] bytes,String charsetName)：通过使用指定的字符集解码当前参数中的字节数组来构造新的String
+7. String与char型数组转换
+   - String转char数组：使用 字符串（常量或变量）.toCharArray()方法
+   - char数组转String：使用 String的构造器，String(new char[])
+8. String与byte型数组转换
+   - String转byte数组：使用 字符串（常量或变量）.getBytes(可以指定字符集类型)方法
+   - byte数组转String：使用 String的构造器，String(new byte[])
+9. boolean isEmpty()：字符串是否为空
+10. int length()：返回字符串长度
+11. String concat(XX)：拼接字符串，返回一个新的字符串
+12. boolean equals(Object obj)：比较字符串是否相等，区分大小写
+13. boolean equalsIgnoreCase(Object obj)：比较字符串是否相等，不区分大小写
+14. int compareTo(String other)：比较字符串大小，区分大小写，按照Unicode编码值比较大小，前值减去后值得到的大小
+15. int compareToIgnoreCase(String other)：比较字符串大小，不区分大小写，按照Unicode编码值比较大小，前值减去后值得到的大小
+16. String toLowerCase()：将字符串中大写字母转为小写
+17. String toUpperCase()：将字符串中小写字母转为大写
+18. String trim()：去掉字符串前后空白符
+19. public String intern()：结果在常量池中共享
+20. boolean contains(xx)：是否包含xx
+21. int indexOf(xx)：从前往后找当前字符串中xx，即如果有返回第一次出现的下标，没有则返回-1
+22. int indexOf(String str,int fromIndex)：返回指定子字符串在此字符串中第一次出现处的索引，从指定的索引开始
+23. int lastIndexOf(xx)：从后往前找当前字符串中xx，即如果有返回最后一次出现的下标，没有则返回-1
+24. int lastIndexOf(String str,int fromIndex)：返回指定子字符串在此字符串中最后一次出现处的索引，从指定的索引开始
+25. String substring(int beginIndex)：返回一个新的字符串，它是此字符串的从beginIndex开始截取
+26. String substring(int beginIndex,int endIndex)：返回一个新的字符串，它是此字符串的从beginIndex开始截取，到endIndex结束，但是不包括endIndex。也就是左闭右开原则
+27. char charAt(index)：返回[index]位置的字符
+28. char toCharArray()：将此字符串转换为一个新的字符数组返回
+29. static String valueOf(char[] data)：返回指定数组中表示该字符序列的String
+30. static String valueOf(char[] data,int offset,int count)：返回指定数组中表示该字符序列的String，从offset下标开始复制count个字符
+31. static String copyValueOf(char[] data)：返回指定数组中表示该字符序列的String
+32. static String copyValueOf(char[] data,int offset,int count)：返回指定数组中表示该字符序列的String，从offset下标开始复制count个字符
+33. boolean startsWith(xx)：测试此字符串是否以指定的前缀开始
+34. boolean startsWith(String prefix,int toffset)：测试此字符串从指定索引开始的子字符串是否以指定的前缀开始
+35. boolean endWith(xx)：测试此字符串是否以指定的后缀结束
+36. String replace(char oldChar,char newChar)：返回一个新的字符串，使用newChar替换所有oldChar字符
+37. Sting replace(CharSequence target,CharSequence repalcement)：使用指定的字面值替换序列替换此字符串所有匹配的字面值目标序列的子字符串
+38. String replaceAll(String regex,String replacement)：使用给定的replacement替换此字符串所有匹配给定的正则表达式的子字符串
+39. String replaceFirst(String regex,String replacement)：使用给定的replacement替换此字符串匹配给定的正则表达式的第一个子字符串
