@@ -747,3 +747,36 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
 37. Sting replace(CharSequence target,CharSequence repalcement)：使用指定的字面值替换序列替换此字符串所有匹配的字面值目标序列的子字符串
 38. String replaceAll(String regex,String replacement)：使用给定的replacement替换此字符串所有匹配给定的正则表达式的子字符串
 39. String replaceFirst(String regex,String replacement)：使用给定的replacement替换此字符串匹配给定的正则表达式的第一个子字符串
+
+### 二、StringBuffer与StringBuilder
+
+##### 一、String、StringBuffer与StringBuilder的对比
+
+1. String：不可变的字符序列；jdk8.0及之前底层使用char[]数组，jdk9.0及之后底层使用byte[]数组
+2. StringBuffer：可变的字符序列；jdk1.0声明，线程安全；效率低，但是效率比String高；jdk8.0及之前底层使用char[]数组，jdk9.0及之后底层使用byte[]数组
+3. StringBuilder：可变的字符序列；jdk5.0声明，线程不安全；效率高；jdk8.0及之前底层使用char[]数组，jdk9.0及之后底层使用byte[]数组
+
+##### 二、StringBuffer与StringBuilder的可变性分析
+
+1. 内部的属性
+	- char[] value：存储字符序列
+	- int count：实际存储的字符的个数
+2. 添加数据：字符不断添加，一旦count要超过value.length时，就需要扩容，默认扩容为原有容量的2倍+2，并将原有value数组中的元素复制到新的数据中
+
+##### 三、源码启示
+
+1. 如果开发过程中需要频繁的针对字符串进行增、删、改、查等操作建议使用StringBuffer与StringBuilder替换String，因为使用String效率低
+2. 如果开发中不涉及线程安全，建议使用StringBuilder替换StringBuffer，因为使用StringBuilder效率高
+3. 如果开发中，大体确定要操作的字符的个数，建议使用带 int capacity参数的构造器，因为可以避免底层多次扩容操作，性能更高
+
+##### 四、StringBuffer与StringBuilder的通用方法
+
+1. StringBuffer/StringBuilder append(xx)：提供了很多append()方法，用于进行字符串追加的方式拼接
+2. StringBuffer/StringBuilder delete(int start,int end)：删除[start,end)之间的字符
+3. StringBuffer/StringBuilder deleteCharAt(int index)：删除[index]位置字符
+4. StringBuffer/StringBuilder replace(int start,int end,String str)：替换[start,end)范围的字符序列为str
+5. void setCharAt(int index,char c)：替换[index]位置的字符为c
+6. char charAt(int index)：查找指定index位置上的字符
+7. StringBuffer/StringBuilder insert(int index,xx)：在[index]位置插入xx
+8. int int length()：返回存储的字符数据的长度
+9. StringBuffer/StringBuilder  reverse()：字符反转

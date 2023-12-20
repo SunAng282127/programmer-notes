@@ -61,6 +61,7 @@
 - git status 文件名称.后缀名：查看文件状态
 - git commit -m "说明"：提交到本地仓库
 - git push url：提交到远程仓库
+- git reflog：查看git仓库的版本日志
 - [Git命令大全](https://gitee.com/all-about-git)
 
 # 五、Git基础理论
