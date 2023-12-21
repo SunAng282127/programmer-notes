@@ -861,7 +861,7 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
 	- java.time.zone：包含时区支持的类
 	- 新的java.time中包含了所有有关时钟（Clock），本地日期（LocalDate）、本地时间（LocalTime）、本地日期时间（LocalDateTime）、时区（ZonedDateTime）和持续时间（Duration）的类
 
-2. 本地日期时间：LocalDate、LocalTime、LocalDateTIme
+2. 本地日期时间：LocalDate、LocalTime、LocalDateTIme；不可变的日期时间类
 
 	|                          方法                           |                             描述                             |
 	| :-----------------------------------------------------: | :----------------------------------------------------------: |
@@ -874,10 +874,6 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
 	|           getHours()/getMinute()/getSecond()            |               获取当前对象对应的小时、分钟、秒               |
 	| withDayOfMonth()/withDayOfYear()/withMonth()/withYear() | 将月份天数、年份天数、月份、年份修改为指定的值并返回新的对象 |
 	|                with(TemporalAdjuster t)                 |           将当前日期时间设置为校对器指定的日期时间           |
-
-	
-
-3. 
 
 
 
