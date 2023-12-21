@@ -852,3 +852,34 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
 
 ##### 二、jdk8中的API
 
+1. 新的日期时间API包含
+
+	- java.time：包含值对象的基础包
+	- java.time.chrono：提供对不同的日历系统的访问
+	- java.time.format：格式化和解析时间、日期
+	- java.time.temporal：包含底层框架和扩展特性
+	- java.time.zone：包含时区支持的类
+	- 新的java.time中包含了所有有关时钟（Clock），本地日期（LocalDate）、本地时间（LocalTime）、本地日期时间（LocalDateTime）、时区（ZonedDateTime）和持续时间（Duration）的类
+
+2. 本地日期时间：LocalDate、LocalTime、LocalDateTIme
+
+	|                          方法                           |                             描述                             |
+	| :-----------------------------------------------------: | :----------------------------------------------------------: |
+	|                 now()/now(ZoneId zone)                  |        静态方法，根据当前时间创建对象/指定时区的对象         |
+	|                   of(xx,xx,xx,xx,xxx)                   |             静态方法，根据指定日期/时间创建对象              |
+	|             getDayOfMonth()/getDayOfYear()              |          获取月份天数（1-31）/获取年份天数（1-366）          |
+	|                     getDayOfWeek()                      |            获取星期几（返回一个DayOfWeek枚举值）             |
+	|                       getMonth()                        |                获取月份，返回一个Month枚举值                 |
+	|                getMonthValue()/getYear()                |                  获得月份（1-12）/获得年份                   |
+	|           getHours()/getMinute()/getSecond()            |               获取当前对象对应的小时、分钟、秒               |
+	| withDayOfMonth()/withDayOfYear()/withMonth()/withYear() | 将月份天数、年份天数、月份、年份修改为指定的值并返回新的对象 |
+	|                with(TemporalAdjuster t)                 |           将当前日期时间设置为校对器指定的日期时间           |
+
+	
+
+3. 
+
+
+
+
+
