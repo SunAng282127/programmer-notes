@@ -863,19 +863,44 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
 
 2. 本地日期时间：LocalDate、LocalTime、LocalDateTIme；不可变的日期时间类
 
-	|                          方法                           |                             描述                             |
-	| :-----------------------------------------------------: | :----------------------------------------------------------: |
-	|                 now()/now(ZoneId zone)                  |        静态方法，根据当前时间创建对象/指定时区的对象         |
-	|                   of(xx,xx,xx,xx,xxx)                   |             静态方法，根据指定日期/时间创建对象              |
-	|             getDayOfMonth()/getDayOfYear()              |          获取月份天数（1-31）/获取年份天数（1-366）          |
-	|                     getDayOfWeek()                      |            获取星期几（返回一个DayOfWeek枚举值）             |
-	|                       getMonth()                        |                获取月份，返回一个Month枚举值                 |
-	|                getMonthValue()/getYear()                |                  获得月份（1-12）/获得年份                   |
-	|           getHours()/getMinute()/getSecond()            |               获取当前对象对应的小时、分钟、秒               |
-	| withDayOfMonth()/withDayOfYear()/withMonth()/withYear() | 将月份天数、年份天数、月份、年份修改为指定的值并返回新的对象 |
-	|                with(TemporalAdjuster t)                 |           将当前日期时间设置为校对器指定的日期时间           |
+	|                             方法                             |                             描述                             |
+	| :----------------------------------------------------------: | :----------------------------------------------------------: |
+	|                    now()/now(ZoneId zone)                    |        静态方法，根据当前时间创建对象/指定时区的对象         |
+	|                     of(xx,xx,xx,xx,xxx)                      |             静态方法，根据指定日期/时间创建对象              |
+	|                getDayOfMonth()/getDayOfYear()                |          获取月份天数（1-31）/获取年份天数（1-366）          |
+	|                        getDayOfWeek()                        |            获取星期几（返回一个DayOfWeek枚举值）             |
+	|                          getMonth()                          |                获取月份，返回一个Month枚举值                 |
+	|                  getMonthValue()/getYear()                   |                  获得月份（1-12）/获得年份                   |
+	|              getHours()/getMinute()/getSecond()              |               获取当前对象对应的小时、分钟、秒               |
+	|   withDayOfMonth()/withDayOfYear()/withMonth()/withYear()    | 将月份天数、年份天数、月份、年份修改为指定的值并返回新的对象 |
+	|                   with(TemporalAdjuster t)                   |           将当前日期时间设置为校对器指定的日期时间           |
+	| plusDays()/plusWeeks()/plusMonths()/plusYears()/plusHours()  |        向当前对象添加几天、几周、几个月、几年、几小时        |
+	| minusDays()/minusWeeks()/minusMonths()/minusYears()/minusHours() |       从当前对象中减去几天、几周、几个月、几年、几小时       |
+	|      plus(TemporalAdjuster t)/minus(TemporalAdjuster t)      |                添加或减少一个Duration或Period                |
+	|                     isBefore()/isAfter()                     |                      比较两个LocalDate                       |
+	|                         isLeapYear()                         |            判断是否为闰年（在LocalDate类中使用）             |
+	|                 format(DateTimeFormatter t)                  |             格式化本地日期、时间，返回一个字符串             |
+	|                   parse(Charsequence text)                   |              将指定格式的字符串解析为日期、时间              |
+	
+3. 瞬时：Instant
 
+   - Instant：时间线上的一个瞬时点。这可能被用来记录应用程序中的事件时间戳
+   - java.time.Instant：表示时间线上的一点，而不需要任何上下文信息，例如，时区。概念上讲，它只是简单的表示自1970年1月1日0时0分0秒（UTC）开始的秒数
 
+   |             方法              |                             描述                             |
+   | :---------------------------: | :----------------------------------------------------------: |
+   |             now()             |          静态方法，返回默认UTC时区的instant类的对象          |
+   | ofEpochMilli(long epochMilli) | 静态方法，返回在1970-01-01 00:00:00基础上加上指定毫秒数之后的Instant类的对象 |
+   |  atOffset(ZoneOffset offset)  |           结合即时的偏移量来创建一个OffsetDateTime           |
+   |        toEpochMilli()         |    返回1970-01-01 00:00:00到当前时间的毫秒数，即为时间戳     |
 
+4. DateTimeFormatter：类似于SimpleDateFormat。用于格式化和解析LocalDate、LocalTime、LocalDateTIme
 
+   |            方法            |                             描述                             |
+   | :------------------------: | :----------------------------------------------------------: |
+   | ofPattern(String pattern)  |     静态方法，返回一个指定字符串格式的DateTimeFormatter      |
+   | format(TemporalAccessor T) |               格式化一个日期、时间，返回字符串               |
+   |  parse(CharSequence text)  | 将指定格式的字符序列解析为一个日期、时间。得到的是一个TemporalAccessor类，想要得到时间格式的还需要使用from(TemporalAccessor t)方法 |
+
+   
 
