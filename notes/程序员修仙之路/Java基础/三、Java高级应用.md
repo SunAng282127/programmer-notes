@@ -1053,6 +1053,58 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
 
 # 四、集合框架
 
+### 一、Java集合框架体系
+
+![Collection集合框架](../../../TyporaImage/Collection集合框架.png)
+
+![Map集合框架](../../../TyporaImage/Map集合框架.png)
+
+- java.util.Collection：存储一个一个的数据
+  - java.util.List：存储有序的、可重复的数据。动态数组
+    - ArrayList
+    - LinkedList
+    - Vector
+  - java.util.set：存储无序的、不可重复的数据
+    - HashSet
+    - LinkedHashSet
+    - TreeSet
+- java.util.Map：存储一对一对的数据（key-value键值对）
+  - HashMap
+  - LinkedHashMap
+  - TreeMap
+  - Hashtable
+    - Properties
+
+### 二、Collection方法的使用
+
+1. add(E obj)：添加元素对象到当前集合中
+2. addAll(Collection other)：添加other集合中的所有元素对象到当前集合中
+3. int size()：获取当前集合中实际存储的元素个数
+4. boolean isEmpty()：判断当前集合是否为空集合
+5. boolean contains(Object obj)：判断当前集合中是否存在一个与obj对象equals返回true的元素。重点在equals()方法上
+6. boolean containsAll(Collection coll)：判断coll集合中的元素是否在当前集合中都存在，即判断coll是否为当前集合的子集
+7. boolean equals(Object obj)：判断当前集合与obj是否相等
+8. void clear()：清空集合元素
+9. boolean remove(Object obj)：从当前集合中删除第一个找到的与obj对象equals返回true的元素
+10. boolean removeAll(Collection coll)：从当前集合中删除所有与coll集合中相同的元素
+11. boolean retainAll(Collection coll)：从当前集合中删除两个集合中不同的元素，使得当前集合仅保留与coll集合中的元素相同的元素，即当前集合中仅保留两个集合的交集
+12. Object[] toArray()：返回包含当前集合中所有元素的数组
+13. hashCode()：获取集合对象的哈希值
+14. iterator()：返回迭代器对象，用于遍历集合
+
+### 三、集合与数组的相互转换
+
+1. 集合转数组：toArray()
+2. 数组转集合：Arrays.toList(Object[] obj)
+3. 注意点：数组中可以存储基本数据类型和引用数据类型，而集合中仅可存引用数据类型。在数组转集合的时候要注意这个细节
+
+### 四、Collection添加元素的要求
+
+- 要求元素所属的类一定要重写equals()方法
+- 因为Collection中的相关方法（比如contains()/remove()）在使用时，要调用元素所在类的equals()方法
+
+### 五、迭代器
+
 # 五、泛型
 
 # 六、数据结构
