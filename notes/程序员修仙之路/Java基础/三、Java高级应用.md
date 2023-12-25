@@ -902,5 +902,156 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
    | format(TemporalAccessor T) |               格式化一个日期、时间，返回字符串               |
    |  parse(CharSequence text)  | 将指定格式的字符序列解析为一个日期、时间。得到的是一个TemporalAccessor类，想要得到时间格式的还需要使用from(TemporalAccessor t)方法 |
 
-   
+
+### 四、Java比较器
+
+##### 一、实现对象的排序
+
+1. 自然排序（Comparable）
+2. 定制排序（Comparator）
+
+##### 二、实现Comparable接口的方式
+
+1. 具体的类A实现Comparable接口
+
+2. 重写Comparable接口中的compareTo(Object obj)方法，在此方法中指明比较类A的对象的大小的标准
+
+3. 创建类A的多个实例，进行大小的比较或排序
+
+	```java
+	// 具体的类A实现Comparable接口
+	class Student implements Comparable{
+	
+	    private String name;
+	
+	    private Integer age;
+	
+	    public Student(String name, Integer age) {
+	        this.name = name;
+	        this.age = age;
+	    }
+	
+	    public String getName() {
+	        return name;
+	    }
+	
+	    public void setName(String name) {
+	        this.name = name;
+	    }
+	
+	    public Student(Integer age) {
+	        this.age = age;
+	    }
+	
+	    @Override
+	    public String toString() {
+	        return "Student{" +
+	                "name='" + name + '\'' +
+	                ", age='" + age + '\'' +
+	                '}';
+	    }
+	
+	    // 重写Comparable接口中的compareTo(Object obj)方法，在此方法中指明比较类A的对象的大小的标准
+	    @Override
+	    public int compareTo(Object o) {
+	        if(this == o){
+	            return 0;
+	        }
+	        if(o instanceof Student){
+	            Student s = (Student) o;
+	            int compare = this.age.compareTo(s.age);
+	            if(compare != 0){
+	                // 从大到小排序
+	                return -compare;
+	            }
+	            int compare1 = this.name.compareTo(s.name);
+	            // 从小到大排序
+	            return compare1;
+	        }
+	        throw new RuntimeException("类型错误！");
+	    }
+	}
+	
+	```
+
+##### 三、实现Comparator接口的方式
+
+1. 创建一个实现了Comparator接口的实现类A（也可以是匿名内部类）
+
+2. 实现类要求重写Comparator接口中的抽象方法compare(Object o1,Object o2)，在此方法中指明要比较大小的对象的大小关系
+
+3. 创建此实现类A的对象，并将此对象传入到相关方法的参数位置即可（比如：Arrays.sort(..,类A的实例)）
+
+	```java
+	Arrays.sort(students, new Comparator<Student>() {
+	            @Override
+	            public int compare(Student o1, Student o2) {
+	                if(o1 instanceof Student && o2 instanceof Student){
+	                    Student student1 = o1;
+	                    Student student2 = o2;
+	                    int compare1 = Integer.compare(student1.getAge(), student2.getAge());
+	                    return compare1;
+	                }
+	                throw new RuntimeException("类型错误！");
+	            }
+	        });
+	```
+
+##### 四、Comparable和Comparator的对比
+
+1. Comparable是单一的，唯一的；Comparator灵活的，多样的
+2. Comparable是一劳永逸的；Comparator临时的
+3. Comparable对应的抽象方法为compareTo(Object obj);Comparator对应的抽象方法为compare(Object o1,Object o2)
+
+### 五、其他常用类
+
+##### 一、System类
+
+1. 属性：in、out、error
+
+2. 成员方法
+
+	- native long currentTimeMillis()：返回时间戳
+
+	- void exit(int status)：用于退出程序。其中status的值为0时代表正常退出，非零代表异常退出
+
+	- void gc()：请求系统进行垃圾回收。至于系统是否立刻回收，则取决于系统中垃圾回收算法的实现以及系统执行时的情况
+
+	- static void arrayCopy(Object src,int srcPos,Object dest,int destPos,int length)：从指定的
+
+	- String  getProperty(String key)：获取系统中属性名为key的属性对应的值
+
+		|    属性名    |      属性说明      |
+		| :----------: | :----------------: |
+		| java,version | java运行时环境版本 |
+		|  java.hone   |    java安装目录    |
+		|   os.name    |   操作系统的名称   |
+		|  os.version  |   操作系统的版本   |
+		|  user.name   |   用户的账户名称   |
+		|  user;home   |    用户的主目录    |
+		|  userr.dir   | 用户的当前工作目录 |
+
+##### 二、Runtime类
+
+- 运行时类
+- 对应着Java进程的内存使用的运行时环境
+- 单例的
+
+##### 三、Math类
+
+- 凡是与数学运算有关的计算，可以在这个类中找
+- round（四舍五入）计算时技巧：可以向下取值+0.5，也就是floor(x+0.5)
+
+##### 四、BigInteger类和BigDecimal类
+
+1. BigInteger类：可以表示任意长度的整数
+2. BigDecimal类：可以表示任意精度的浮点数
+
+##### 五、Random类
+
+- 获取指定范围的随机整数，nextInt(int bound)
+
+# 四、集合框架
+
+
 
