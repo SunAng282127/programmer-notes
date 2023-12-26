@@ -1077,8 +1077,8 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
 
 ### 二、Collection方法的使用
 
-1. add(E obj)：添加元素对象到当前集合中
-2. addAll(Collection other)：添加other集合中的所有元素对象到当前集合中
+1. boolean add(E obj)：添加元素对象到当前集合中
+2. boolean addAll(Collection other)：添加other集合中的所有元素对象到当前集合中
 3. int size()：获取当前集合中实际存储的元素个数
 4. boolean isEmpty()：判断当前集合是否为空集合
 5. boolean contains(Object obj)：判断当前集合中是否存在一个与obj对象equals返回true的元素。重点在equals()方法上
@@ -1140,6 +1140,45 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
 		操作临时变量的输出
 	}
 	```
+
+### 六、List接口方法的使用
+
+##### 一、List接口中存储数据的特点
+
+- 用于存储有序的、可以重复的
+- 使用List替代数组，也就是动态数组
+- 因为List是有序的，进而就有索引，进而就会增加一些针对索引操作的方法
+
+##### 二、List接口中的常用方法
+
+1. boolean  add(E obj)：添加元素对象到当前集合中
+2. boolean addAll(Collection other)：添加other集合中的所有元素对象到当前集合中
+3. int size()：获取当前集合中实际存储的元素个数
+4. boolean isEmpty()：判断当前集合是否为空集合
+5. boolean contains(Object obj)：判断当前集合中是否存在一个与obj对象equals返回true的元素。重点在equals()方法上
+6. boolean containsAll(Collection coll)：判断coll集合中的元素是否在当前集合中都存在，即判断coll是否为当前集合的子集
+7. boolean equals(Object obj)：判断当前集合与obj是否相等
+8. void clear()：清空集合元素
+9. boolean remove(Object obj)：从当前集合中删除第一个找到的与obj对象equals返回true的元素
+10. boolean removeAll(Collection coll)：从当前集合中删除所有与coll集合中相同的元素
+11. boolean retainAll(Collection coll)：从当前集合中删除两个集合中不同的元素，使得当前集合仅保留与coll集合中的元素相同的元素，即当前集合中仅保留两个集合的交集
+12. Object[] toArray()：返回包含当前集合中所有元素的数组
+13. hashCode()：获取集合对象的哈希值
+14. iterator()：返回迭代器对象，用于遍历集合
+15. void add(int index,Object ele)：在index位置上插入ele元素
+16. boolean addAll(int index,Collection eles)：从index位置开始将eles中的所有元素添加进来
+17. Object get(int index)：获取指定index位置的元素
+18. List subList(int fromIndex,int toIndex)：返回从fromIndex到toIndex位置的子集合。左闭右开
+19. int indexOf(Object obj)：返回obj在集合中首次出现的位置
+20. int lastIndexOf(Object obj)：返回obj在当前集合中末次出现的位置
+21. Object remove(int index)：移除指定index位置的元素，并返回此元素
+22. Object set(int index,Object ele)：设置指定index位置的元素为ele
+
+##### 三、List及其实现类特点
+
+1. ArrayList：线程不安全；效率高；底层使用Object[]数组存储；在添加数据、查找数据时效率较高，在插入、删除数据时效率较低
+2. Vector：线程安全；效率低；底层使用Object[]数组存储
+3. LinkedList：底层使用双向链表的方式进行存储；在添加数据、查找数据时效率较低，在插入、删除数据时效率较高；在对集合中的数据进行频繁的删除、插入操作时，建议使用此类
 
 # 五、泛型
 
