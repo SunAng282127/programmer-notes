@@ -1105,6 +1105,42 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
 
 ### 五、迭代器
 
+##### 一、迭代器的作用
+
+- 用来遍历集合元素
+
+##### 二、获取迭代器对象
+
+- Iterator iterator = (集合实例)coll.iterator()
+
+##### 三、迭代器的方法
+
+1. next()：指针下移；将下移以后集合位置上的元素返回
+2. hashNext()：判断是否有下一个元素
+3. remove()：移除元素
+
+##### 三、实现集合的遍历
+
+1. 使用Iterator迭代器遍历某个特定的集合时迭代器对象只能声明一次
+
+	```java
+	Iterator iterator = coll.iterator();
+	while(iterator.hasNext){
+	    System.out.println(iterator.next());
+	}
+	```
+
+2. 增强for循环（foreach循环）
+
+	- 增强for循环底层实现也是使用的Iterator迭代器
+	- 增强for循环取出的引用数据数组或集合，会把数组或集合中的元素地址赋值给临时变量，改变临时变量的时候也就改变了原始元素。基本数据类型和不可变对象元素不变改变原来的值
+
+	```java
+	for(要遍历的集合或数组元素的类型 临时变量:要遍历的集合或数组变量){
+		操作临时变量的输出
+	}
+	```
+
 # 五、泛型
 
 # 六、数据结构
