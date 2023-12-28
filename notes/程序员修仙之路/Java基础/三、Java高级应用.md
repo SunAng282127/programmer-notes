@@ -1307,6 +1307,38 @@ java.util.Map：存储一对一对的数据（key-value键值对）
    - 使用Properties对象中load(文件流)加载流中文件的数据
    - 使用Properties对象中getProperty(key)获取value值
 
+### 九、Collections
+
+##### 一、Collections概述
+
+- 操作数组的工具类为Arrays
+- 操作Set、List和Mp等集合的工具类为Collections
+
+##### 二、常用方法
+
+1. reverse(List)：反转List中元素的顺序
+2. shuffle(List)：对List集合元素进行随机排序
+3. sort(List)：根据元素的自然顺序对指定的List集合元素按照升序排序
+4. sort(List,Comparator)：根据指定的Comparator产生的顺序对List集合元素进行排序
+5. swap(List,int,int)：将指定List集合中的i处元素和处元素进行交换
+6. Object max(Collection)：根据元素的自然排序，返回给定集合中的最大元素，
+7. Object max(Collection,Comparator)：根据Comparator指定的顺序，返回给定集合中的最大元素，默认排序完集合中最右边的最大，不一定是数值最大，也可能是最小的。同理min()取值的最左边的值
+8. Object min(Collection)：根据元素的自然排序，返回给定集合中的最小元素
+9. Object min(Collection,Comparator)：根据Comparator指定的顺序，返回给定集合中的最小元素
+10. int binarySearch(List list,T key)：在List集合中查找某个元素的下标，但是List的元素必须是T或T的子类对象，而且必须是可比较大小的，即支持自然排序。而且集合本身也事先必须是有序的，否则结果不确定
+11. int binarySearch(List list,T key,Comparator c)：在List集合中查找某个元素的下标，但是List的元素必须是T或T的子类对象。而且集合本身也事先必须是按照c比较器规则进行排序过的，否则结果不确定
+12. int frequency(Collection c,Object o)：返回指定集合中指定元素的出现次数
+13. void copy(List dest,List src)：将src中的内容复制到dest中
+14. boolean replaceAll(List list,Object oldVal,Object newVal)：使用新值替换List对象中的所有旧值
+15. 提供了多个unmodifiableXxx()方法，该方法返回指定Xxx的不可修改的视图。只能读不能写
+16. boolean addAll(Collection c,T... elements)：将所有指定元素添加到指定的collection中
+17. Collection类中提供了多个synchronizedXxx()方法，该方法可使将指定集合包装成线程安全的集合，从而可以解决多线程并发访问集合时的线程安全问题
+
+##### 三、Collection和Collections的区别
+
+1. Collection：集合框架中的用于存储一个一个元素的接口，又分为List和Set等子接口
+2. Collections：用于操作集合框架（List、Set、Map）的工具类
+
 # 五、泛型
 
 # 六、数据结构
