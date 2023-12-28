@@ -1070,7 +1070,7 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
     - TreeSet
 - java.util.Map：存储一对一对的数据（key-value键值对）
   - HashMap
-  - LinkedHashMap
+  	- LinkedHashMap
   - TreeMap
   - Hashtable
     - Properties
@@ -1184,10 +1184,10 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
 
 ##### 一、Set及其实现类特点
 
-- Set存储无序的、不可重复的数据
-- HashSet：主要实现类；底层实现的是HahsMap，即使用数组+单向连表+红黑树结构进行存储
-- LinkedHashSet：是HashSet的子类；在现有的数组+单向连表+红黑树结构的基础上，又添加了一组双向链表，又添加了一组双向链表，用于记录添加元素的先后顺序。用于频繁的查询操作
-- TreeSet：底层使用红黑树存储。可以按照添加元素的指定属性的大小顺序进行遍历
+1. Set存储无序的、不可重复的数据
+2. HashSet：主要实现类；底层实现的是HahsMap，即使用数组+单向连表+红黑树结构进行存储
+3. LinkedHashSet：是HashSet的子类；在现有的数组+单向连表+红黑树结构的基础上，又添加了一组双向链表，又添加了一组双向链表，用于记录添加元素的先后顺序。用于频繁的查询操作
+4. TreeSet：底层使用红黑树存储。可以按照添加元素的指定属性的大小顺序进行遍历
 
 ##### 二、开发中的使用频率及场景
 
@@ -1207,13 +1207,49 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
 	- 根据添加的元素的哈希值，计算出其在数组中的存储位置。此位置不是依次排列的，表现为无序性
 2. 不可重复性
 	- 添加到Set中的元素是不能相同的
-	- 比较的标准，需要先判断hashCode()得到的哈希值以及后判断equals()得到的结果
+	- HashSet/LinkedHashSet比较的标准，需要先判断hashCode()得到的哈希值以及后判断equals()得到的结果
 	- 哈希值相同且equals()返回true，则认为元素是相同的
 
 ##### 五、添加到HashSet/LinkedHashSet中元素的要求
 
 - 要求元素所在的类要重写两个方法，equals()和hashCode()
 - 同时，要求equals()和hashCode()要保持一致
+
+##### 六、TreeSet的使用
+
+1. 底层的数据结构
+	- 红黑树
+2. 添加数据后的特点
+	- 可以按照添加元素的指定属性的大小顺序进行遍历
+3. 向TreeSet中添加元素的要求
+	- 要求添加到TreeSet中的元素必须是同一类型的对象，否则会报ClassCastException异常
+	- 添加的元素需要考虑排序：自然排序（Comparable，自定义类实现Comparable即可）；定制排序（Comparator,在声明TreeSet时，把Comparator传入构造器中即可）
+4. 判断元素是否相同的标准
+	- 不再是考虑hashCode()和equals()方法了，也就意味着添加到TreeSet中的元素所在的类不需要重写hashCode()和equals()方法
+	- 比较元素大小的或比较元素是否相等的标准就是考虑自然排序或定制排序中，compareTo()或compare()的返回值。compareTo()或compare()的返回值为0，则认为两个对象是相等的。由于TreeSet中不能存放相同的元素，则后一个相等的元素就不能添加到TreeSet中
+
+### 八、Map接口的使用
+
+##### 一、Map及其实现类
+
+java.util.Map：存储一对一对的数据（key-value键值对）
+
+1. HashMap：主要实现类；线程不安全（没用synchronized修饰）；效率高；可以添加null的key和value值：磁层使用的是数组+单向链表+红黑树结构存储
+	- LinkedHashMap：是HashMap的子类，在HashMap使用的数据结构的基础上，增加了一对双向链表，用于记录添加的元素的先后顺序，进而在遍历元素时，就可以按照添加的顺序显示。开发中，对于频繁的遍历操作，建议使用此类
+2. TreeMap：底层使用的红黑树存储；可以按照添加的key-value中的key元素的指定属性的大小顺序进行遍历；需要考虑使用自然排序或定制排序
+3. Hashtable：古老实现类；线程安全（使用synchronized修饰）；效率低；不可以添加null的key或value值；磁层使用的是数组+单向链表 结构存储
+	- Properties：存储的键值对都是String类型。常用来处置属性文件
+
+##### 二、HashMap的特点
+
+1. HashMap中的所有key彼此之间是不重复的、无序的。所有的key构成了一个Set集合，key所在的类要重写hashCode()和equals()方法
+2. HashMap中所有的value彼此之间是可重复的、无序的。所有的value就构成了一个Collection集合，value所在的类只需要重写equals()方法即可
+3. HashMap中的一个key-value，就构成了一个Entry
+4. HashMap中的所有Entry彼此之间是不重复的、无序的。所有的entry就构成了一个Set集合
+
+##### 三、Map的常用方法
+
+##### 四、TreeNMap的使用
 
 # 五、泛型
 
