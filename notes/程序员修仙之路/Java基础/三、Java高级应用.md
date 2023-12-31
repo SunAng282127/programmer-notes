@@ -1441,7 +1441,438 @@ java.util.Map：存储一对一对的数据（key-value键值对）
 
 # 六、数据结构
 
+### 一、数据结构的含义
 
+- 数据结构就是一种程序设计优化的方法论，研究数据的逻辑结构和物理结构以及它们之间相互关系，并对这种结构定义相应的运算，目的是加快程序的执行速度、减少内存占用的空间
 
+### 二、数据结构的研究对象
 
+##### 一、数据之间的逻辑关系
 
+1. 数据的逻辑结构指反映数据元素之间的逻辑关系，而与数据的存储无关，是独立于计算机的
+2. 集合结构：数据结构中的元素之间除了同属一个集合的相互关系外，别无其他关系。集合元素之间没有逻辑关系
+3. 线性结构：数据结构中的元素存在一对一的相互关系。比如：排队。结构中必须存在唯一的首元素和唯一的尾元素。体现为：一维数组、链表、栈、队列
+4. 树形结构：数据结构中的元素存在一对多的相互关系。比如：家谱、文件系统、组织架构
+5. 图形结构：数据结构中的元素存在多对多的相互关系。比如：全国铁路网、地铁图
+
+##### 二、数据的存储结构/物理结构
+
+1. 数据的存储结构/物理结构包括数据元素的表示和关系的表示。数据的存储结构是逻辑结构用计算机语言的实现，它依赖于计算机语言
+2. 顺序结构
+   - 顺序结构就是使用一组连续的存储单元依次存储逻辑上相邻的各个元素
+   - 优点：只需要申请存放数据本身的内存空间即可。支持下标访问，也可以实现随机访问
+   - 缺点：必须静态分配连续空间，内存空间的利用率比较低。插入或删除可能需要移动大量元素，效率比较低
+3. 链式结构
+   - 不使用连续的存储空间存放结构的元素，而是为每一个元素构造一个节点。节点中除了存放数据本身以外，还需要存放指向下一个节点的指针
+   - 优点：不采用连续的存储空间导致内存利用率比较高，克服顺序存储结构中预知元素个数的缺点。插入或删除元素时，不需要移动大量的元素
+   - 缺点：需要额外的空间来表达数据之间的逻辑关系，不支持下标访问和随机访问
+4. 索引结构
+   - 除建立存储节点信息外，还建立附加的索引表来记录每个元素节点的地址。索引表由若干索引项组成，索引项的一般形式是：（关键字，地址）
+   - 优点：用节点的索引号来确定结点存储地址，检索速度快
+   - 缺点：增加了附加的索引表，会占用较多的存储空间。在增加和删除数据时要修改索引表，因而会花费较多的时间
+5. 散列结构
+   - 根据元素的关键字直接计算出该元素的存储空间，又称为Hash存储
+   - 优点：检索、增加和删除节点的操作都很快
+   - 缺点：不支持排序，一般比用线性存储需要更多的空间，并且记录的关键字不能重复
+6. 开发中，更习惯如下的方式理解存储结构
+   - 线性表（一对一关系）：一维数组、单项链表、双向链表、栈（先进入出）、队列（先进先出）
+   - 树（一对多关系）：各种树。比如：二叉树、B+树
+   - 图（多对多关系）：
+   - 哈希表：如HashSet、HashMap
+
+##### 三、运算结构
+
+1. 施加在数据上的运算包括运算的定义和实现。运算的定义是针对逻辑结构的，指出运算的功能；运算的实现是针对存储结构的，指出运算的具体操作步骤
+2. 分配资源，建立结构，释放资源
+3. 插入和删除
+4. 获取和遍历
+5. 修改和排序
+
+### 三、常见的存储结构
+
+##### 一、常见存储结构之数组
+
+1. 数组在存储时开辟连续的指定长度空间，每个槽位开辟的空间大小取决于数组存放的类型
+2. 每一个槽位占用的空间大小为4个字节
+3. byte、char、short、int、float在数组中的槽位空间大小都是占用4个字节；long、double在数组中的槽位大小都是占用8个字节，也就是两个槽位；引用数据类型的槽位大小是占用一个槽位，存放的地址
+
+##### 二、常见存储结构之链表
+
+1. 单向链表
+
+   - 单向链表中的基本单位是节点（Node）
+
+   - 节点的属性有存储的数据（Object data）和指向的下一个节点（Node next）
+
+     ```java
+     // 单向列表简略定义
+     class Node{
+     	Object data;
+         Node next;
+         
+         public Node(Object data){
+             this.data = data;
+         }
+     }
+     
+     // 创建对象
+     Node node1 = new Node("AA");
+     Node node2 = new Node("BB");
+     node1.next = node2;
+     ```
+
+2. 双向链表
+
+   - 双向链表中的基本单位是节点（Node）
+
+   - 节点的属性有存储的数据（Object data）、指向的下一个节点（Node next）以及指向的上一个节点（Node prev）
+
+     ```java
+     // 双向列表简略定义
+     class Node{
+         Node prev;
+     	Object data;
+         Node next;
+         
+         public Node(Object data){
+             this.data = data;
+         }
+         
+         public Node(Node prev,Object data,Node next){
+             this.prev = prev;
+             this.data = data;
+             this.next = next;
+         }
+     }
+     
+     // 创建对象
+     Node node1 = new Node(null,"AA",null);
+     Node node2 = new Node(node1,"BB",null);
+     Node node3 = new Node(node2,"CC",null);
+     // 连接双向
+     node1.next = node2;
+     node2.next = node3;
+     ```
+
+##### 三、常见存储结构之二叉树
+
+1. 二叉树中的基本单位是节点（TreeNode）
+
+2. 节点的属性有存储的数据（Object data）和指向的下一个节点（Node next）
+
+   ```java
+   // 单向列表简略定义
+   class Node{
+       TreeParent parent;-----------------也可以补充个父节点，也可以不用
+       TreeNode left;
+   	Object data;
+       TreeNode right;
+       
+       public TreeNode(Object data){
+           this.data = data;
+       }
+       
+       public TreeNode(TreeNode left,Object data,TreeNode right){
+           this.left = left;
+           this.data = data;
+           this.right = right;
+       }
+       
+       public TreeNode(TreeParent parent,TreeNode left,Object data,TreeNode right){
+           this.parent = parent;
+           this.left = left;
+           this.data = data;
+           this.right = right;
+       }
+   }
+   
+   // 创建对象
+   TreeNode node1 = new TreeNode(null,null"AA",null);
+   TreeNode leftNode = new TreeNode(node1,null,"BB",null);
+   TreeNode rughtNode = new TreeNode(node1,null,"CC",null);
+   node1.left = leftNode;
+   node2.right = rughtNode;
+   ```
+
+##### 四、常见存储结构之栈
+
+- 栈的特点：stack、先进后出、first in last out、FILO、LIFO
+
+- 属于抽象数据类型（ADT）
+
+- 可以使用数组或链表来构建
+
+  ```java
+  // 数组实现栈
+  class Stack{
+  	Object[] values;
+  	int size; //记录存储的元素个数
+      
+      public Stack(int length){
+          values = new Object[length];
+      }
+      
+      // 入栈
+      public void push(Object ele){
+          if(size >= values.length){
+              throw new RuntimeException("栈空间已满，入栈失败！")；
+          }
+          values[size] = ele;
+          size++;
+      }
+      
+      // 出栈
+      public void pop(){
+      	if(size <=0){
+           	throw new RuntimeException("栈空间已空，出栈失败！")；
+          }  
+          Object obj = values[size-1];
+          values[size-1] = null;
+          size--;
+          return obj;
+      }
+  }
+  ```
+
+##### 五、常见存储之队列
+
+- 队列的特点：queue、先进先出、first in first out、FIFO
+
+- 属于抽象数据类型（ADT）
+
+- 可以使用数据或链表来构建
+
+  ```java
+  // 数组实现队列
+  class Queue{
+      Object[] values;
+      int size; // 记录存储的元素的个数
+      
+      public Queue(int length){
+          values = new Object[length];
+      }
+      
+      // 添加
+      public void add(Object ele){
+         if(size >= values.length){
+              throw new RuntimeException("队列已满，添加失败！")；
+          }
+          values[size] = ele;
+          size++; 
+      }
+      
+      // 取值
+      public Object get(){
+      	if(size <=0){
+           	throw new RuntimeException("队列已空，取值失败！")；
+          }  
+          // 队列取值永远取头部的那个
+          Object obj = values[0];
+          // 数据前移
+          for(int i=0;i<size-1;i++){
+              values[i] = values[i+1]
+          }
+          // 最后一个元素置空
+          values[size-1]=null;
+          size--;
+          return obj;
+      }
+  }
+  ```
+
+##### 六、树与二叉树
+
+1. 树的专有名词解释
+   - 节点：树中的数据元素都称之为节点
+   - 根节点：最上面的节点称之为根，一棵树只有一个根且由根发展而来，从另一个角度来说，每个节点都可以认为是其子树的根
+   - 父节点：节点的上层节点
+   - 子节点：节点的下层节点
+   - 兄弟节点：具有相同父节点的节点称为兄弟节点
+   - 节点的度数：每个节点所拥有的子树的个数称之为节点的度，只算子节点的个数，不再往下细数
+   - 树叶：度数为0的节点，也叫做终端节点
+   - 非终端节点（或分支节点）：树叶以外的节点，或度数不为0的节点
+   - 树的深度（或高度）：树中节点的最大层次数
+   - 节点的层数：从根节点到树中某节点所经路径上的分支树称为该节点的层数，根节点的层数规定为1，其余节点的层数等于其父类节点的层数+1
+   - 同代：在同一棵树中具有相同层数的节点
+2. 二叉树的基本概念
+   - 二叉树的特点是每个节点最多只能有两颗子树，且有左右之分
+3. 二叉树的遍历（记住根在什么时候遍历就是什么遍历）
+   - 前序遍历：中左右（根左右）：即先访问根节点，再前序遍历左子树，最后再前序遍历右子树。前序遍历运算访问二叉树各节点是以根、左、右的顺序进行访问的
+   - 中序遍历：左中右（左根右）：即先中序遍历左子树，然后再访问根节点，最后再中序遍历右子树。中序遍历运算访问二叉树各节点是以左、根、右的顺序进行访问的
+   - 后序遍历：左右中（左右根）：即先后序遍历左子树，然后再后续遍历右子树，最后访问根节点。后序遍历运算访问二叉树各节点是以左、右、根的顺序进行访问的
+
+### 四、List实现类底层刨析
+
+##### 一、ArrayList
+
+1. ArrayList的特点
+   - 实现了List接口，存储有序的、可以重复的数据
+   - 底层使用Object[]数组存储
+   - 线程不安全
+2. jdk7中ArrayList原码解析
+   - 初始化ArrayList时，底层会初始化数组，数组的默认长度为10。即Object[] elementData = new Object[10]
+   - 当要添加第11个元素时，底层的elementData数组已满，则需要扩容。默认扩容为原来长度的1.5倍。并将原有数组中的元素复制到新的数组中	
+3. jdk8中ArrayList原码解析
+   - 初始化ArrayList时，底层会动态初始化数组。即Object[] elementData = new Object[]{}
+   - 首次添加元素的时候，会初始化数组elementData = new Object[10]，再把首个元素添加进去
+   - 当要添加第11个元素时，底层的elementData数组已满，则需要扩容。默认扩容为原来长度的1.5倍。并将原有数组中的元素复制到新的数组中
+
+##### 二、Vector
+
+1. Vector的特点
+   - 实现了List接口，存储有序的、可以重复的数据
+   - 底层使用Object[]数组存储
+   - 线程安全
+2. Vector的底层源码解析
+   - 初始化ArrayList时，底层会初始化数组，数组的默认长度为10。即Object[] elementData = new Object[10]
+   - 当要添加第11个元素时，底层的elementData数组已满，则需要扩容。默认扩容为原来长度的2倍。并将原有数组中的元素复制到新的数组中	
+
+##### 三、LinkedList
+
+1. LinkedList的特点
+   - 实现了List接口，存储有序的、可以重复的数据
+   - 底层使用双向链表存储
+   - 线程不安全
+2. LinkedList的底层源码解析
+   - 在初始化LinkedList的时候底层并未做什么。只是LinkedList里面有两个Node<E>属性first和last。而Node里面的属性又包括E item、Node<E> next、Node<E> prev
+   - 在将第一个‘AA’元素封装到一个Node对象1中，list对象的属性first、last都指向此Node对象1
+   - 在将第二个‘BB’元素封装到一个Node对象2中，对象1和对象2构成一个双向链表，同时last指向此Node对象2，first指向Node对象1。以此类推
+   - 因为LinkedList使用的是双向链表，不需要考虑扩容问题
+
+##### 四、开发启示和建议
+
+1. Vector基本不使用了
+2. ArrayList底层使用数组结构，查找和添加（尾部添加）操作效率高，时间复杂度为o(1)；删除和插入操作效率低，时间复杂度为o(n)
+3. LinkedList底层使用双向链表结构，删除和插入操作效率高，时间复杂度为o(1)；查找和添加（尾部添加）操作效率低，时间复杂度为o(n)；添加操作有可能是o(1)
+4. 在选择ArrayList的前提下，new ArrayList()底层创建长度为10的数组；new ArrayList(int capacity)底层创建指定capacity长度的数组。如果开发中大体确定数组的长度，则推荐使用new ArrayList(int capacity)构造器，避免了底层的扩容、赋值，效率会更好一点
+
+### 五、Map实现类底层刨析
+
+##### 一、HashMap
+
+1. HashMap中元素的特点
+
+   - HashMap中的所有key彼此之间是不重复的、无序的。所有的key构成了一个Set集合，key所在的类要重写hashCode()和equals()方法
+   - HashMap中所有的value彼此之间是可重复的、无序的。所有的value就构成了一个Collection集合，value所在的类只需要重写equals()方法即可
+   - HashMap中的一个key-value，就构成了一个Entry
+   - HashMap中的所有Entry彼此之间是不重复的、无序的。所有的entry就构成了一个Set集合
+
+2. jdk7中HashMap的底层源码解析
+
+   - HashMap<String,Integer> map = new HashMap<>()在创建对象的过程中，底层会初始化数组Entry[] table = new Entry[16]。将(key1,value1)添加到当前map中，底层实现如下步骤
+
+   - 首先把需要调用key1所在类的hashCode()方法，计算key1对应的哈希值1，此哈希值1经过某种算法（hash()）之后，得到哈希值2。哈希值2再经过某种算法（indexFor()）之后，就确定了(key1,value1)其在数组table中的索引位置i
+
+   - 如果此索引位置i的数组上没有元素，则(key1,value1)添加成功------------->情况1
+
+   - 如果此索引位置i的数组上有元素(key2,value2)，即哈希冲突
+
+   - 如果有哈希冲突，则继续比较key1和key2的哈希值2。如果key1的哈希值2与key2的哈希值2不相同，则添加成功---------------------------------------------------------------------------------------------->情况2
+
+   - 如果有哈希冲突，则继续比较key1和key2的哈希值2。如果key1的哈希值2与key2的哈希值2相同，则需要继续比较key1和key2的equals的情况。要调用key1所在类的equals()，将key2作为参数传递进去
+
+   - 调用equals()方法，返回false，则(key1,value1)添加成功------------------->情况3
+
+   - 调用equals()方法，返回true，则认为key1和key2是相同的。默认情况下，value1替换原有的value2
+
+   - 说明，上述情况1，将(key1,value1)存放到数组的索引位置i；情况2和3，(key1,value1)元素与现有的(key2,value2)构成单向链表结构，(key1,value1)指向(key2,value2)，此时使用的是头插法，将新进来的(key1,value1)插在单向链表的首地址处。算法的角度来说，链表越短越好
+
+   - 随着不断地添加元素，在满足元素的个数达到临界值时，就会扩容。默认的临界值为数组的长度`*`加载因子，也就是16`*`0.75 = 12。默认扩容为原来的两倍
+
+   - Map中Entry数组的长度永远都是2的整数倍，在构造Map时传入的Entry大小无论是不是2的整数倍，底层都会做操作，使之称为2的整数倍
+
+     ```java
+     // 通过此循环，得到的capacity的最终值，此最终值决定了Entry数组的长度。此时的capacity一定是2的整数倍
+     int capacity = 1;
+     while(capacity<initialCapacity){
+         capacity <<= 1;
+     }
+     ```
+
+3. jdk8中HashMap的底层源码解析
+
+4. jdk7和jdk8中HashMap的不同之处
+
+   - 在jdk8中，当我们创建了HashMap实例以后，底层并没有初始化table数组。当首次添加(key,value)时，进行判断，如果发现table尚未初始化，则对数组进行初始化
+   - 在jdk8中，HashMap底层定义了Node内部类，替换了jdk7中的Entry内部类，只是名称换了，换汤不换药。意味着，我们创建的数组是Node[]
+   - 在jdk8中，如果当前的(key,value)经过一系列判断之后，可以添加到当前的数组角标i中。如果此时角标i位置上有元素，在jdk7中是将新的(key,value)指向已有的旧的元素，即头插法；而在jdk8中是旧的元素指向新的(key,value)元素，即尾插法
+   - 在jdk7中使用的结构为数组+单向链表；而在jdk8中使用的结构为数组+单向链表+红黑树（是二叉排序树的一种）。
+   - 如果数组索引位置i上的链表元素个数达到8，并且数组的长度达到64时，我们就将此索引i位置上的多个元素改为使用红黑树的结构进行存储。使用红黑树进行put()、get()或remove()操作的时间复杂度为o(logn)，比单向链表的时间复杂度o(n)的好，性能更高
+   - 当使用红黑树的索引i位置上的元素的个数低于6的时候，就会将红黑树结构退化为单向链表。要转回单向链表是因为红黑树中的TreeNode是单向链表中Node所占空间的两倍，更费空间
+   - 如果数组索引位置i上的链表元素个数达到8，但数组的长度未达到64时，则先进行数组的扩容；逐步扩容后，如果数组索引位置i上的链表元素个数达到8，但数组的长度达到64时，则实现单向链表转红黑树
+
+5. 属性/字段
+
+   ```java
+   // 默认初始化容量
+   static final int DEFAULT_INITIAL_CAPACITY = 1 << 4; // aka 16
+   
+   // 最大容量
+   static final int MAXIMUM_CAPACITY = 1 << 30;
+   
+   // 默认加载因子
+   static final float DEFAULT_LOAD_FACTOR = 0.75f;
+   
+   // 默认树化阈值8，当链表的长度达到这个值后，需要考虑树化
+   static final int TREEIFY_THRESHOLD = 8;
+   
+   // 默认反树化阈值6，当树中节点的个数达到此阈值后，要考虑变为链表
+   static final int UNTREEIFY_THRESHOLD = 6;
+   
+   // 当单个链表的节点个数达到8，并且table的长度达到64时，才会树化
+   // 当单个链表的节点个数达到8，但是table的长度未达到64，会先扩容
+   static final int MIN_TREEIFY_CAPACITY = 64;
+   
+   // 数组
+   transient Node<K,V> table;
+   
+   // 记录有效映射关系的对数，也是Entry对象的个数
+   transient int size;
+   
+   // 阈值，当size达到阈值时，考虑扩容
+   int threshold;
+   
+   // 加载因子，影响扩容的频率
+   final float loadFactor;
+   ```
+
+##### 二、LinkeHashMap
+
+1. LinkeHashMap与HashMap的关系
+
+   - LinkeHashMap是HashMap的子类
+
+   - LinkeHashMap在HanshMap使用的数组+单向链表+红黑树的基础上，又增加了一对双向链表，用来记录添加的(key,value)的先后顺序，便于我们去遍历所有的key-value
+
+   - LinkeHashMap重写了HashMap的如下方法
+
+     ```java
+     Node<K,V> newNode(int hash, K key, V value, Node<K,V> e) {
+     	 LinkedHashMap.Entry<K,V> p = new LinkedHashMap.Entry<>(hash, key, value, e);
+          linkNodeAtEnd(p);
+          return p;
+     }
+     ```
+
+2. LinkeHashMap底层结构
+
+   - LinkedHashMap内部定义了一个Entry
+
+     ```java
+     static class Entry<K,V> extends HashMap.Node<K,V> {
+     	Entry<K,V> before, after;
+     	Entry(int hash, K key, V value, Node<K,V> next) {
+     		super(hash, key, value, next);
+     	}
+     }
+     ```
+
+### 六、Set实现类底层刨析
+
+##### 一、HashSet
+
+- HashSet底层使用的是HashMap
+
+##### 二、LinkedHashSet
+
+- LinkedHashSet底层使用的是LinkedHashMap
