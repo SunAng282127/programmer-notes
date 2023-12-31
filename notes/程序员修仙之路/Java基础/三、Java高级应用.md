@@ -1876,3 +1876,43 @@ java.util.Map：存储一对一对的数据（key-value键值对）
 ##### 二、LinkedHashSet
 
 - LinkedHashSet底层使用的是LinkedHashMap
+
+# 七、File类与IO流
+
+### 一、File类
+
+##### 一、File类的理解
+
+- Filie类位于java.io包下
+- File类的一个对象，对应着操作系统下的一个文件或一个文件目录（或文件夹）
+- File类中声明了新建、删除、获取名称等方法，并没有涉及到文件内容的读写操作，要想实现文件内容的读写，就需要使用IO流
+- File类的对象，通常作为IO流操作的文件的端点出现的。代码层面，将File类的对象作为参数传递到IO流相关类的构造器中
+
+##### 二、File内部API使用说明
+
+1. 构造器
+   - public File(String pathname)：以pathname为路径创建File对象，可以是绝对路径或者相对路径
+   - public File(String parent,String child)：以parent为父路径，一定是一个文件；child为子路径创建File对象，可以是一个文件，也可以是一个文件目录
+   - public File(File parent,String child)：根据一个父File对象和子文件路径创建File对象。以parent为父路径，一定是一个文件；child为子路径创建File对象，可以是一个文件，也可以是一个文件目录
+   - 相对路径：相对于项目目录的路径；绝对路径：从盘符开始的路径。在IDEA中如果使用单元测试方法相对路径是相对于当前的module来讲；如果使用main()方法相对路径是相对于当前的project来讲的，也就是整个项目。在Java层面，路径的分隔符一般用‘/’或‘\\’表示
+2. 方法
+   - public String getName()：获取名称
+   - public String getPath()：获取路径
+   - public String getAbsolutePath()：获取绝对路径
+   - public File getAbsoluteFile()：获取绝对路径表示的文件
+   - public String getParent()：获取上层文件目录路径。若无则返回null
+   - public long length()：获取文件长度（即：字节数）。不能获取目录的长度
+   - public long lastModified()：获取最后一次的修改时间，毫秒值
+   - public Sting[] list()：返回一个String数组，表示该File目录中的所有子文件或目录
+   - public FIle[] listFiles()：返回一个File数组，表示该File目录中的所有子文件或目录
+   - public boolean renameTo(File dest)：把文件重命名为指定的文件路径。file1.renameTo(file2)，file1必须存在且file2必须不存在，file2所在的文件目录需要存在
+   - public boolean exists()：此File表示的文件或目录是否真实存在
+   - public boolean isDirectory()：此File表示的是否为目录
+   - public boolean isFile()：此File表示的是否为文件
+   - public boolean canRead()：判断是否可读
+   - public boolean canWrite()：判断是否可写
+   - public boolean isHidden()：判断是否隐藏
+   - public boolean createNewFile()：创建文件。若文件存在，则不创建，返回false
+   - public boolean mkdir()：创建文件目录。如果此文件目录存在，就不创建。如果此文件目录上的上层目录不存在，也不创建
+   - public boolean mkdirs()：创建文件目录。如果上层文件目录不存在，一并创建
+   - public boolean delete()：删除文件或文件夹。删除注意事项有，Java中的删除不走回收站；要删除一个文件目录，请注意该文件目录内不能包含文件或者文件目录
