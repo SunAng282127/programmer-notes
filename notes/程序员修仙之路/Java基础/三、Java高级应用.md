@@ -1916,3 +1916,415 @@ java.util.Map：存储一对一对的数据（key-value键值对）
    - public boolean mkdir()：创建文件目录。如果此文件目录存在，就不创建。如果此文件目录上的上层目录不存在，也不创建
    - public boolean mkdirs()：创建文件目录。如果上层文件目录不存在，一并创建
    - public boolean delete()：删除文件或文件夹。删除注意事项有，Java中的删除不走回收站；要删除一个文件目录，请注意该文件目录内不能包含文件或者文件目录
+
+### 二、IO流
+
+##### 一、IO流的概念
+
+- IO流中的I/O是Input/Output的缩写，IO流用于处理设备之间的数据传输，如读/写文件、网络通讯等
+- 输入input：读取外部数据（磁盘、光盘等存储设备的数据）到程序（内存）中
+- 输出output：将程序（内存）数据输出到磁盘、光盘等存储设备中
+
+##### 二、流的分类
+
+1. 按照数据的流向不同分为输入流和输出流
+
+   - 输入流：把数据从其他设备上读取到内存中的流。以InputStream、Reader结尾
+
+   - 输出流：把数据从内存中写到其他设备上的流。以OutputStream、Writer结尾
+
+2. 按照操作数据单位的不同分为：字节流（8bit）和字符流（16bit）
+
+   - 字节流：以字节为单位，读写数据的流。以InputStream、OutputStream结尾
+   - 字符流：以字符为单位，读写数据的流。以Reader、Writer结尾
+
+3. 根据IO流的角色不同分为：节点流和处理流
+
+   - 节点流：直接从数据源或目的地读写数据
+   - 处理流：不直接连接到数据源或目的地，而是连接在已存在的流（节点流或处理流）之上，通过对数据的处理为程序提供更为强大的读写功能
+
+##### 三、流的API
+
+- Java的IO流共涉及40多个类，实际上非常规则，都是从如下4个抽象基类派生的
+
+  | 抽象基类 |   输入流    |    输出流    |
+  | :------: | :---------: | :----------: |
+  |  字节流  | InputStream | OutputStream |
+  |  字符类  |   Reader    |    Writer    |
+
+- 由这四个类派生出来的子类名称都是以其父类名作为子类名后缀
+
+- 基础IO流的框架
+
+  |   抽象基类   | 节点流（文件流） | 缓冲流（处理流之一） |
+  | :----------: | :--------------: | :------------------: |
+  | InputStream  | FileInputStream  | BufferedInputStream  |
+  | OutputStream | FileOutputStream | BufferedOutputStream |
+  |    Reader    |    FileReader    |    BufferedReader    |
+  |    Writer    |    FileWriter    |    BufferedWriter    |
+
+##### 四、基础流的使用
+
+1. FileReader/FileWriter的使用
+
+   - 创建读取或写出的File类的对象。对于输入流来说，要求File类的对象对应的物理磁盘上的文件必须存在，否则汇报FileNotFoundException；对于输出流来说，File类的对象对应的物理磁盘上的文件可以不存在，如果此文件不存在则在输出的过程中会自动创建此文件并写出数据到此文件中，如果此文件存在，文件覆盖（内容追加）与否取决于FileWriter()的构造器
+
+   - 创建输入和输出流
+
+   - 具体的读入或写出的过程
+
+   - 关闭流资源，否则会内存泄漏。关闭多个流的时候并无先后顺序，需要使用try-catch-finally的方式来处理异常
+
+     ```java
+     		// 以下代码为读取操作		
+     		// 创建FIle类的对象，对应着要操作的文件
+             File file = new File("hello.txt");
+             // 创建输入型的字符流，用于读取数据
+             FileReader fr = null;
+             try {
+                 fr = new FileReader(file);
+                 // 判断是否读取完毕并操作数据
+                 // 此读取方式较慢，与磁盘交互次数太多
+                 int data ;
+                 while ((data = fr.read()) != -1) {
+                     System.out.print((char) data);
+                 }
+                 // 利用缓冲数组的方式读取数据，减少与磁盘的交互
+                 char[] cbuffer = new char[5];
+                 int len;
+                 while((len=fr.read(cbuffer))!=-1){
+                     for(int i=0;i<len;i++){
+                         char c = cbuffer[i];
+                     }
+                 }
+             } catch (FileNotFoundException e) {
+                 e.printStackTrace();
+             } catch (IOException e) {
+                 e.printStackTrace();
+             } finally {
+                 // 关闭资源
+                 try {
+                     if (fr != null) {
+                         fr.close();
+                     }
+                 } catch (IOException e) {
+                     e.printStackTrace();
+                 }
+             }
+     ```
+
+     ```java
+     		// 以下代码为写入操作		
+     		// 创建FIle类的对象，对应着要操作的文件，文件不存在则会自动创建
+             File file = new File("hello.txt");
+             // 创建输出流
+             FileWriter fw = null;
+             try {
+                 // 构造器中可以指定是覆盖原文件还是追加原文件
+                 fw = new FileWriter(file);
+                 // 写入数据
+                 fw.write("I LOVE U!\n");
+                 fw.write("LOVE LOVE LOVE");
+             } catch (IOException e) {
+                 e.printStackTrace();
+             } finally {
+                 try {
+                     if (fw != null) {
+                         fw.close();
+                     }
+                 } catch (IOException e) {
+                     e.printStackTrace();
+                 }
+             }
+     ```
+
+     ```java
+     		// 以下代码为读取写入操作合并
+     		// 创建FIle类的对象，对应着要操作的文件
+             File inputFile = new File("hello.txt");
+             File outFile = new File("word.txt");
+             // 创建输入输出流
+             FileReader fr = null;
+             FileWriter fw = null;
+             try {
+                 fr = new FileReader(inputFile);
+                 fw = new FileWriter(outFile);
+                 // 读取数据
+                 char[] cbuffer = new char[10];
+                 int len;
+                 while ((len = fr.read(cbuffer)) != -1) {
+                     // 写入文件
+                     fw.write(cbuffer, 0, len);
+                 }
+             } catch (IOException e) {
+                 e.printStackTrace();
+             } finally {
+                 try {
+                     if (fw != null) {
+                         fw.close();
+                     }
+                 } catch (IOException e) {
+                     e.printStackTrace();
+                 }
+                 try {
+                     if (fr != null) {
+                         fr.close();
+                     }
+                 } catch (IOException e) {
+                     e.printStackTrace();
+                 }
+             }
+     ```
+
+2. FileInputStream/FileOutputStream的使用
+
+   - 创建相关的的File类对象
+
+   - 创建相关的字节流
+
+   - 数据的读入和写出
+
+   - 关闭资源
+
+   - 对于字符流，只能用来操作文本文件，不能用来处理非文本文件；对于字节流，通常是用来处理非文本文件的，但是涉及到文本文件的复制操作，也可以使用字节流
+
+   - 文本文件：.txt、.java、.c、.cpp、.py等；非文本文件：.doc、.xls、.jpg、.mp3、.mp4等
+
+     ```java
+     // 创建相关的的File类对象
+             File inputImg = new File("随心.jpg");
+             File outImg = new File("copy.jpg");
+             // 创建相关的字节流
+             InputStream inputStream = null;
+             OutputStream outputStream = null;
+             try {
+                 inputStream = new FileInputStream(inputImg);
+                 outputStream = new FileOutputStream(outImg);
+                 // 数据的读取与写入
+                 byte[] buffer = new byte[1024];
+                 // 记录每次读入到buffer中字节的个数
+                 int len;
+                 while((len = inputStream.read(buffer)) != -1){
+                     outputStream.write(buffer,0,len);
+                 }
+             } catch (FileNotFoundException e) {
+                 e.printStackTrace();
+             } catch (IOException e) {
+                 e.printStackTrace();
+             } finally {
+                 try {
+                     if(inputStream != null){
+                         inputStream.close();
+                     }
+                 }catch (IOException e){
+                     e.printStackTrace();
+                 }
+                 try {
+                     if(outputStream != null){
+                         outputStream.close();
+                     }
+                 }catch (IOException e){
+                     e.printStackTrace();
+                 }
+             }
+     ```
+
+##### 五、缓冲流（处理流之一）的使用
+
+1. 缓冲流的作用
+
+   - 提升文件读写的效率
+
+2. 缓冲流的分类及方法
+
+   - 处理非文本文件的字节流
+
+     |        缓冲流        |           常用方法           |
+     | :------------------: | :--------------------------: |
+     | BufferedInputStream  |    read(byte[] buffer)等     |
+     | BufferedOutputStream | write(byte[] buffer,0,len)等 |
+
+   - 处理文本文件的字符流
+
+     |     缓冲流     |             常用方法              |
+     | :------------: | :-------------------------------: |
+     | BufferedReader | read(byte[] cBuffer)/readLine()等 |
+     | BufferedWriter |   write(byte[] cBuffer,0,len)等   |
+
+3. 缓冲流的实现步骤
+
+   - 创建File的对象、流的对象（包括文件流、缓冲流）
+
+   - 使用缓冲流实现读取数据或写出数据的过程
+
+     ① 读取：int read(char[] cbuffer / byte[] buffer)，每次将数据读入到cbuffer/buffer数组中，并返回读入到数组中字符或字节的个数
+
+     ② 写出：void write(String str)/write(char[] cbuf)，将str或cbuf写出到文件中；void write(byte[] buffer)：将byte[]写出到文件中
+
+   - 关闭资源。关闭资源时，先关闭外层资源再关闭内层资源，像脱衣服一样，先脱外再脱内。由于外层流的关闭会自动的对内层的流进行关闭操作，所以可以省略内层流的关闭
+
+   - 注意点：BufferedReader中的readLine()每次读取一行不带换行符的内容并拼接到一块。无则返回null；所有操作IO的输出流都有flush操作，此操作为即时刷新操作，每当调用此方法时，就会主动的将内存中的数据写到磁盘文件中，如果没有此方法也会在执行close()方法时指向刷新操作
+
+     ```java
+      	    // 使用BufferedInputStream和BufferedOutputStream复制文件
+     	    // 创建相关的的File类对象
+             File inputImg = new File("随心.jpg");
+             File outImg = new File("copy1.jpg");
+             // 创建相关的字节流
+             InputStream inputStream = null;
+             OutputStream outputStream = null;
+             // 创建相关的缓冲流
+             BufferedInputStream bis = null;
+             BufferedOutputStream bos = null;
+             try {
+                 inputStream = new FileInputStream(inputImg);
+                 outputStream = new FileOutputStream(outImg);
+                 bis = new BufferedInputStream(inputStream);
+                 bos = new BufferedOutputStream(outputStream);
+                 // 数据的读取与写入
+                 byte[] buffer = new byte[1024];
+                 // 记录每次读入到buffer中字节的个数
+                 int len;
+                 while((len = bis.read(buffer)) != -1){
+                     bos.write(buffer,0,len);
+                 }
+             } catch (FileNotFoundException e) {
+                 e.printStackTrace();
+             } catch (IOException e) {
+                 e.printStackTrace();
+             } finally {
+                 try {
+                     if(bis != null){
+                         bis.close();
+                     }
+                 }catch (IOException e){
+                     e.printStackTrace();
+                 }
+                 try {
+                     if(bos != null){
+                         bos.close();
+                     }
+                 }catch (IOException e){
+                     e.printStackTrace();
+                 }
+             }
+     ```
+
+     ```java
+     		// 使用BufferedReader和BufferedWriter复制文件
+     		// 创建相关的的File类对象
+             File inputFile = new File("hello.txt");
+             File outputFile = new File("world.txt");
+             // 创建相关的输入输出流
+             Reader is = null;
+             Writer os = null;
+             // 创建相关的缓存输入输出字符流
+             BufferedReader br = null;
+             BufferedWriter bw = null;
+             try {
+                 is = new FileReader(inputFile);
+                 os = new FileWriter(outputFile);
+                 br = new BufferedReader(is);
+                 bw = new BufferedWriter(os);
+                 // 操作数据写入文件中
+                 String data;
+                 while ((data = br.readLine()) != null) {
+                     bw.write(data);
+                     bw.newLine();
+                     bw.flush();
+                 }
+             } catch (FileNotFoundException e) {
+                 e.printStackTrace();
+             } catch (IOException e) {
+                 e.printStackTrace();
+             } finally {
+                 try {
+                     if (br != null) {
+                         br.close();
+                     }
+                 } catch (IOException e) {
+                     e.printStackTrace();
+                 }
+                 try {
+                     if (bw != null) {
+                         bw.close();
+                     }
+                 } catch (IOException e) {
+                     e.printStackTrace();
+                 }
+             }
+     ```
+
+##### 六、转换流（处理流之二）的使用
+
+1. 字符编码解码
+
+   - 字符编码：从字符、字符串、字符数组转为字节、字节数组（从我们能看得懂的转为我们看不懂的）
+   - 字符解码：从字节、字节数组转为字符、字符串、字符数组（从我们看不懂的转为我们看的懂的）
+
+2. 文件读取时乱码问题
+
+   - 解码时使用的字符集必须与当初编码时使用的字符集得相同
+   - 解码集必须要与编码集兼容。比如，文件编码使用的是GBK，解码时使用的是utf-8，如果文件中只有英文字符也不会出现乱码，因为GBK和utf-8都向下了
+
+3. 转换流
+
+   - 作用：实现字节与字符之间的转换
+
+   - InputStreamReader：将一个输入型的字节流转为输入型的字符流
+
+   - OutputStreamWriter：将一个输出型的字符流转为输出型的字节流
+
+     ```java
+     // 创建相关的的File类对象
+             File inputFile = new File("hello.txt");
+             File outputFile = new File("world.txt");
+             // 造流
+             InputStream is = null;
+             InputStreamReader isr = null;
+             OutputStream os = null;
+             OutputStreamWriter osw = null;
+             try {
+                 is = new FileInputStream(inputFile);
+                 isr = new InputStreamReader(is,"UTF-8");
+                 os = new FileOutputStream(outputFile);
+                 osw = new OutputStreamWriter(os,"UTF-8");
+                 char[] buffer = new char[5];
+                 int len;
+                 while ((len = isr.read(buffer)) != -1) {
+                     osw.write(buffer, 0, len);
+                 }
+             } catch (FileNotFoundException e) {
+                 e.printStackTrace();
+             } catch (IOException e) {
+                 e.printStackTrace();
+             } finally {
+                 try {
+                     if(isr != null){
+                         isr.close();
+                     }
+                 } catch (IOException e) {
+                     e.printStackTrace();
+                 }
+                 try {
+                     if(osw != null){
+                         osw.close();
+                     }
+                 } catch (IOException e) {
+                     e.printStackTrace();
+                 }
+             }
+     ```
+
+   ![转换流](../../../TyporaImage/转换流.png)
+
+4. 在存储文件中字符集的理解
+
+   - ASCII：主要存储英文字母、数字、常用的标点符号等。每个字符占用一个字节
+   - GDK：主要存储英文字母、数字、常用的标点符号以及繁简中文等。除中文外每个字符占用一个字节，中文每个字符占用两个字节。向下兼容ASCII。使用了双字节编码
+   - UTF-8：可以用来存储世界范围内主要的语言的所有的字符。除中文外每个字符占用一个字节，中文每个字符占用三个字节。使用1-4个不等的字节进行存储，可变的字节编码。
+
+5. 在内存中字符集的理解
+
+   - 一个字符（char）占用2个字节，在内存中使用的字符集称为Unicode字符集
+   - 字符在内存层面和存储文件层面有不同的字节占用
