@@ -2463,7 +2463,7 @@ java.util.Map：存储一对一对的数据（key-value键值对）
 
 ##### 三、TCP的三次握手和四次挥手
 
-在建⽴TCP连接时，需要通过三次握⼿来建⽴，过程是：
+在建⽴TCP连接时，需要通过三次握⼿来建⽴，发送请求和回复报文，过程是：
 
 1. 客户端向服务端发送⼀个SYN 
 2. 服务端接收到SYN后，给客户端发送⼀个SYN_ACK
@@ -2508,42 +2508,44 @@ java.util.Map：存储一对一对的数据（key-value键值对）
 
 1. 客户端编程
 
-	```java
-		   // 创建一个Socket
-		    Socket socket = null;
-	        OutputStream os = null;
-	        try {
-	            int port = 8989;
-	            // 声明要访问服务器的地址和端口号
-	            socket = new Socket("127.0.0.1",port);
-	            os = socket.getOutputStream();
-	            // 发送数据
-	            os.write("hell world".getBytes());
-	        } catch (IOException e) {
-	            e.printStackTrace();
-	        }finally {
-	            // 关闭连接，关闭时无先后顺序
-	            try {
-	                if(socket != null){
-	                    socket.close();
-	                }
-	            }catch (IOException e){
-	                e.printStackTrace();
-	            }
-	            try {
-	                if(os != null){
-	                    os.close();
-	                }
-	            }catch (IOException e){
-	                e.printStackTrace();
-	            }
-	        }
-	```
+  ```java
+  	   // 创建一个Socket
+  	    Socket socket = null;
+          OutputStream os = null;
+          try {
+              int port = 8989;
+              // 声明要访问服务器的地址和端口号
+              socket = new Socket("127.0.0.1",port);
+              os = socket.getOutputStream();
+              // 发送数据
+              os.write("hell world".getBytes());
+              // 客户端表明不再继续发送数据
+              socket.shutdownOutput();
+          } catch (IOException e) {
+              e.printStackTrace();
+          }finally {
+              // 关闭连接，关闭时无先后顺序
+              try {
+                  if(socket != null){
+                      socket.close();
+                  }
+              }catch (IOException e){
+                  e.printStackTrace();
+              }
+              try {
+                  if(os != null){
+                      os.close();
+                  }
+              }catch (IOException e){
+                  e.printStackTrace();
+              }
+          }
+  ```
 
 2. 服务端编程
 
 	```java
-	// 创建一个ServerSocket
+			// 创建一个ServerSocket
 		    ServerSocket serverSocket = null;
 			// 调用accept()，接收客户端的Socket
 	        Socket socket = null;
@@ -2557,7 +2559,8 @@ java.util.Map：存储一对一对的数据（key-value键值对）
 	            is = socket.getInputStream();
 	            byte[] buffer = new byte[1024];
 	            int len;
-	            // 内部维护了一个byte[]数组，将数据读取到内存中
+	            // 内部维护了一个byte[]数组，将数据读取到内存中，操作文件的什么时候不用它
+	            // 操作文件时还是把相应的文件读写操作的流嵌入进来即可
 	            ByteArrayOutputStream baos = new ByteArrayOutputStream();
 	            while ((len = is.read(buffer)) != -1){
 	                //这种方式可能会出现乱码
@@ -2598,5 +2601,99 @@ java.util.Map：存储一对一对的数据（key-value键值对）
 
 ### 十一、UDP网络编程
 
+1. 发送端编程
+
+   ```java
+   		// 建立Socket,发送端不需要在此指明端口号
+           DatagramSocket ds = new DatagramSocket();
+           // 将数据、目的地的ip、目的地的端口号都封装在DatagramPacket数据报中。如数据量过大，可创建    DatagramPacket数据进行发送
+           InetAddress inetAddress = InetAddress.getByName("127.0.0.1");
+           int port = 9090;
+           byte[] bytes = "我是发送端".getBytes("utf-8");
+           // 封装数据包
+           DatagramPacket packet = new DatagramPacket(bytes,0,bytes.length,inetAddress,port);
+           // 发送数据
+           ds.send(packet);
+           ds.close();
+   ```
+
+2. 接收端编程
+
+   ```java
+   		// 创建DatagramSocket的实例并指明端口号
+           DatagramSocket ds = new DatagramSocket(9090);
+           // 创建数据包的对象，用于接收发送端发送过来的数据
+           byte[] buffer = new byte[1024*64];
+           DatagramPacket packet = new DatagramPacket(buffer,0,buffer.length);
+           // 接收数据
+           ds.receive(packet);
+           // 获取数据
+           String str = new String(packet.getData(),0, packet.getLength());
+           System.out.println(str);
+           ds.close();
+   ```
+
 ### 十二、URL编程
+
+##### 一、URL的含义及其作用
+
+1. URL含义：统一资源定位符（Uniform Resource Locator）
+2. URL作用：一个具体的url就对应着互联网上某一资源的地址
+
+##### 二、URL的格式
+
+1. URL具体的格式：应用层协议	ip地址	端口号	资源地址	参数列表
+2. URL具体的例子：http:            //  127.0.0.1:8080 / examples/abc?name=sun
+
+##### 三、URL类的实例及其常用方法
+
+1. URL url  = new URL(url字符串)
+2. public String getProtocal()：获取该URL的协议名
+3. public String getHost()：获取该URL的主机名
+4. public String getPort()：获取该URL的端口号
+5. public String getPath()：获取该URL的文件路径
+6. public String getFile()：获取该URL的文件名
+7. public String getQuey()：获取该URL的查询名
+
+##### 四、URL编程步骤
+
+```java
+		HttpURLConnection urlConnection = null;
+        InputStream is = null;
+        FileOutputStream fos = null;
+        try {
+            // 获取URL实例
+            URL url = new URL("https://img1.baidu.com/it/u=2559867097,3726275945&fm=253&fmt=auto&app=138&f=JPEG?w=1333&h=500");
+            // 创建与服务器端的连接
+            urlConnection = (HttpURLConnection) url.openConnection();
+            // 获取输入流，创建输出流
+            is = urlConnection.getInputStream();
+            File file = new File("urltest.jpg");
+            fos = new FileOutputStream(file);
+            byte[] buffer = new byte[1024];
+            int len;
+            while((len = is.read(buffer))!=-1){
+                fos.write(buffer,0,len);
+            }
+            System.out.println("文件下载完成");
+        }catch (IOException e){
+            e.printStackTrace();
+        }finally {
+            try {
+                if(is !=null){
+                    is.close();
+                }
+            }catch (IOException e){
+                e.printStackTrace();
+            }
+            try {
+                if(fos !=null){
+                    fos.close();
+                }
+            }catch (IOException e){
+                e.printStackTrace();
+            }
+            urlConnection.disconnect();
+        }
+```
 
