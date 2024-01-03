@@ -2504,9 +2504,99 @@ java.util.Map：存储一对一对的数据（key-value键值对）
 
 ![TCP网络通讯模型](../../../TyporaImage/TCP网络通信模型.png)
 
+##### 二、TCP编程步骤
 
+1. 客户端编程
+
+	```java
+		   // 创建一个Socket
+		    Socket socket = null;
+	        OutputStream os = null;
+	        try {
+	            int port = 8989;
+	            // 声明要访问服务器的地址和端口号
+	            socket = new Socket("127.0.0.1",port);
+	            os = socket.getOutputStream();
+	            // 发送数据
+	            os.write("hell world".getBytes());
+	        } catch (IOException e) {
+	            e.printStackTrace();
+	        }finally {
+	            // 关闭连接，关闭时无先后顺序
+	            try {
+	                if(socket != null){
+	                    socket.close();
+	                }
+	            }catch (IOException e){
+	                e.printStackTrace();
+	            }
+	            try {
+	                if(os != null){
+	                    os.close();
+	                }
+	            }catch (IOException e){
+	                e.printStackTrace();
+	            }
+	        }
+	```
+
+2. 服务端编程
+
+	```java
+	// 创建一个ServerSocket
+		    ServerSocket serverSocket = null;
+			// 调用accept()，接收客户端的Socket
+	        Socket socket = null;
+			// 接收数据的流
+	        InputStream is = null;
+	        try {
+	            int port = 8989;
+	            serverSocket = new ServerSocket(port);
+	            socket = serverSocket.accept();
+	            System.out.println("server start!");
+	            is = socket.getInputStream();
+	            byte[] buffer = new byte[1024];
+	            int len;
+	            // 内部维护了一个byte[]数组，将数据读取到内存中
+	            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+	            while ((len = is.read(buffer)) != -1){
+	                //这种方式可能会出现乱码
+				  //String str = new String(buffer,0,len);
+				  //System.out.print(str);
+	                // 使用此方法避免了编码问题
+	                baos.write(buffer,0,len);
+	            }
+	            System.out.println(baos.toString());
+	            System.out.println("accept end!");
+	        }catch (IOException e){
+	            e.printStackTrace();
+	        }finally {
+	            // 关闭连接，serverSocket可以不关闭，毕竟服务器一直要开启状态
+	            try {
+	                if(socket != null){
+	                    socket.close();
+	                }
+	            }catch (IOException e){
+	                e.printStackTrace();
+	            }
+	            try {
+	                if(is != null){
+	                    is.close();
+	                }
+	            }catch (IOException e){
+	                e.printStackTrace();
+	            }
+	            try {
+	                if(serverSocket != null){
+	                    serverSocket.close();
+	                }
+	            }catch (IOException e){
+	                e.printStackTrace();
+	            }
+	        }
+	```
 
 ### 十一、UDP网络编程
 
-十二、URL编程
+### 十二、URL编程
 
