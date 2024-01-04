@@ -2697,3 +2697,106 @@ java.util.Map：存储一对一对的数据（key-value键值对）
         }
 ```
 
+# 九、反射机制
+
+### 一、反射概述
+
+- 反射（Reflection）是被视为动态语言的关键，反射机制允许程序在运行期间借助于Reflection API取得任何类的内部信息，并能直接操作任意对象的内部属性及方法
+- 加载完类之后，在堆内存的方法区中就产生了一个class类型的对象（一个类只有一个Class对象），这个对象就包含了完整的类的结构信息。我们可以通过这个对象看到类的结构。这个对象就像一面镜子，透过这个镜子看到类的结构，所以，我们就形象的称之为反射
+- 反射体现了动态性（可以在运行时动态的获取对象所属的类，动态的调用相关的方法），所以我们在设计框架的时候，会大量的使用反射。框架=注解+反射+设计模式
+- 封装性体现的是是否建议我们调用内部API的问题 ，比如，private声明的结构意味着不建议调用；反射体现的是我们能否调用的问题，因为类的完整结构都加载到了内存中，所以我们就有能力进行调用
+
+### 二、反射机制提供的功能
+
+- 在运行时判断任意一个对象所属的类
+- 在运行时构造任意一个类的对象
+- 在运行时判断任意一个类所具有的成员变量和方法
+- 在运行时获取泛型信息
+- 在运行时调用任意一个对象的成员变量和方法、构造器
+- 在运行时处理注解
+- 生成动态代理
+
+### 三、反射的优缺点
+
+1. 优点
+	- 提高了Java程序的灵活性和扩展性，降低了耦合性，提高自适应能力
+	- 允许程序创建和控制任何类的对象，无需提前硬编码目标类
+2. 缺点
+	- 反射的性能较低，反射机制主要应用在对灵活性和扩展性要求很高的系统框架上
+	- 反射会模糊程序内部逻辑，可读性较差
+
+### 四、Class类
+
+##### 一、Class类的理解
+
+- 以Java类的加载为例说明，针对于编写好的.java源文件进行编译（使用javac.exe），会生成一个或多个.class字节码文件。接着，我们使用java.exe命令对指定的.class文件进行解释运行。这个解释运行的过程中，我们需要.class字节码文件加载（使用类的加载器）到内存中（存放在方法区）、加载到内存中的.class文件对应的结构即为Class的一个实例。
+- 比如，加载到内存中的Person类或其他类吗，都作为Class的一个一个实例。Class clazz = Person.class。此时Person为运行时类，运行时类在内存中会缓存起来，在整个执行期间，只会加载一次，再执行类似的操作获取相同的类时，会直接在内存中（方法区）去拿
+
+##### 二、获取Class类的实例
+
+1. 调用运行时类的静态属性
+2. 调用运行时类的对象getClass()
+3. 调用Class类的静态方法forName(String className),className为类的包路径+类
+4. 使用类的加载器的方式
+
+```java
+ // 1 调用运行时类的静态属性
+        Class clazz1 = Server.class;
+
+        // 2 调用运行时类的对象getClass()
+        Server server = new Server();
+        Class clazz2 = server.getClass();
+
+        // 3 调用Class类的静态方法forName(String className),className为类的包路径+类
+        Class clazz3 = Class.forName("com.ruoyi.system.domain.Server");
+
+        // 4 使用类的加载器的方式
+        Class clazz4 = ClassLoader.getSystemClassLoader().loadClass("com.ruoyi.system.domain.Server");
+```
+
+##### 三、Class对象对应的类型
+
+1. class：外部类，成员类（成员内部类、静态内部类），局部内部类，匿名内部类
+2. interface：接口
+3. []：数组
+4. enum：枚举
+5. annotation：注解@interface
+6. primitive type：基本数据类型
+7. void 
+
+##### 四、类的加载过程
+
+1. 类的装载（loading）
+	- 将类的class文件读入内存，并为之创建一个java.lang.Class对象，此过程由类加载器完成
+2. 链接（linking）
+	- 验证（Verify）：确保加载的类信息符合JVM规范，例如，以cafebabe开头，没有安全方面的问题
+	- 准备（Prepare）：正式为类变量（static）分配内存并设置类变量默认初始值的阶段，这些内存都将在方法区中进行分配
+	- 解析（Resolve）：虚拟机常量池内的符号引用（常量名）替换为直接引用（地址）的过程
+3. 初始化（initialization）
+	- 执行类构造器<clinit>()方法的过程
+	- 类构造器<clinit>()方法是由编译期自动收集类中所有类变量的赋值动作和静态代码块中的语句合并产生的
+
+##### 五、类的加载器
+
+1. 类加载器的作用：负责类的加载，并对应于一个Class的实例
+2. 类加载器的分类（JDK8）
+	- BootstrapClassLoader：引导类加载器、启动类加载器。使用C/C++语言编写，不能通过Java代码获取实例；负责加载Java的核心库（JAVA_HOME/jre/lib/rt.jar或sun.boot.class.path路径下的内容）
+	- 继承于ClassLoader的类加载器
+		- ExtensionClassLoader：扩展类加载器。负责加载从java.ext.dirs系统属性所指定的目录中加载类库，或从JDK的安装目录的jre/lib/ext子目录下加载类库
+		- SystemClassLoader/ApplicationClassLoader：系统类加载器、应用程序类加载器。默认使用的类加载器
+		- 用户自定义类的加载器。实现应用的隔离（同一个类在一个应用程序中可以加载多份）；数据加密
+3. 注意点：
+	- 用户自定义的类使用的是系统类加载器加载的
+	- 对于Java的核心API使用引导类加载器加载
+	- 以上的类的加载器不存在继承关系，只是层级关系
+
+##### 六、加载器加载指定的配置文件
+
+```java
+	    Properties pro = new Properties();
+        InputStream is = ClassLoader.getSystemClassLoader().getResourceAsStream("info.properties");
+        pro.load(is);
+        String name = pro.getProperty("name");
+        String pwd = pro.getProperty("pwd");
+```
+
