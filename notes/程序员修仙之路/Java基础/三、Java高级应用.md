@@ -2740,7 +2740,7 @@ java.util.Map：存储一对一对的数据（key-value键值对）
 4. 使用类的加载器的方式
 
 ```java
- // 1 调用运行时类的静态属性
+ 	    // 1 调用运行时类的静态属性
         Class clazz1 = Server.class;
 
         // 2 调用运行时类的对象getClass()
@@ -2799,4 +2799,22 @@ java.util.Map：存储一对一对的数据（key-value键值对）
         String name = pro.getProperty("name");
         String pwd = pro.getProperty("pwd");
 ```
+
+### 五、反射的应用
+
+##### 一、创建运行时类的对象
+
+1. 实现运行时类的创建：通过Class的实例调用newInstance()方法即可，前提是在jdk8中是这样使用的
+
+   ```java
+   Class clazz = User.class;
+   User user = (User) clazz.newInstance();
+   ```
+
+2. 创建运行时类的要求
+
+   - 要求运行时类中必须提供一个空参的构造器
+   - 要求提供的空参的构造器的权限要足够，也就是调用者类与运行类的包关系要满足访问修饰符的访问权限
+
+##### 二、获取运行时类的内部结构
 
