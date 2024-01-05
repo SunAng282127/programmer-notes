@@ -2817,3 +2817,127 @@ java.util.Map：存储一对一对的数据（key-value键值对）
    - 要求提供的空参的构造器的权限要足够，也就是调用者类与运行类的包关系要满足访问修饰符的访问权限
 
 ##### 二、获取运行时类的内部结构
+
+1. 获取实现的全部接口：public Class<?>[] getInterfaces()  ，确定此对象所表示的类或接口实现的接口
+2. 获取所继承的父类： public Class<? Super T> getSuperclass()，返回表示此Class所表示的实体（类、接口、基本类型）的父类的Class
+3. 获取构造器
+	- public Constructor<T>[] getConstructors()，返回此 Class 对象所表示的类的所有public构造方法
+	- public Constructor<T>[] getDeclaredConstructors()，返回此 Class 对象表示的类声明的所有构造方法
+	- Constructor类中：取得修饰符使用public int getModifiers()；取得方法名称使用public String getName()；取得参数的类型使用public Class<?>[] getParameterTypes()
+4. 获取方法
+	- public Method[] getDeclaredMethods()，返回此Class对象所表示的类或接口的全部方法
+	- public Method[] getMethods()，返回此Class对象所表示的类或接口的public的方法
+	- Method类中：public Class<`?`> getReturnType()取得全部的返回值；public Class<`?`>[] getParameterTypes()取得全部的参数；public int getModifiers()取得修饰符；public Class<`?`>[] getExceptionTypes()取得异常信息
+5. 获取属性
+	- public Field[] getFields()，返回此Class对象所表示的类或接口的public的Field
+	- public Field[] getDeclaredFields()，返回此Class对象所表示的类或接口的全部Field
+	- Field方法中：public int getModifiers() 以整数形式返回此Field的修饰符；public Class<?> getType() 得到Field的属性类型；public String getName() 返回Field的名称
+6. 获取Annotation
+	- getAnnotation(Class annotationClass)
+	- getDeclaredAnnotations() 
+7. 泛型相关
+	- 获取父类泛型类型：Type getGenericSuperclass()，Type是一个接口，Class实现了此接口
+	- 泛型类型：ParameterizedType，如果父类是带泛型的，则可以强转为ParameterizedType
+	- 获取实际的泛型类型参数数组：getActualTypeArguments()，获取泛型的参数，结果是一个数组，因为可能有多个泛型参数
+8. 类所在的包
+	- Package getPackage()
+
+##### 三、调用指定的结构
+
+1. 调用指定的属性（Filed）
+	- 先创建一个要操作类的Class类的实例，通过此Class实例调用newInstance()方法创建要操作类的实例
+	- 通过Class实例调用getDeclaredField(String filedName)，获取运行时类指定的属性
+	- 通过setAccessible(true)，确保此属性是可以访问的
+	- 通过Filed类的实例调用set(Object obj,Object value)/get(Object obj)进行属性的设置或获取。操作静态属性的set/get时Object obj参数为Class对象，比如Person.class或null都行
+2. 调用指定的方法（Method）
+	- 先创建一个要操作类的Class类的实例，通过此Class实例调用newInstance()方法创建要操作类的实例
+	- 通过Class实例调用getDeclaredMethod(String methodName,Class ...args)，获取运行时类指定的方法，参数类型传值例为String.class类型的Class对象。此时不能使用自动装箱来传值Class对象，自动装箱只能用于值的装箱，不能用于类型的装箱
+	- 通过setAccessible(true)，确保此方法是可以访问的
+	- 通过Method类的实例调用invoke(Object obj,Object ...objs)，执行此方法。此方法的返回值就是Method的返回值，如果Method的返回值为void，则invoke的返回值为null。操作静态方法时Object obj参数为Class对象，比如Person.class或null都行
+3. 调用指定的构造器（Construct）
+	- 先创建一个要操作类的Class类的实例
+	- 通过Class实例调用getDeclaredConstruct(Class ...args)，args为对应的参数类型Class对象，获取运行类指定参数类型的构造器
+	- 通过setAccessible(true)，确保此构造器是可以访问的
+	- 通过Construct类的实例调用newInstance(Object... args)，args为对应的参数值，此返回值为运行时的一个实例
+4. 调用指定的注解（Annotation）
+	- 先创建一个要操作类的Class类的实例
+	- 通过Class实例调用getDeclaredAnnotation(Class clazz)，clazz为对应的注解参数类型Class对象，获取运行类指定参数类型的构造器。返回的值为对应的注解。此时调用的是类的注解
+	- 如果是调用属性或方法的注解，则在以上两个步骤之间获取要操作的属性或方法即可
+
+# 十、JDK8新特性
+
+![JDK8新特性](../../../../jdk8%E6%96%B0%E7%89%B9%E6%80%A7.png)
+
+### 一、Lambda表达式
+
+1. Lambda表达式的使用举例
+
+	```java
+		    // 语言格式一：无参，无返回值
+	        Runnable runnable1 = () -> {
+	            System.out.println("无参，无返回值");
+	        };
+	        runnable1.run();
+	
+	        // 语言格式二：有一个参数，无返回值
+	        Consumer<String> consumer1 = (String str) -> {
+	            System.out.println(str + "是一个参数，无返回值");
+	        };
+	        consumer1.accept("我");
+	
+	        // 语言格式三：数据类型可以省略，因为可由编译器推断得出，称为“类型推断”
+	        Consumer<String> consumer2 = (str) -> {
+	            System.out.println(str + "是一个数据类型可以省略参数，无返回值");
+	        };
+	        consumer2.accept("我");
+	
+	        // 语法格式四：Lambda若只需要一个参数时，参数的小括号可以省略
+	        Consumer<String> consumer3 = str -> {
+	            System.out.println(str + "是一个数据类型可以省略参数（小括号可以省略），无返回值");
+	        };
+	        consumer3.accept("我");
+	
+	        // 语法格式五：Lambda需要两个或以上的参数，多条执行语句，并且可以有返回值
+	        Comparator<Integer> comparator1 = (x, y) -> {
+	            System.out.println("实现函数式接口方法！");
+	            return Integer.compare(x, y);
+	        };
+	        System.out.println(comparator1.compare(12, 45));
+	
+	        // 语法格式六：当Lambda体只有一条语句时，return 与大括号若有，都可以省略
+	        Comparator<Integer> comparator2 = (x, y) -> Integer.compare(x, y);
+	        System.out.println(comparator1.compare(12, 45));
+	```
+
+2. Lambda表达式的格式
+
+	- ->：Lambda操作符或箭头操作符
+	- ->的左边：Lambda形参列表，对应着要重写的接口中的抽象方法的形参列表。参数得类型都可以省略；如果形参只有一个，则一对括号可以省略
+	- ->的右边：Lambda体，对应着接口的实现类要重写的方法的方法体。 如果方法体中只有一行执行体，则一对{}可以省略；如果有return关键字，则必须一并省略
+
+3. Lambda表达式的本质
+
+	- 一方面，Lambda表达式作为接口实现类的对象。本质是对象
+	- 另一方面，Lambda表达式是一个匿名函数
+
+4. 函数式接口
+
+	- 如果接口中只声明有一个抽象方法，则此接口就称为函数式接口
+	- 只有给函数式接口提供类的对象时，才可以使用Lambda表达式
+	- jdk8中声明的函数式接口都在java,util.function
+
+5. 四个函数式接口
+
+	|       函数式接口       | 参数类型 | 返回类型 |                             用途                             |
+	| :--------------------: | :------: | :------: | :----------------------------------------------------------: |
+	| Consumer<T>消费型接口  |    T     |   void   |     对类型为T的对象应用操作，包含方法：void accept(T t)      |
+	| Supplier<T>供给型接口  |    无    |    T     |             返回类型为T的对象，包含方法：T get()             |
+	| Function<T>函数型接口  |    T     |    R     | 对类型为T的对象应用操作，并返回结果。结果是R类型的对象。包含方法：R apply(T t) |
+	| Predicate<T>函数型接口 |    T     | boolean  | 确定类型为T的对象是否满足某约束，并返回boolean 值。包含方法：boolean test(T t) |
+
+### 二、方法引用
+
+### 三、构造器引用
+
+# 十一、JDK8之后的新特性
+
