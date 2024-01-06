@@ -1140,6 +1140,8 @@ private final byte value[]; // jdk9及其以后此处的数组类型是byte型�
 		操作临时变量的输出
 	}
 	```
+	
+3. 增强for循环，forEach：list.forEach()
 
 ### 六、List接口的使用
 
@@ -2977,5 +2979,260 @@ java.util.Map：存储一对一对的数据（key-value键值对）
 
 ### 五、Stream API
 
+##### 一、Stream API与集合框架的区别
+
+1. Stream API关注多个数据的计算（排序、查找、过滤、映射、遍历等），面向CPU的；集合关注的是数据的存储，面向内存的
+2. Stream API之于集合，类似于SQL之于数据表的查询
+
+##### 二、Stream API使用说明
+
+1. Stream自己不会存储元素
+2. Stream不会改变源对象。相反，他们会返回一个持有结果的新Stream
+3. Stream操作是延迟的。这意味着他们会等到需要结果的时候才执行。即一旦执行终止操作，就执行中间操作链，并产生结果
+4. Stream一旦执行了终止操作，就不能再调用其他中间操作或终止操作了
+
+##### 三、Stream执行流程
+
+1. Stream实例化
+
+   - 通过集合创建流
+
+     ```java
+     // default Stream<E> stream()通过集合创建顺序流(和添加数据的顺序一致)
+     Stream<String> stream = list.stream();
+     // default Stream<E> parallelStream()通过集合创建并行流(和添加数据的顺序不一致)
+     Stream<String> stream = list.parallelStream();
+     ```
+
+   - 通过数组创建流
+
+     ```java
+     // 调用Arrays类的static <T> Stream<T> stream(T[] array)返回一个流
+     Stream<Integer> stream = Arrays.stream(arr);
+     ```
+
+   - 通过Stream.of创建流
+
+     ```java
+     // 通过Stream.of(Object... args)创建流
+     Stream<String> stream = Stream.of("AA","BB",15);
+     ```
+
+2. Stream一系列的中间操作
+
+   - 筛选与切片
+
+     |        方法         |                             描述                             |
+     | :-----------------: | :----------------------------------------------------------: |
+     | filter(Predicate p) |              接收 Lambda ， 从流中排除某些元素               |
+     |     distinct()      | 筛选，通过流所生成元素的 hashCode() 和 equals() 去除重复元素 |
+     | limit(long maxSize) |                截断流，使其元素不超过给定数量                |
+     |    skip(long n)     | 跳过元素，返回一个扔掉了前 n 个元素的流。若流中元素不足 n 个，则返回一 |
+
+   - 映射
+
+     |              方法               |                             描述                             |
+     | :-----------------------------: | :----------------------------------------------------------: |
+     |         map(Function f)         | 接收一个函数作为参数，该函数会被应用到每个元 素上，并将其映射成一个新的元素 |
+     | mapToDouble(ToDoubleFunction f) | 接收一个函数作为参数，该函数会被应用到每个元素上，产生一个新的 DoubleStream |
+     |    mapToInt(ToIntFunction f)    | 接收一个函数作为参数，该函数会被应用到每个元素上，产生一个新的 IntStream |
+     |   mapToLong(ToLongFunction f)   | 接收一个函数作为参数，该函数会被应用到每个元 素上，产生一个新的 LongStream |
+     |       flatMap(Function f)       | 接收一个函数作为参数，将流中的每个值都换成另一个流，然后把所有流连接成一个流 |
+
+   - 排序
+
+     |          方法          |                             描述                             |
+     | :--------------------: | :----------------------------------------------------------: |
+     |        sorted()        | 产生一个新流，其中按自然顺序排序。排序的类要实现Comparable接口 |
+     | sorted(Comparator com) |              产生一个新流，其中按比较器顺序排序              |
+
+3. 执行终止操作
+
+   - 匹配与查找
+
+     |          方法          |                             描述                             |
+     | :--------------------: | :----------------------------------------------------------: |
+     | allMatch(Predicate p)  |                     检查是否匹配所有元素                     |
+     | anyMatch(Predicate p)  |                   检查是否至少匹配一个元素                   |
+     | noneMatch(Predicate p) |                   检查是否没有匹配所有元素                   |
+     |      findFirst()       |                        返回第一个元素                        |
+     |       findAny()        |                    返回当前流中的任意元素                    |
+     |        count()         |                       返回流中元素总数                       |
+     |   max(Comparator c)    |                        返回流中最大值                        |
+     |   min(Comparator c)    |                        返回流中最小值                        |
+     |  forEach(Consumer c)   | 内部迭代(使用 Collection 接口需要用户去做迭代，称为外部迭代。相反，Stream API 使用内部迭代——它帮你把迭代做了) |
+
+   - 归约
+
+     |               方法               |                           描述                           |
+     | :------------------------------: | :------------------------------------------------------: |
+     | reduce(T iden, BinaryOperator b) |      可以将流中元素反复结合起来，得到一个值。返回 T      |
+     |     reduce(BinaryOperator b)     | 可以将流中元素反复结合起来，得到一个值。返回 Optional<T> |
+
+   - 收集
+
+     |         方法         |                             描述                             |
+     | :------------------: | :----------------------------------------------------------: |
+     | collect(Collector c) | 将流转换为其他形式。接收一个 Collector接口的实现，用于给Stream中元素做汇总的方法 |
+
 # 十一、JDK8之后的新特性
+
+### 一、REPL工具
+
+- jShell执行命令，JDK9新特性，在终端中像执行shell命令一样执行特定的Java命令
+
+### 二、文件流操作优化
+
+1. 在JDK7中，流的关闭可以省略。在try(中声明操作流的对象
+
+   ```java
+   try(资源对象的声明和初始化){
+       业务逻辑代码，可能会产生异常
+   }catch(异常类型1 e){
+       处理异常代码
+   }catch(异常类型2 e){
+       处理异常代码
+   }
+   ```
+
+   ```java
+   		// 创建FIle类的对象，对应着要操作的文件
+           File inputFile = new File("hello.txt");
+           File outFile = new File("word.txt");
+           // 创建输入输出流
+           try(FileReader fr = new FileReader(inputFile);
+               FileWriter fw = new FileWriter(outFile);) {
+               // 读取数据
+               char[] cbuffer = new char[10];
+               int len;
+               while ((len = fr.read(cbuffer)) != -1) {
+                   // 写入文件
+                   fw.write(cbuffer, 0, len);
+               }
+           } catch (IOException e) {
+               e.printStackTrace();
+           }
+   ```
+
+2. 在JDK9中，try的前面可以定义流对象，try后面的()可以直接引用流对象的名称。在try代码执行完毕后，流对象也可以释放掉，也不用写finally
+
+   ```java
+   // 此时定义的a、b是final的，不可修改
+   A a = new A();
+   B b = new B();
+   try(a;b){
+       业务逻辑代码，可能会产生异常
+   }catch(异常类型1 e){
+       处理异常代码
+   }catch(异常类型2 e){
+       处理异常代码
+   }
+   ```
+
+### 三、局部变量类型推断
+
+1. JDK10新特性局部变量类型推断适用的场景
+
+   - 局部变量的实例化，要赋值初始化
+   - 增强for循环中的索引
+   -  传统for循环中
+   - 返回值类型含复杂泛型结构
+
+   ```java
+   // 局部变量的实例化
+   var list = new ArrayList<String>();
+   
+   // 增强for循环中的索引
+   for(var v:list){}
+   
+   // 传统for循环中
+   for(var i=0;i<100;i++){}
+   
+   // 返回值类型含复杂泛型结构
+   var entrySet = map.entrySet();
+   ```
+
+2. JDK10新特性局部变量类型推断不适用的场景
+
+   - 声明一个成员变量
+   - ‘声明一个数组变量，并为数组静态初始化（省略new的情况下）
+   - 方法的返回值类型
+   - 方法的参数类型
+   - 没有初始化的方法内的局部变量声明
+   - 作为catch块中异常类型
+   - Lambda表达式中函数式接口的类型
+   - 方法引用中函数式接口的类型
+
+### 四、instanceOf新特性
+
+```java
+public boolean equals(Object o){
+    // 判断参数对象o是否为String类型，是则强转为String类型的对象other，然后进行操作
+    if(o instanceOf String other){
+        业务逻辑
+    }
+}
+```
+
+### 五、switch表达式新特性
+
+1. 在JDK12中
+   - 使用case L -> 来替代以前的break，如有多行执行语句则用{}包起来
+   - 同时将多个case合并到一行，也就是可以使用’or‘关系，多个条件之间用’,‘分隔
+   - 为了保持兼容性，case条件语句中依然可以使用字符’:‘，但是同一个switch结构中不能混用’->‘和’:‘
+   - 可以使用变量接收switch表达式的结果
+2. 在JDK13中
+   - 引入了yield关键字，用于返回指定的数据，结束switch结构
+   - switch表达式(返回值)应该使用yield，switch语句(不返回值)应该使用break；
+   - yield只会跳出当前switch块，而return则会直接跳出当前方法
+
+### 六、文本块的使用
+
+```java
+// 上下各三个"
+"""
+"""
+// 文本块中使用\：取消换行操作
+// 文本块中使用\s：表示一个空格
+```
+
+### 七、record的使用
+
+```java
+public record User(int age,String name){
+
+}
+```
+
+- 类似于JavaBean的使用，但是限制比较大
+- 定义record时，所声明的成员变量是final，不可修改的，在此record中不可再定义新的成员变量
+- 可以定义成员方法、静态方法、静态属性、构造器等
+
+### 八、密封类
+
+1. 密封类是指使用sealed修饰的类，被sealed修饰的类可以指定子类，这样这个类就只能被指定的类继承。密封的类使用关键字permits列出可以直接扩展（即extends）它的类
+2. sealed修饰的类的机制具有传递性，它的子类必须使用指定的关键字进行修饰，且只能是final、sealed、non-sealed三者之一
+
+### 九、API的变化
+
+##### 一、Optional类
+
+1. Optional类的作用：为了避免代码中出现空指针异常
+
+2. Optional的实例化
+
+   ```java
+   // 调用ofNullable方法，进行对象实例化，参数为要操作的对象
+   Optional optional = Optional.ofNullable();
+   ```
+
+3. Optional的常用方法
+
+   - orElse(T other)：如果Optional实例内部的value属性不为null，则返回value；如果value为null，则返回other
+   - get()：取出内部的value值，没有值则报异常
+
+##### 二、String类
+
+1. 底层由原来的char[]改为byte[]来存储
+2. 新增许多方法
 
