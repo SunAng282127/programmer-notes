@@ -102,6 +102,16 @@
 6. drop table 表名;    删除表
 7. show create database 创建的数据库名称/创建的表名;    查询创建的数据库或表的创建信息
 8. show varibles like 'character_%';    查询数据库中所使用的字符集
-9. select 字段名1,字段名2...... from 表名
-10. insert into 表名 values(字段值1,字段值2)；    插入表中数据
+
+# 三、基本的SELECT语句
+
+## 一、SQL分类
+
+1. DDL（Data Definition Languages，数据定义语言），这些语言定义了不同的数据库、表、视图、索引等数据库对象，还可以用来创建、删除和修改数据库和数据表的结构。主要语句关键字包含：CREAT、DROP、ALTER、RENAME、TRUNCATE等
+2. DML（Data Manipulation Languages，数据操作语言），用于添加、删除、更新和查询数据库记录，并检查数据完整性。主要语句关键字包含：INSERT、DELETE、UPDATE、SELECT等
+3. DCL（Data Control Languages，数据控制语言），用于定义数据库、表、字段、用户的访问权限和安全级别。主要语句关键字包含：GRANT、REVOKE、COMMIT、ROLLBACK、SAVEPOINT等
+
+二、SQL语言与规范
+
+
 
