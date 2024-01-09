@@ -111,7 +111,7 @@
 2. DML（Data Manipulation Languages，数据操作语言），用于添加、删除、更新和查询数据库记录，并检查数据完整性。主要语句关键字包含：INSERT、DELETE、UPDATE、SELECT等
 3. DCL（Data Control Languages，数据控制语言），用于定义数据库、表、字段、用户的访问权限和安全级别。主要语句关键字包含：GRANT、REVOKE、COMMIT、ROLLBACK、SAVEPOINT等
 
-二、SQL语言与规范
+## 二、SQL语言规则与规范
 
 
 
