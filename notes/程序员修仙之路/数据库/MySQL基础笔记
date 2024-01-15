@@ -468,6 +468,56 @@
 
 ## 二、聚合函数
 
+### 一、聚合函数的含义
+
+- 聚合函数作用于一组数据，并对一组数据返回一个值
+- 聚合函数不能嵌套使用。比如不能出现类似“AVG(SUM(字段名称))”形式的调用
+
+### 二、AGE和SUM函数
+
+- 可以对数值型数据使用AGE和SUM函数
+
+### 三、MIN和MAX函数
+
+- 可以对任意数据类型的数据使用MIN和MAX函数
+
+### 四、COUNT函数
+
+1. COUNT(*)返回表中记录总数，适用于任意数据类型
+2. COUNT(任一数字)返回表中记录总数，适用于任意数据类型，任何数字COUNT()后返回的结果都是一样
+3. COUNT(expr)返回expr不为空的记录总数，其中expr为表中的任一字段
+   - 如果使用的是MyISAM存储引擎，则COUNT(*)、COUNT(1)和COUNT(expr)的效率是相同的，都是O(1)
+   - 如果使用的是InnoDB存储引擎，则COUNT(*)=COUNT(1)>COUNT(expr)
+
+### 五、GROUP BY
+
+1. GROUP BY的作用：可以使用GROUP BY子句将表中的数据分为若干组
+
+2. GROUP BY使用注意点
+
+   - GROUP BY中使用字段的先后顺序对结果并不会产生影响
+   - GROUP BY不一定要和聚合函数一起配合使用
+   - 在SELECT列表中所有未包含在组函数中的列都应该包含在GROUP BY子句中。人话为SELECT中出现的非组函数的字段必须声明在GROUP BY中，反之，GROUP BY中声明的字段可以不出现在SELECT中
+
+3. MySQL使用GROUP BY中的WITH ROLLUP
+
+   ```mysql
+   SELECT dept_id,AVG(salary) avg_sal FROM employees GROUP BY dept_id WITH ROLLUP;
+   ```
+
+   - 使用WITH ROLLUP关键字之后，在所有查询到的分组记录之后增加一条记录，该记录计算查询出的所有记录的总和，即统计记录数量
+   - 当使用WITH ROLLUP时，不能同时使用ORDER BY子句进行结果排序，即WITH ROLLUP和ORDER BY是互相排斥的
+
+### 六、HAVING
+
+- HAVING用于过滤数据
+- 如果过滤条件中使用了聚合函数，则必须使用HAVING来替换WHERE，当然WHERE和HAVING可以配合使用，只是HWERE条件中不能出现聚合函数，而HAVING过滤条件可以出现非聚合函数。一般带有聚合函数的过滤条件放在HAVING里面，未有聚合函数的过滤条件放在WHERE里面，因为WHERE的执行效率高
+- HAVING必须声明在GROUP BY的后面。当前HAVING也可以单独使用在非HAVING的查询语句中，但是没有实际开发意义，因为聚合函数没有分组，只会出现一个结果再去过滤就意义不大了
+
+
+
+
+
 
 
 
