@@ -538,13 +538,15 @@
 2. 查询执行顺序
 
 	```mysql
-	FROM --> ON --> JOIN -> WHERE -> 
-	GROUP BY -> HAVING -> SELECT 的字段 -> DISTINCT ->
-	ORDER BY -> LIMIT
+	FROM  -> JOIN -> ON -> 
+	WHERE -> 
+	GROUP BY -> HAVING -> 
+	SELECT 的字段 -> DISTINCT ->
+ORDER BY -> LIMIT
 	```
 
 	在 SELECT 语句执行这些步骤的时候，每个步骤都会产生一个 虚拟表 ，然后将这个虚拟表传入下一个步骤中作为输入。需要注意的是，这些步骤隐含在 SQL 的执行过程中，对于我们来说是不可见的
-
+	
 	```
 	SELECT 是先执行 FROM 这一步的。在这个阶段，如果是多张表联查，还会经历下面的几个步骤：
 		1. 首先先通过 CROSS JOIN 求笛卡尔积，相当于得到虚拟表 vt（virtual table）1-1；
@@ -557,25 +559,134 @@
 	然后进入第三步和第四步，也就是 GROUP 和 HAVING 阶段 。在这个阶段中，实际上是在虚拟表 vt2 的
 	基础上进行分组和分组过滤，得到中间的虚拟表 vt3 和 vt4 。
 	
-	当我们完成了条件筛选部分之后，就可以筛选表中提取的字段，也就是进入到 SELECT 和 DISTINCT
-	阶段 。
+	当我们完成了条件筛选部分之后，就可以筛选表中提取的字段，也就是进入到 SELECT 和 DISTINCT阶段 。
 	
-	首先在 SELECT 阶段会提取想要的字段，然后在 DISTINCT 阶段过滤掉重复的行，分别得到中间的虚拟表
-	vt5-1 和 vt5-2 。
+	首先在 SELECT 阶段会提取想要的字段，然后在 DISTINCT 阶段过滤掉重复的行，分别得到中间的虚拟表vt5-1 和 vt5-2 。
 	
-	当我们提取了想要的字段数据之后，就可以按照指定的字段进行排序，也就是 ORDER BY 阶段 ，得到
-	虚拟表 vt6 。
+	当我们提取了想要的字段数据之后，就可以按照指定的字段进行排序，也就是 ORDER BY 阶段 ，得到虚拟表 vt6 。
 	
-	最后在 vt6 的基础上，取出指定行的记录，也就是 LIMIT 阶段 ，得到最终的结果，对应的是虚拟表
-	vt7 。
+	最后在 vt6 的基础上，取出指定行的记录，也就是 LIMIT 阶段 ，得到最终的结果，对应的是虚拟表vt7 。
 	```
 
 # 八、子查询
 
+## 一、子查询的含义
 
+- 子查询指一个查询语句嵌套在另一个查询语句内部的查询
+- SQL中子查询的使用大大增强了SELECT查询的能力，因为很多时候查询需要从结果集中获取数据，或者需要从同一个表中先计算出一个数据结果，然后与这个数据结果（可能是某个标量，也可能是某个集合）进行比较
 
+## 二、子查询的基本使用
 
+1. 子查询（内查询）在主查询之前一次执行完成
+2. 子查询的结果被主查询（外查询）使用
+3. 注意事项
+   - 子查询要包含在括号内
+   - 将子查询放在比较条件的右侧
+   - 单行操作符对应单行子查询，多行操作符对应多行子查询
 
+## 三、子查询的分类
 
+### 一、分类方式一
 
- 
+- 按照内查询的结果返回一条还是多条记录，将子查询分为单行子查询、多行子查询
+
+### 二、分类方式二
+
+1. 按照内查询是否被执行多次，将子查询划分为相关（或关联）子查询和不相关（或非关联）子查询
+2. 子查询从数据表中查询了数据结果，如果这个数据结果只执行了一次，然后这个数据结果作为主查询的条件进行执行，那么这样的子查询叫做不相关子查询
+3. 如果子查询需要执行多次，即采用循环的方式，先从外部查询开始，每次都传入子查询进行查询，然后再将结果反馈给外部，这种嵌套的执行方式就称为相关子查询
+
+## 四、单行子查询
+
+### 一、单行比较操作符
+
+![MySQL单行比较操作符](../../../TyporaImage/MySQL单行比较操作符.png)
+
+### 二、WHERE中的子查询
+
+```mysql
+SELECT employee_id, manager_id, department_id
+FROM employees
+WHERE manager_id =
+				(SELECT manager_id
+				 FROM employees
+				 WHERE employee_id = 174)
+AND department_id =
+				(SELECT department_id
+				 FROM employees
+				 WHERE employee_id = 174))
+AND employee_id = 174;
+```
+
+### 三、HAVING中的子查询
+
+1. 首先执行子查询
+2. 向主查询中的HAVING子句返回结果
+
+```mysql
+SELECT department_id, MIN(salary)
+FROM employees
+GROUP BY department_id
+HAVING MIN(salary) >
+				(SELECT MIN(salary)
+				 FROM employees
+				 WHERE department_id = 50);
+```
+
+### 四、CASE中的子查询
+
+```mysql
+SELECT employee_id, last_name,
+(CASE department_id
+WHEN
+(SELECT department_id FROM departments
+WHERE location_id = 1800)
+THEN 'Canada' ELSE 'USA' END) location
+FROM employees;
+```
+
+## 五、多行子查询
+
+### 一、多行比较操作符 
+
+![MySQL多行比较操作符](../../../TyporaImage/MySQL多行比较操作符.png)
+
+1. IN：等于列表中的任意一个
+
+   ```mysql
+   SELECT employee_id, manager_id, department_id
+   FROM employees
+   WHERE manager_id IN
+   				(SELECT manager_id
+   				 FROM employees
+   				 WHERE employee_id IN (174,141))
+   AND department_id IN
+   				(SELECT department_id
+   				 FROM employees
+   				 WHERE employee_id IN (174,141))
+   AND employee_id NOT IN(174,141);
+   ```
+
+2. ANY：需要和单行比较操作符一起使用，和子查询返回的某一个值比较
+
+   ```mysql
+   SELECT employee_id, manager_id, department_id
+   FROM employees
+   WHERE salary < ANY
+   				(SELECT salary
+   				 FROM employees
+   				 WHERE employee_id IN (174,141))
+   ```
+
+3. ALL：需要和单行比较操作符一起使用，和子查询返回的所有值比较
+
+   ```mysql
+   SELECT employee_id, manager_id, department_id
+   FROM employees
+   WHERE salary < ALL
+   				(SELECT salary
+   				 FROM employees
+   				 WHERE employee_id IN (174,141))
+   ```
+
+4. SOME：实际上是ANY的别名，作用相同，一般常使用ANY
