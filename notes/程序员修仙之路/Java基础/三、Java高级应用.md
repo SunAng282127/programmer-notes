@@ -3027,13 +3027,15 @@ java.util.Map：存储一对一对的数据（key-value键值对）
      | filter(Predicate p) |              接收 Lambda ， 从流中排除某些元素               |
      |     distinct()      | 筛选，通过流所生成元素的 hashCode() 和 equals() 去除重复元素 |
      | limit(long maxSize) |                截断流，使其元素不超过给定数量                |
-     |    skip(long n)     | 跳过元素，返回一个扔掉了前 n 个元素的流。若流中元素不足 n 个，则返回一 |
+     |    skip(long n)     | 跳过元素，返回一个扔掉了前 n 个元素的流。若流中元素不足 n 个，则返回一个空流。与limit(n)互补 |
+
+     
 
    - 映射
 
      |              方法               |                             描述                             |
      | :-----------------------------: | :----------------------------------------------------------: |
-     |         map(Function f)         | 接收一个函数作为参数，该函数会被应用到每个元 素上，并将其映射成一个新的元素 |
+     |         map(Function f)         | 接收一个函数作为参数，该函数会被应用到每个元素上，并将其映射成一个新的元素 |
      | mapToDouble(ToDoubleFunction f) | 接收一个函数作为参数，该函数会被应用到每个元素上，产生一个新的 DoubleStream |
      |    mapToInt(ToIntFunction f)    | 接收一个函数作为参数，该函数会被应用到每个元素上，产生一个新的 IntStream |
      |   mapToLong(ToLongFunction f)   | 接收一个函数作为参数，该函数会被应用到每个元 素上，产生一个新的 LongStream |

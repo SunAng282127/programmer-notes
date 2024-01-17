@@ -699,3 +699,42 @@ FROM employees;
 
 1. 无论是在单行子查询还是多行子查询中都需要注意空值问题
 2. 如果是操作子查询中出现空值，则整体查询语句可能会查不出数据。所以尽量在子查询中去除空值
+
+## 六、相关子查询
+
+### 一、相关子查询的含义
+
+- 如果子查询的执行流程依赖于外部查询，通常情况下都是因为子查询中的表用到了外部的表，并进行了条件关联，因此每执行一次外部查询，子查询都要重新计算一次，这样的子查询就称之为 关联子查询
+
+### 二、相关子查询的执行流程
+
+1. GET：从主查询中获取候选列
+2. EXECUTE：子查询使用主查询的数据
+3. USE：如果满足子查询的条件则返回该行
+
+### 三、子查询的适用位置
+
+- 除了GROUP BY和LIMIT之外的地方，都可以声明子查询
+
+### 四、EXISTS与NOT EXISTS关键字
+
+1. 如果在子查询中不存在满足条件的行
+   - 条件返回FALSE
+   - 继续在子查询中查找
+2. 如果在子查询中存在满足条件的行
+   - 不在子查询中继续查找
+   - 条件返回TRUE
+3. NOT EXISTS关键字表示如果不存在某种条件，则返回TRUE，否则返回FALSE
+
+```mysql
+# 查询公司管理者的employee_id，last_name，job_id，department_id信息
+SELECT employee_id, last_name, job_id, department_id
+FROM employees e1
+WHERE EXISTS 
+			( SELECT *
+			  FROM employees e2
+			  WHERE e2.manager_id = e1.employee_id);
+# 其中在子查询中只要满足 e2.manager_id = e1.employee_id 就会返回TRUE,e1.employee_id相对应的行就会被查询出来
+# 子查询中的SELECT查询的字段名称无所谓，用什么都行
+```
+
