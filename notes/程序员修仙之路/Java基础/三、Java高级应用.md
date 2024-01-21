@@ -2868,7 +2868,7 @@ java.util.Map：存储一对一对的数据（key-value键值对）
 
 # 十、JDK8新特性
 
-![JDK8新特性](../../../../jdk8%E6%96%B0%E7%89%B9%E6%80%A7.png)
+![JDK8新特性](../../../TyporaImage/jdk8%E6%96%B0%E7%89%B9%E6%80%A7.png)
 
 ### 一、Lambda表达式
 
