@@ -856,7 +856,7 @@ DROP TABLE IF EXISTS 表名
 - DELETE：实现对数据的删除，可以有where条件，同时保留表结构。一旦执行此操作，数据可以回滚，但是数据库设置了SET autocommit=TRUE，则执行的DELETE操作就不可以实现回滚
 
 ```mysql
-TRUNCATE FROM 表名
+TRUNCATE TABLE 表名
 DELETE FROM 表名
 ```
 
