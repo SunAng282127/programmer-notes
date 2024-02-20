@@ -1589,3 +1589,86 @@ ALTER TABLE 从表名 DROP INDEX 索引名;
 3. 阿里开发规范：不得使用外键与级联，一切外键概念必须在应用层解决。外键与级联更新适用于单机低并发 ，不适合 分布式 、 高并发集群 ；级联更新是强阻塞，存在数据库更新风暴的风险；外键影响数据库的插入速度
 
 ## 八、CHECK约束
+
+### 一、作用
+
+- 检查某个字段的值是否符号xx要求，一般指的是值的范围
+
+### 二、关键字
+
+- check
+
+### 三、说明
+
+1. MySQL5.7不支持check约束
+2. MySQL8.0不支持check约束
+
+### 四、用法
+
+```mysql
+create table employee(
+eid int primary key,
+ename varchar(5),
+gender char check ('男' or '女')
+);
+
+CREATE TABLE temp(
+id INT AUTO_INCREMENT,
+NAME VARCHAR(20),
+age INT CHECK(age > 20),
+PRIMARY KEY(id)
+);
+```
+
+## 九、DEFAULT约束
+
+### 一、作用
+
+- 给某个字段/某列指定默认值，一旦设置默认值，在插入数据时，如果此字段没有显式赋值，则赋值为默认值
+
+### 二、关键字
+
+- DEFAULT
+
+### 三、添加默认值约束
+
+1. 建表时
+
+   ```mysql
+   create table 表名称(
+   字段名 数据类型 primary key,
+   字段名 数据类型 unique key not null,
+   字段名 数据类型 unique key,
+   字段名 数据类型 not null default 默认值,
+   );
+   
+   create table 表名称(
+   字段名 数据类型 default 默认值 ,
+   字段名 数据类型 not null default 默认值,
+   字段名 数据类型 not null default 默认值,
+   primary key(字段名),
+   unique key(字段名)
+   );
+   
+   #说明：默认值约束一般不在唯一键和主键列上加
+   ```
+
+2. 建表后
+
+   ```mysql
+   alter table 表名称 modify 字段名 数据类型 default 默认值;
+   
+   #如果这个字段原来有非空约束，你还保留非空约束，那么在加默认值约束时，还得保留非空约束，
+   #否则非空约束就被删除了
+   #同理，在给某个字段加非空约束也一样，如果这个字段原来有默认值约束，你想保留，
+   #也要在modify语句中保留默认值约束，否则就删除了
+   alter table 表名称 modify 字段名 数据类型 default 默认值 not null;
+   ```
+
+### 三、删除默认值约束
+
+```mysql
+alter table 表名称 modify 字段名 数据类型 ;#删除默认值约束，也不保留非空约束
+alter table 表名称 modify 字段名 数据类型 not null; #删除默认值约束，保留非空约束
+```
+
