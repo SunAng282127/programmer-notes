@@ -120,7 +120,7 @@ Git本地有三个工作区域：工作目录(Working Directory)、暂存区(Sta
 1. 在Github或者Gitee上建立一个仓库，一个建立，另一个导入即可
 2. 使用git clone 命令拉取代码
 3. 点击.git文件，在里面找到config文件打开filemode=true，即忽略文件夹权限
-4. 使用git remote add url 分别添加Gitee和GitHub的远程仓库地址
+4. 使用git remote add name url 分别添加Gitee和GitHub的远程仓库地址
 5. 可以在config文件查看添加的远程仓库地址
 6. push的时候使用git push url分别push到gitee和github上，或使用git push --all
 7. 如果Gitee和GitHub同时关联，第四步可省略，第六步只需要git push则会同时更新Gitee和GitHub代码

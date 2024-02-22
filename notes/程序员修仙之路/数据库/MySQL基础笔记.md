@@ -2623,3 +2623,99 @@ END //
 DELIMITER ;
 ```
 
+## 四、游标
+
+### 一、游标的含义
+
+- 游标，提供了一种灵活的操作方式，让我们能够对结果集中的每一条记录进行定位，并对指向的记录中的数据进行操作的数据结构。游标让SQL这种面向集合的语言有了面向过程开发的能力
+- 在 SQL 中，游标是一种临时的数据库对象，可以指向存储在数据库表中的数据行指针。这里游标充当了指针的作用，我们可以通过操作游标来对数据行进行操作
+- MySQL中游标可以在存储过程和函数中使用
+
+### 二、游标的使用步骤
+
+游标必须在声明处理程序之前被声明，并且变量和条件还必须在声明游标或处理程序之前被声明
+
+1. 声明游标
+
+   ```mysql
+   DECLARE cursor_name CURSOR FOR select_statement;
+   #此语法在MySQL，SQL Server，DB2 和 MariaDB中都适用
+   
+   DECLARE cursor_name CURSOR IS select_statement;
+   #此语法适用于Oracle 或者 PostgreSQL
+   
+   #要使用 SELECT 语句来获取数据结果集，而此时还没有开始遍历数据，这里 select_statement 代表的是SELECT 语句，返回一个用于创建游标的结果集
+   ```
+
+2. 打开游标
+
+   ```mysql
+   OPEN cursor_name
+   #当我们定义好游标之后，如果想要使用游标，必须先打开游标。打开游标的时候 SELECT 语句的查询结果集就会送到游标工作区，为后面游标的逐条读取结果集中的记录做准备
+   ```
+
+3. 使用游标（从游标中取得数据）
+
+   ```mysql
+   FETCH cursor_name INTO var_name [, var_name] ...
+   #这句的作用是使用 cursor_name 这个游标来读取当前行，并且将数据保存到 var_name 这个变量中，游标指针指到下一行。如果游标读取的数据行有多个列名，则在 INTO 关键字后面赋值给多个变量名即可
+   #var_name必须在声明游标之前就定义好
+   #游标的查询结果集中的字段数，必须跟 INTO 后面的变量数一致，否则，在存储过程执行的时候，MySQL 会提示错误
+   ```
+
+4. 关闭游标
+
+   ```mysql
+   CLOSE cursor_name
+   #当我们使用完游标后需要关闭掉该游标。因为游标会占用系统资源 ，如果不及时关闭，游标会一直保持到存储过程结束，影响系统运行的效率。而关闭游标的操作，会释放游标占用的系统资源
+   #关闭游标之后，我们就不能再检索查询结果中的数据行，如果需要检索只能再次打开游标
+   ```
+
+### 三、游标的案例
+
+```mysql
+#创建存储过程“get_count_by_limit_total_salary()”，声明IN参数 limit_total_salary，DOUBLE类型；声明OUT参数total_count，INT类型。函数的功能可以实现累加薪资最高的几个员工的薪资值，直到薪资总和达到limit_total_salary参数的值，返回累加的人数给total_count
+DELIMITER //
+CREATE PROCEDURE get_count_by_limit_total_salary(IN limit_total_salary DOUBLE,OUT
+total_count INT)
+BEGIN
+DECLARE sum_salary DOUBLE DEFAULT 0; #记录累加的总工资
+DECLARE cursor_salary DOUBLE DEFAULT 0; #记录某一个工资值
+DECLARE emp_count INT DEFAULT 0; #记录循环个数
+#定义游标
+DECLARE emp_cursor CURSOR FOR SELECT salary FROM employees ORDER BY salary DESC;
+#打开游标
+OPEN emp_cursor;
+REPEAT
+#使用游标（从游标中获取数据）
+FETCH emp_cursor INTO cursor_salary;
+SET sum_salary = sum_salary + cursor_salary;
+SET emp_count = emp_count + 1;
+UNTIL sum_salary >= limit_total_salary
+END REPEAT;
+SET total_count = emp_count;
+#关闭游标
+CLOSE emp_cursor;
+END //
+DELIMITER ;
+```
+
+### 四、游标的优缺点
+
+1. 优点
+   - 游标是 MySQL 的一个重要的功能，为 逐条读取 结果集中的数据，提供了完美的解决方案。跟在应用层面实现相同的功能相比，游标可以在存储程序中使用，效率高，程序也更加简洁
+2. 缺点
+   - 也会带来一些性能问题，比如在使用游标的过程中，会对数据行进行加锁 ，这样在业务并发量大的时候，不仅会影响业务之间的效率，还会消耗系统资源 ，造成内存不足，这是因为游标是在内存中进行的处理
+3. 建议
+   - 养成用完之后就关闭的习惯，这样才能提高系统的整体效率
+
+## 五、全局变量的持久化
+
+- 使用SET GLOBAL语句设置的变量值只会 临时生效 。 数据库重启后，服务器又会从MySQL配置文件中读取变量的默认值。 MySQL 8.0版本新增了 SET PERSIST 命令
+
+  ```mysql
+  SET PERSIST global max_connections = 1000;
+  ```
+
+- MySQL会将该命令的配置保存到数据目录下的 mysqld-auto.cnf 文件中，下次启动时会读取该文件，用其中的配置来覆盖默认的配置文件
+
