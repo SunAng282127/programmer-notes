@@ -2337,3 +2337,289 @@ SELECT @diff_sal;
 | 会话用户变量 |      当前会话       |   会话的任何地方    |  加@符号，不用指定类型   |
 |   局部变量   | 定义它的BEGIN END中 | BEGIN END的第一句话 | 一般不用加@,需要指定类型 |
 
+## 二、定义条件与处理程序
+
+- 定义条件是事先定义程序执行过程中可能遇到的问题
+- 处理程序定义了在遇到问题时应当采取的处理方式，并且保证存储过程或函数在遇到警告或错误时能继续执行。这样可以增强存储程序处理问题的能力，避免程序异常停止运行
+- 定义条件和处理程序在存储过程、存储函数中都是支持的
+
+### 一、定义条件
+
+1. 定义条件就是给MySQL中的错误码命名，这有助于存储的程序代码更清晰。它将一个错误名字和指定的错误条件关联起来。这个名字可以随后被用在定义处理程序的 DECLARE HANDLER 语句中
+
+2. 定义条件使用DECLARE语句，语法如下
+
+   ```mysql
+   DECLARE 错误名称 CONDITION FOR 错误码（或错误条件）
+   ```
+
+3. 错误码的说明
+
+   ```mysql
+   #使用MySQL_error_code
+   DECLARE Field_Not_Be_NULL CONDITION FOR 1048;
+   
+   #使用sqlstate_value
+   DECLARE Field_Not_Be_NULL CONDITION FOR SQLSTATE '23000';
+   ```
+
+   - MySQL_error_code是数值类型错误代码
+   - sqlstate_value是长度为5的字符串类型错误代码
+
+### 二、定义处理程序
+
+```mysql
+DECLARE 处理方式 HANDLER FOR 错误类型 处理语句
+# 这个语法可以翻译为 报错遇到相应的错误类型，则执行处理方式以及处理语句
+
+#方法1：捕获sqlstate_value
+DECLARE CONTINUE HANDLER FOR SQLSTATE '42S02' SET @info = 'NO_SUCH_TABLE';
+#方法2：捕获mysql_error_value
+DECLARE CONTINUE HANDLER FOR 1146 SET @info = 'NO_SUCH_TABLE';
+#方法3：先定义条件，再调用
+DECLARE no_such_table CONDITION FOR 1146;
+DECLARE CONTINUE HANDLER FOR NO_SUCH_TABLE SET @info = 'NO_SUCH_TABLE';
+#方法4：使用SQLWARNING
+DECLARE EXIT HANDLER FOR SQLWARNING SET @info = 'ERROR';
+#方法5：使用NOT FOUND
+DECLARE EXIT HANDLER FOR NOT FOUND SET @info = 'NO_SUCH_TABLE';
+#方法6：使用SQLEXCEPTION
+DECLARE EXIT HANDLER FOR SQLEXCEPTION SET @info = 'ERROR';
+```
+
+1. 处理方式：处理方式有3个取值，分别为CONTINUE、EXIT、UNDO
+2. 错误类型（即条件）
+
+   - SQLSTATE '字符串错误码' ：表示长度为5的sqlstate_value类型的错误代码
+   - MySQL_error_code ：匹配数值类型错误代码
+   - 错误名称 ：表示DECLARE ... CONDITION定义的错误条件名称
+   - SQLWARNING ：匹配所有以01开头的SQLSTATE错误代码
+   - NOT FOUND ：匹配所有以02开头的SQLSTATE错误代码
+   - SQLEXCEPTION ：匹配所有没有被SQLWARNING或NOT FOUND捕获的SQLSTATE错误代码
+3. 处理语句：如果出现上述条件之一，则采用对应的处理方式，并执行指定的处理语句。语句可以是像“ SET 变量 = 值 ”这样的简单语句，也可以是使用 BEGIN ... END 编写的复合语句
+
+### 三、案例
+
+```mysql
+#在存储过程中，定义处理程序，捕获sqlstate_value值，当遇到MySQL_error_code值为1048时，执行CONTINUE操作，并且将@proc_value的值设置为-1
+
+DELIMITER //
+CREATE PROCEDURE UpdateDataNoCondition()
+BEGIN
+#定义处理程序
+DECLARE CONTINUE HANDLER FOR 1048 SET @proc_value = -1;
+SET @x = 1;
+UPDATE employees SET email = NULL WHERE last_name = 'Abel';
+SET @x = 2;
+UPDATE employees SET email = 'aabbel' WHERE last_name = 'Abel';
+SET @x = 3;
+END //
+DELIMITER ;
+
+CALL UpdateDataWithCondition();
+```
+
+## 三、流程控制
+
+解决复杂问题不可能通过一个 SQL 语句完成，我们需要执行多个 SQL 操作。流程控制语句的作用就是控制存储过程中SQL 语句的执行顺序，是我们完成复杂操作必不可少的一部分。只要是执行的程序，流程就分为三大类：
+
+- 顺序结构：程序从上往下依次执行 
+- 分支结构：程序按条件进行选择执行，从两条或多条路径中选择一条执行
+- 循环结构：程序满足一定条件下，重复执行一组语句
+
+针对于MySQL 的流程控制语句主要有 3 类。注意：只能用于**存储程序**
+
+- 条件判断语句：IF 语句和 CASE 语句
+- 循环语句：LOOP、WHILE 和 REPEAT 语句
+- 跳转语句：ITERATE 和 LEAVE 语句 
+
+### 一、分支结构之IF
+
+1. IF语法结构
+
+   ```mysql
+   IF 表达式1 THEN 操作1
+   [ELSEIF 表达式2 THEN 操作2]……
+   [ELSE 操作N]
+   END IF
+   
+   #根据表达式的结果为TRUE或FALSE执行相应的语句。这里“[]”中的内容是可选的
+   ```
+
+2. IF特点
+
+   - 不同的表达式对应不同的操作
+   - 使用在begin end中
+
+### 二、分支结构之CASE
+
+CASE语法结构
+
+```mysql
+#情况一：类似于switch
+CASE 表达式
+WHEN 值1 THEN 结果1或语句1(如果是语句，需要加分号)
+WHEN 值2 THEN 结果2或语句2(如果是语句，需要加分号)
+...
+ELSE 结果n或语句n(如果是语句，需要加分号)
+END [case]（如果是放在begin end中需要加上case，如果放在select后面不需要）
+
+#情况二：类似于多重if
+CASE
+WHEN 条件1 THEN 结果1或语句1(如果是语句，需要加分号)
+WHEN 条件2 THEN 结果2或语句2(如果是语句，需要加分号)
+...
+ELSE 结果n或语句n(如果是语句，需要加分号)
+END [case]（如果是放在begin end中需要加上case，如果放在select后面不需要）
+```
+
+### 三、循环结构之LOOP
+
+LOOP循环语句用来重复执行某些语句。LOOP内的语句一直重复执行直到循环被退出（使用LEAVE子句），跳出循环过程
+
+```mysql
+[loop_label:] LOOP
+循环执行的语句
+END LOOP [loop_label]
+
+#其中，loop_label表示LOOP语句的标注名称，该参数可以省略
+
+DECLARE id INT DEFAULT 0;
+add_loop:LOOP
+SET id = id +1;
+IF id >= 10 THEN LEAVE add_loop;
+END IF;
+END LOOP add_loop;
+```
+
+### 四、循环结构之WHILE
+
+WHILE语句创建一个带条件判断的循环过程。WHILE在执行语句执行时，先对指定的表达式进行判断，如果为真，就执行循环内的语句，否则退出循环
+
+```mysql
+[while_label:] WHILE 循环条件 DO
+循环体
+END WHILE [while_label];
+
+#while_label为WHILE语句的标注名称；如果循环条件结果为真，WHILE语句内的语句或语句群被执行，直至循环条件为假，退出循环
+
+DELIMITER //
+CREATE PROCEDURE test_while()
+BEGIN
+DECLARE i INT DEFAULT 0;
+WHILE i < 10 DO
+SET i = i + 1;
+END WHILE;
+SELECT i;
+END //
+DELIMITER ;
+#调用
+CALL test_while();
+```
+
+### 五、循环结构之REPEAT
+
+REPEAT语句创建一个带条件判断的循环过程。与WHILE循环不同的是，REPEAT 循环首先会执行一次循环，然后在UNTIL 中进行表达式的判断，如果满足条件就退出，即 END REPEAT；如果条件不满足，则会就继续执行循环，直到满足退出条件为止
+
+```mysql
+[repeat_label:] REPEAT
+循环体的语句
+UNTIL 结束循环的条件表达式
+END REPEAT [repeat_label]
+
+#repeat_label为REPEAT语句的标注名称，该参数可以省略；REPEAT语句内的语句或语句群被重复，直至expr_condition为真
+
+DELIMITER //
+CREATE PROCEDURE test_repeat()
+BEGIN
+DECLARE i INT DEFAULT 0;
+REPEAT
+SET i = i + 1;
+UNTIL i >= 10
+END REPEAT;
+SELECT i;
+END //
+DELIMITER ;
+```
+
+### 六、三种循环结构对比
+
+1. 这三种循环都可以省略名称，但如果循环中添加了循环控制语句（LEAVE或ITERATE）则必须添加名称
+2. 具体的用法
+   - LOOP：一般用于实现简单的"死"循环
+   - WHILE：先判断后执行
+   - REPEAT：先执行后判断，无条件至少执行一次
+
+### 七、跳转语句之LEAVE语句
+
+LEAVE语句：可以用在循环语句内，或者以 BEGIN 和 END 包裹起来的程序体内，表示跳出循环或者跳出程序体的操作。可以把 LEAVE 理解为 break
+
+```mysql
+#基本语法
+LEAVE 标记名
+#其中，label参数表示循环的标志。LEAVE和BEGIN ... END或循环一起被使用
+
+DELIMITER //
+CREATE PROCEDURE leave_begin(IN num INT)
+begin_label: BEGIN
+IF num<=0
+THEN LEAVE begin_label;
+ELSEIF num=1
+THEN SELECT AVG(salary) FROM employees;
+ELSEIF num=2
+THEN SELECT MIN(salary) FROM employees;
+ELSE
+SELECT MAX(salary) FROM employees;
+END IF;
+SELECT COUNT(*) FROM employees;
+END //
+DELIMITER ;
+
+DELIMITER //
+CREATE PROCEDURE leave_while(OUT num INT)
+BEGIN
+DECLARE avg_sal DOUBLE;#记录平均工资
+DECLARE while_count INT DEFAULT 0; #记录循环次数
+SELECT AVG(salary) INTO avg_sal FROM employees; #① 初始化条件
+while_label:WHILE TRUE DO #② 循环条件
+#③ 循环体
+IF avg_sal <= 10000 THEN
+LEAVE while_label;
+END IF;
+UPDATE employees SET salary = salary * 0.9;
+SET while_count = while_count + 1;
+#④ 迭代条件
+SELECT AVG(salary) INTO avg_sal FROM employees;
+END WHILE;
+#赋值
+SET num = while_count;
+END //
+DELIMITER ;
+```
+
+### 八、跳转语句之ITERATE语句
+
+ITERATE语句：只能用在循环语句（LOOP、REPEAT和WHILE语句）内，表示重新开始循环，将执行顺序转到语句段开头处。可以把 ITERATE 理解为 continue
+
+```mysql
+#基本语法
+ITERATE label
+#label参数表示循环的标志。ITERATE语句必须跟在循环标志前面
+
+DELIMITER //
+CREATE PROCEDURE test_iterate()
+BEGIN
+DECLARE num INT DEFAULT 0;
+my_loop:LOOP
+SET num = num + 1;
+IF num < 10
+THEN ITERATE my_loop;
+ELSEIF num > 15
+THEN LEAVE my_loop;
+END IF;
+SELECT '尚硅谷：让天下没有难学的技术';
+END LOOP my_loop;
+END //
+DELIMITER ;
+```
+
