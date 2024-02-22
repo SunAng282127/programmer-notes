@@ -2135,3 +2135,205 @@ DROP {PROCEDURE | FUNCTION} [IF EXISTS] 存储过程或函数的名
 2. 调试困难。只有少数 DBMS 支持存储过程的调试。对于复杂的存储过程来说，开发和维护都不容易。虽然也有一些第三方工具可以对存储过程进行调试，但要收费
 3. 存储过程的版本管理很困难。比如数据表索引发生变化了，可能会导致存储过程失效。我们在开发软件的时候往往需要进行版本管理，但是存储过程本身没有版本控制，版本迭代更新的时候很麻烦
 4. 它不适合高并发的场景。**高并发的场景需要减少数据库的压力，有时数据库会采用分库分表的方式，而且对可扩展性要求很高，在这种情况下，存储过程会变得难以维护， 增加数据库的压力 ，显然就不适用了
+
+# 十五、变量、流程控制与游标
+
+## 一、变量
+
+- 在 MySQL 数据库中，变量分为系统变量 以及用户自定义变量
+
+### 一、系统变量
+
+#### 一、系统变量的分类
+
+- 变量由系统定义，不是用户定义，属于服务器层面。启动MySQL服务，生成MySQL服务实例期间，MySQL将为MySQL服务器内存中的系统变量赋值，这些系统变量定义了当前MySQL服务实例的属性、特征。这些系统变量的值要么是编译MySQL时参数 的默认值，要么是 配置文件 （例如my.ini等）中的参数值
+- 系统变量分为全局系统变量（需要添加 global 关键字）以及会话系统变量（需要添加 session 关键字），有时也把全局系统变量简称为全局变量，有时也把会话系统变量称为local变量。如果不写，默认会话级别。静态变量（在 MySQL 服务实例运行期间它们的值不能使用 set 动态修改）属于特殊的全局系统变量
+- 每一个MySQL客户机成功连接MySQL服务器后，都会产生与之对应的会话。会话期间，MySQL服务实例会在MySQL服务器内存中生成与该会话对应的会话系统变量，这些会话系统变量的初始值是全局系统变量值的复制
+- 全局系统变量针对于所有会话（连接）有效，但 不能跨重启
+- 会话系统变量仅针对于当前会话（连接）有效。会话期间，当前会话对某个会话系统变量值的修改，不会影响其他会话同一个会话系统变量的值
+- 会话1对某个全局系统变量值的修改会导致会话2中同一个全局系统变量值的修改
+- 在MySQL中有些系统变量只能是全局的，例如 max_connections 用于限制服务器的最大连接数；有些系统变量作用域既可以是全局又可以是会话，例如 character_set_client 用于设置客户端的字符集；有些系统变量的作用域只能是当前会话，例如 pseudo_thread_id 用于标记当前会话的 MySQL 连接 ID
+
+#### 二、查看系统变量
+
+1. 查看所有或部分系统变量
+
+	```mysql
+	#查看所有全局变量
+	SHOW GLOBAL VARIABLES;
+	
+	#查看所有会话变量
+	SHOW SESSION VARIABLES;
+	或
+	SHOW VARIABLES;
+	
+	#查看满足条件的部分系统变量。
+	SHOW GLOBAL VARIABLES LIKE '%标识符%';
+	
+	#查看满足条件的部分会话变量
+	SHOW SESSION VARIABLES LIKE '%标识符%';
+	```
+
+2. 查看指定系统变量
+
+	作为 MySQL 编码规范，MySQL 中的系统变量以 两个“@” 开头，其中“@@global”仅用于标记全局系统变量，“@@session”仅用于标记会话系统变量。“@@”首先标记会话系统变量，如果会话系统变量不存在，则标记全局系统变量
+
+	```mysql
+	#查看指定的系统变量的值
+	SELECT @@global.变量名;
+	
+	#查看指定的会话变量的值
+	SELECT @@session.变量名;
+	#或者
+	SELECT @@变量名;
+	```
+
+3. 修改系统变量的值
+
+	- 修改MySQL 配置文件 ，继而修改MySQL系统变量的值（该方法需要重启MySQL服务）
+
+	- 在MySQL服务运行期间，使用“set”命令重新设置系统变量的值
+
+		```mysql
+		#为某个系统变量赋值
+		#方式1：
+		SET @@global.变量名=变量值;
+		#方式2：
+		SET GLOBAL 变量名=变量值;
+		#为某个会话变量赋值
+		#方式1：
+		SET @@session.变量名=变量值;
+		#方式2：
+		SET SESSION 变量名=变量值;
+		```
+
+### 二、用户变量
+
+#### 一、用户变量的分类
+
+- 用户变量是用户自己定义的，作为 MySQL 编码规范，MySQL 中的用户变量以 一个“@” 开头。根据作用范围不同，又分为会话用户变量和局部变量
+- 会话用户变量：作用域和会话变量一样，只对当前连接会话有效
+- 局部变量：只在 BEGIN 和 END 语句块中有效。局部变量只能在存储过程和函数中使用
+
+#### 二、会话用户变量
+
+1. 变量的定义
+
+	```mysql
+	#方式1：“=”或“:=”
+	SET @用户变量 = 值;
+	SET @用户变量 := 值;
+	
+	#方式2：“:=” 或 INTO关键字
+	SELECT @用户变量 := 表达式 [FROM 等子句];
+	SELECT 表达式 INTO @用户变量 [FROM 等子句];
+	```
+
+2. 查看用户变量的值（查看、比较、运算等）
+
+	```mysql
+	SELECT @用户变量
+	
+	SELECT @num := COUNT(*) FROM employees;
+	SELECT @num;
+	
+	SELECT AVG(salary) INTO @avgsalary FROM employees;
+	SELECT @avgsalary;
+	
+	SELECT @big; #查看某个未声明的变量时，将得到NULL值
+	```
+
+#### 三、局部变量
+
+1. 可以使用 DECLARE 语句定义一个局部变量
+
+2. 仅仅在定义它的 BEGIN ... END 中有效
+
+3. 只能放在 BEGIN ... END 中，而且只能放在第一句
+
+	```mysql
+	BEGIN
+	#声明局部变量
+	DECLARE 变量名1 变量数据类型 [DEFAULT 变量默认值];
+	DECLARE 变量名2,变量名3,... 变量数据类型 [DEFAULT 变量默认值];
+	#为局部变量赋值
+	SET 变量名1 = 值;
+	SELECT 值 INTO 变量名2 [FROM 子句];
+	#查看局部变量的值
+	SELECT 变量1,变量2,变量3;
+	END
+	```
+
+##### 一、定义变量
+
+```mysql
+DECLARE 变量名 类型 [default 值]; # 如果没有DEFAULT子句，初始值为NULL
+```
+
+##### 二、变量赋值
+
+1. 一般用于赋简单的值
+
+	```mysql
+	SET 变量名=值;
+	SET 变量名:=值;
+	```
+
+2. 一般用于赋表中的字段值
+
+	```mysql
+	SELECT 字段名或表达式 INTO 变量名 FROM 表; #一个INTO可以赋值多个变量
+	```
+
+##### 三、使用变量
+
+```mysql
+SELECT 局部变量名;
+
+#方式1：使用会话用户变量
+SET @m=1;
+SET @n=1;
+SET @sum=@m+@n;
+SELECT @sum;
+
+
+#方式2：使用局部变量
+DELIMITER //
+CREATE PROCEDURE set_value()
+BEGIN
+DECLARE emp_name VARCHAR(25);
+DECLARE sal DOUBLE(10,2);
+SELECT last_name,salary INTO emp_name,sal
+FROM employees
+WHERE employee_id = 102;
+SELECT emp_name,sal;
+END //
+DELIMITER ;
+
+DELIMITER //
+CREATE PROCEDURE different_salary(IN emp_id INT,OUT dif_salary DOUBLE)
+BEGIN
+#声明局部变量
+DECLARE emp_sal,mgr_sal DOUBLE DEFAULT 0.0;
+DECLARE mgr_id INT;
+SELECT salary INTO emp_sal FROM employees WHERE employee_id = emp_id;
+SELECT manager_id INTO mgr_id FROM employees WHERE employee_id = emp_id;
+SELECT salary INTO mgr_sal FROM employees WHERE employee_id = mgr_id;
+SET dif_salary = mgr_sal - emp_sal;
+END //
+DELIMITER ;
+
+#调用
+SET @emp_id = 102;
+CALL different_salary(@emp_id,@diff_sal);
+#查看
+SELECT @diff_sal;
+```
+
+#### 四、会话用户变量与局部变量对比
+
+|              |       作用域        |      定义位置       |           语法           |
+| :----------: | :-----------------: | :-----------------: | :----------------------: |
+| 会话用户变量 |      当前会话       |   会话的任何地方    |  加@符号，不用指定类型   |
+|   局部变量   | 定义它的BEGIN END中 | BEGIN END的第一句话 | 一般不用加@,需要指定类型 |
+
