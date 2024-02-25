@@ -794,8 +794,6 @@ SHOW DATABASES;
 
    - 其他类型的表空间：随着MySQL的发展，除了上述两种老牌表空间之外，现在还新提出了一些不同类型的表空间，比如通用 表空间（general tablespace）、临时表空间（temporary tablespace）等
 
-   
-
 #### 二、MyISAM存储引擎模式
 
 1. 表结构
@@ -821,7 +819,7 @@ SHOW DATABASES;
    - 如果采用系统表空间模式的，数据信息和索引信息都存储在ibdata1中
    - 如果采用 独立表空间存储模式，data（/var/lib/mysql）\a中还会产生b.ibd文件（存储数据信息和索引信息） 
    - 此外，MySQL5.7中会在data（/var/lib/mysql）/a的目录下生成 db.opt 文件用于保存数据库的相关配置。比如：字符集、比较规则。而MySQL8.0不再提供db.opt文件。 MySQL8.0中不再单独提供b.frm，而是合并在b.ibd文件中
-2. 如果表b采用 MyISAM ，data（/var/lib/mysql）\a中会产生3个文件：
+2. 如果表b采用MyISAM ，data（/var/lib/mysql）\a中会产生3个文件：
    - MySQL5.7中：b.frm为描述表结构文件，字段长度等；MySQL8.0 中 b.xxx.sdi：描述表结构文件，字段长度等
    - b.MYD (MYData)：数据信息文件，存储数据信息(如果采用独立表存储模式)
    - b.MYI (MYIndex)：存放索引信息文件 
