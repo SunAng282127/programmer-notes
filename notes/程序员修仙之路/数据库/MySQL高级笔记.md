@@ -824,3 +824,330 @@ SHOW DATABASES;
    - b.MYD (MYData)：数据信息文件，存储数据信息(如果采用独立表存储模式)
    - b.MYI (MYIndex)：存放索引信息文件 
 
+# 三、用户与权限管理
+
+## 一、用户管理
+
+### 一、登录MySQL服务器
+
+```mysql
+mysql –h hostname|hostIP –P port –u username –p DatabaseName –e "SQL语句"
+```
+
+1. -h参数：后面接主机名或者主机IP，hostname为主机，hostIP为主机IP
+2. -P参数：后面接MySQL服务的端口，通过该参数连接到指定的端口。MySQL服务的默认端口是3306，不使用该参数时自动连接到3306端口，port为连接的端口号
+3. -u参数：后面接用户名，username为用户名，默认为root
+4. -p参数：会提示输入密码
+5. DatabaseName参数：指明登录到哪一个数据库中。如果没有该参数，就会直接登录到MySQL数据库中，然后可以使用USE命令来选择数据库
+6. -e参数：后面可以直接加SQL语句。登录MySQL服务器以后即可执行这个SQL语句，然后退出MySQL服务器
+
+### 二、创建用户
+
+```mysql
+CREATE USER 用户名 [IDENTIFIED BY '密码'][,用户名 [IDENTIFIED BY '密码']];
+
+#示例
+CREATE USER zhang3 IDENTIFIED BY '123123'; # 默认host是 %，表示任何地方可以访问到
+CREATE USER 'kangshifu'@'localhost' IDENTIFIED BY '123456'; #表示localhost只能本地访问
+```
+
+1. 用户名参数表示新建用户的账户，由用户（User）和主机名（Host）构成，而且User和Host同时校验才能确定用户的唯一性
+2.  “[ ]”表示可选，也就是说，可以指定用户登录时需要密码验证，也可以不指定密码验证，这样用户可以直接登录。不过，不指定密码的方式不安全，不推荐使用。如果指定密码值，这里需要使用 IDENTIFIED BY指定明文密码值
+3. CREATE USER语句可以同时创建多个用户
+
+### 三、修改用户
+
+```mysql
+UPDATE mysql.user SET USER = 新名称 WHERE USER = 旧名称
+```
+
+### 四、删除用户
+
+1. 使用DROP方式删除（推荐）：使用DROP USER语句来删除用户时，必须用于DROP USER权限
+
+   ```mysql
+   DROP USER user[,user]…;
+   
+   ## 默认删除host为%的用户，也可以指明host
+   DROP USER 'USER'@'HOST';
+   ```
+
+2. 使用DELETE方式删除
+
+   ```mysql
+   DELETE FROM mysql.user WHERE Host=’hostname’ AND User=’username’;
+   #执行完DELETE命令后要使用FLUSH命令来使用户生效
+   FLUSH PRIVILEGES;
+   
+   #注意：不推荐通过 DELETE FROM USER u WHERE USER='li4' 进行删除，系统会有残留信息留。而drop user命令会删除用户以及对应的权限，执行命令后你会发现mysql.user表和mysql.db表的相应记录都消失了
+   ```
+
+### 五、设置当前用户密码
+
+1. 使用旧的写法，不推荐使用
+
+   ```mysql
+   # 修改当前用户的密码：（MySQL5.7测试有效）
+   SET PASSWORD = PASSWORD('123456');
+   ```
+
+2. 使用ALTER USER命令来修改当前用户密码：用户可以使用ALTER命令来修改自身密码，如下语句代表修改当前登录用户的密码
+
+   ```mysql
+   ALTER USER USER() IDENTIFIED BY 'new_password';
+   ```
+
+3. 使用SET语句来修改当前用户密码：使用root用户登录MySQL后，可以使用SET语句来修改密码
+
+   ```mysql
+   SET PASSWORD='new_password';
+   #该语句会自动将密码加密后再赋给当前用户
+   ```
+
+### 六、修改其他用户密码
+
+1. 使用ALTER语句来修改普通用户的密码：可以使用ALTER USER语句来修改普通用户的密码
+
+   ```mysql
+   ALTER USER user [IDENTIFIED BY '新密码'][,user[IDENTIFIED BY '新密码']]…;
+   ```
+
+2. 使用SET命令来修改普通用户的密码：使用root用户登录到MySQL服务器后，可以使用SET语句来修改普通用户的密码
+
+   ```mysql
+   SET PASSWORD FOR 'username'@'hostname'='new_password';
+   ```
+
+3. 使用UPDATE语句修改普通用户的密码（不推荐）
+
+   ```mysql
+   UPDATE MySQL.user SET authentication_string=PASSWORD("新密码") WHERE User = "username" AND Host = "hostname";
+   ```
+
+## 二、权限管理
+
+### 一、权限列表
+
+```mysql
+ show privileges;
+ #查看权限列表
+```
+
+1. CREATE和DROP权限 ，可以创建新的数据库和表，或删除（移掉）已有的数据库和表。如果将MySQL数据库中的DROP权限授予某用户，用户就可以删除MySQL访问权限保存的数据库
+2. SELECT、INSERT、UPDATE和DELETE权限 允许在一个数据库现有的表上实施操作
+3. SELECT权限只有在它们真正从一个表中检索行时才被用到
+4. INDEX权限允许创建或删除索引，INDEX适用于已有的表。如果具有某个表的CREATE权限，就可以在CREATE TABLE语句中包括索引定义
+5. ALTER权限可以使用ALTER TABLE来更改表的结构和重新命名表
+6. CREATE ROUTINE权限 用来创建保存的程序（函数和程序），ALTER ROUTINE权限用来更改和删除保存的程序， EXECUTE权限 用来执行保存的程序
+7. GRANT权限 允许授权给其他用户，可用于数据库、表和保存的程序
+8. FILE权限使用户可以使用LOAD DATA INFILE和SELECT ... INTO OUTFILE语句读或写服务器上的文件，任何被授予FILE权限的用户都能读或写MySQL服务器上的任何文件（说明用户可以读任何数据库目录下的文件，因为服务器可以访问这些文件）
+
+### 二、授予权限的原则
+
+1. 只授予能 满足需要的最小权限 ，防止用户干坏事。比如用户只是需要查询，那就只给select权限就可以了，不要给用户赋予update、insert或者delete权限
+2. 创建用户的时候限制用户的登录主机 ，一般是限制成指定IP或者内网IP段
+3. 为每个用户设置满足密码复杂度的密码
+4. 定期清理不需要的用户，回收权限或者删除用户
+
+### 三、授予权限
+
+1. 给用户授权的方式有 2 种，分别是通过把 角色赋予用户给用户授权 和 直接给用户授权 。用户是数据库的使用者，我们可以通过给用户授予访问数据库中资源的权限，来控制使用者对数据库的访问，消除安全隐患
+
+2. 授权命令
+
+   ```mysql
+   GRANT 权限1,权限2,…权限n ON 数据库名称.表名称 TO 用户名@用户地址 [IDENTIFIED BY ‘密码口令’];
+   
+   #示例
+   GRANT SELECT,INSERT,DELETE,UPDATE ON 数据库名称.* TO 用户名@主机名（或%）;
+   GRANT ALL PRIVILEGES ON *.* TO joe@'%' IDENTIFIED BY '123';
+   ```
+
+   - 该权限如果发现没有该用户，则会直接新建一个用户
+   - ALL PRIVILEGES这里唯独不包括grant的权限 
+
+### 四、查看权限
+
+1. 查看当前用户权限
+
+   ```mysql
+   SHOW GRANTS;
+   # 或
+   SHOW GRANTS FOR CURRENT_USER;
+   # 或
+   SHOW GRANTS FOR CURRENT_USER();
+   ```
+
+2. 查看某用户的全局权限
+
+   ```mysql
+   SHOW GRANTS FOR '用户名称'@'主机地址' ;
+   ```
+
+### 五、收回权限
+
+1. 收回权限就是取消已经赋予用户的某些权限。收回用户不必要的权限可以在一定程度上保证系统的安全性
+
+2. MySQL中使用 REVOKE语句 取消用户的某些权限。使用REVOKE收回权限之后，用户账户的记录将从db、host、tables_priv和columns_priv表中删除，但是用户账户记录仍然在user表中保存（删除user表中的账户记录使用DROP USER语句）。所以在将用户账户从user表删除之前，应该收回相应用户的所有权限
+
+3. 注意点，须用户重新登录后才能生效
+
+4. 收回权限命令
+
+   ```mysql
+   REVOKE 权限1,权限2,…权限n ON 数据库名称.表名称 FROM 用户名@用户地址;
+   
+   #收回全库全表的所有权限
+   REVOKE ALL PRIVILEGES ON *.* FROM 用户名@用户地址;
+   ```
+
+## 三、权限表
+
+### 一、user表
+
+user表是MySQL中最重要的一个权限表， 记录用户账号和权限信息。这些字段可以分成4类，分别是范围列（或用户列）、权限列、安全列和资源控制列
+
+#### 一、范围列（或用户列）
+
+1. host：表示连接类型
+   - %：表示所有远程通过 TCP方式的连接 
+   - IP地址：通过制定ip地址进行的TCP方式的连接
+   - 机器名：通过制定网络中的机器名进行的TCP方式的连接
+   - ::1：IPv6的本地ip地址，等同于IPv4的 127.0.0.1 
+   - localhost：本地方式通过命令行方式的连接 ，比如mysql -u xxx -p xxx 方式的连接
+2. user：表示用户名，同一用户通过不同方式链接的权限是不一样的
+3. password：密码
+   - 所有密码串通过 password(明文字符串) 生成的密文字符串。MySQL 8.0 在用户管理方面增加了角色管理，默认的密码加密方式也做了调整，由之前的SHA1改为了SHA2，不可逆 。同时加上 MySQL 5.7 的禁用用户和用户过期的功能
+   - mysql 5.7及之后版本的密码保存到authentication_string字段中不再使用password字段
+
+#### 二、权限列
+
+1. Grant_priv字段：表示是否拥有GRANT权限 
+2. Shutdown_priv字段：表示是否拥有停止MySQL服务的权限
+3. Super_priv字段：表示是否拥有超级权限
+4. Execute_priv字段 ：表示是否拥有EXECUTE权限。拥有EXECUTE权限，可以执行存储过程和函数
+5. Select_priv , Insert_priv等：为该用户所拥有的权限
+
+#### 三、安全列
+
+- 安全列只有6个字段，其中两个是ssl相关的（ssl_type、ssl_cipher），用于 加密 ；两个是x509相关的（x509_issuer、x509_subject），用于 标识用户 ；另外两个Plugin字段用于 验证用户身份 的插件，该字段不能为空。如果该字段为空，服务器就使用内建授权验证机制验证用户身份
+
+#### 四、资源控制列
+
+1. max_questions：用户每小时允许执行的查询操作次数
+2. max_updates：用户每小时允许执行的更新操作次数
+3. max_connections：用户每小时允许执行的连接操作次数
+4. max_user_connections：用户允许同时建立的连接次数
+
+### 二、db表
+
+#### 一、用户列
+
+db表用户列有3个字段，分别是Host、User、Db。这3个字段分别表示主机名、用户名和数据库名。表示从某个主机连接某个用户对某个数据库的操作权限，这3个字段的组合构成了db表的主键
+
+#### 二、权限列
+
+Create_routine_priv和Alter_routine_priv这两个字段决定用户是否具有创建和修改存储过程的权限
+
+### 三、tables_priv表和columns_priv表
+
+1. tables_priv表用来对表设置操作权限，columns_priv表用来对表的 某一列设置权限
+2. tables_priv表有8个字段，分别是Host、Db、User、Table_name、Grantor、Timestamp、Table_priv和Column_priv
+   - Host 、 Db 、 User 和 Table_name 四个字段分别表示主机名、数据库名、用户名和表名
+   - Grantor表示修改该记录的用户
+   - Timestamp表示修改该记录的时间
+   - Table_priv 表示对象的操作权限。包括Select、Insert、Update、Delete、Create、Drop、Grant、 References、Index和Alter
+   - Column_priv字段表示对表中的列的操作权限，包括Select、Insert、Update和References
+
+### 四、procs_priv表
+
+procs_priv表可以对存储过程和存储函数设置操作权限
+
+## 四、角色管理
+
+### 一、角色的理解
+
+- 引入角色的目的是 方便管理拥有相同权限的用户 。恰当的权限设定，可以确保数据的安全性，这是至关重要的
+
+### 二、创建角色
+
+1. 角色名称的命名规则和用户名类似。如果host_name省略，默认为%，role_name不可省略，不可为空
+
+2. 创建角色语句
+
+   ```mysql
+   CREATE ROLE 'role_name'[@'host_name'] [,'role_name'[@'host_name']]...
+   ```
+
+### 三、赋予角色权限
+
+```mysql
+GRANT privileges ON table_name TO 'role_name'[@'host_name'];
+```
+
+1. 创建角色之后，默认这个角色是没有任何权限的，我们需要给角色授权，系统就会自动给你一个“ USAGE ”权限
+2. 多个权限，”,“分割
+
+### 四、查看角色的权限
+
+```mysql
+SHOW GRANTS FOR '角色名';
+```
+
+### 五、回收角色的权限
+
+```mysql
+REVOKE 权限 ON tablename FROM 'rolename';
+```
+
+### 六、删除角色
+
+```mysql
+DROP ROLE role [,role2]...
+#删除了角色，那么用户也就失去了通过这个角色所获得的所有权限
+```
+
+### 七、给用户赋予角色
+
+```mysql
+GRANT role [,role2,...] TO user [,user2,...];
+```
+
+### 八、激活角色
+
+1. 使用set default role命令激活角色
+
+   ```mysql
+   SET DEFAULT ROLE ALL TO 'username'@'localhost'[,'role_name'[@'host_name']]...
+   ```
+
+2. 将activate_all_roles_on_login设置为ON
+
+   ```mysql
+   SET GLOBAL activate_all_roles_on_login=ON;
+   #对 所有角色永久激活 。运行这条语句之后，用户才真正拥有了赋予角色的所有权限
+   ```
+
+### 九、撤销用户的角色
+
+```mysql
+REVOKE 角色名称 FROM 用户名称;
+```
+
+### 十、设置强制角色
+
+1. 服务启动前设置
+
+   ```mysql
+   [mysqld]
+   mandatory_roles='role1,role2@localhost,r3'
+   ```
+
+2. 运行时设置
+
+   ```mysql
+   SET PERSIST mandatory_roles = 'role1,role2@localhost,r3@%.example.com'; #系统重启后仍然有效
+   SET GLOBAL mandatory_roles = 'role1,role2@localhost,r3@%.example.com'; #系统重启后失效
+   ```
+
+   
