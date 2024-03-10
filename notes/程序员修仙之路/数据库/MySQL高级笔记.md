@@ -1821,3 +1821,293 @@ select * from ts1 order by a desc,b desc
    - 不要定义重复索引：比如一个字段已经是主键索引了，就没必要再去定义它为唯一性索引或者普通索引
 
 # 九、性能分析工具的使用
+
+## 一、查看系统性能参数
+
+可以使用SHOW STATUS语句查询一些MySQL数据库服务器的性能参数、执行频率
+
+```mysql
+#SHOW STATUS语句语法
+SHOW [GLOBAL|SESSION] STATUS LIKE '参数';
+```
+
+常用的参数有
+
+- Connections：连接MySQL服务器的次数
+- Uptime：MySQL服务器的上线时间
+- Slow_queries：慢查询的次数
+- Innodb_rows_read：Select查询返回的行数
+- Innodb_rows_inserted：执行INSERT操作插入的行数
+- Innodb_rows_updated：执行UPDATE操作更新的行数
+- Innodb_rows_deleted：执行DELETE操作删除的行数
+- Com_select：查询操作的次数
+- Com_insert：插入操作的次数，对于批量插入的 INSERT 操作，只累加一次
+- Com_update：更新操作的次数
+- Com_delete：删除操作的次数
+
+## 二、统计SQL的查询成本
+
+```mysql
+ SHOW STATUS LIKE 'last_query_cost';
+ #返回值last_query_cost的值为页的数量
+```
+
+- 相同的SQL即使last_query_cost的数值不同，但是效率上可能相同
+- 查询效率接近的原因是采用了顺序读取的方式将页面一次性加载到缓冲池中，然后再进行查找。虽然页数量（last_query_cost）增加了不少，但是通过缓冲池的机制，并没有增加多少查询时间
+- 使用场景为对于开销的比较，特别是有好几种查询方式可选的时候
+
+## 三、慢查询日志
+
+1. 开启show_query_log
+
+   ```mysql
+   set global slow_query_log='ON';
+   
+   #查看下慢查询日志是否开启，以及慢查询日志文件的位置
+   show variables like '%slow_query_log%';
+   ```
+
+2. 修改long_query_time阈值
+
+   ```mysql
+   #查看long_query_time阈值
+   show variables like '%long_query_time%';
+   
+   #修改long_query_time阈值
+   #设置global的方式对当前session的long_query_time失效。对新连接的客户端有效，所以还需要设置当前会话的阈值
+   set global long_query_time = 1;
+   set long_query_time=1;
+   ```
+
+3. 查看慢查询数目
+
+   ```mysql
+   SHOW GLOBAL STATUS LIKE '%Slow_queries%';
+   ```
+
+4. 慢查询日志分析工具：mysqldumpslow
+
+   ```mysql
+   #按照查询时间排序，查看前五条SQL语句
+   mysqldumpslow -s t -t 5 /var/lib/mysql/慢日志文件名称.log
+   #得到返回记录集最多的10个SQL
+   mysqldumpslow -s r -t 10 /var/lib/mysql/慢日志文件名称.log
+   #得到访问次数最多的10个SQL
+   mysqldumpslow -s c -t 10 /var/lib/mysql/慢日志文件名称.log
+   #得到按照时间排序的前10条里面含有左连接的查询语句
+   mysqldumpslow -s t -t 10 -g "left join" /var/lib/mysql/慢日志文件名称.log
+   #另外建议在使用这些命令时结合 | 和more 使用 ，否则有可能出现爆屏情况
+   mysqldumpslow -s r -t 10 /var/lib/mysql/慢日志文件名称.log | more
+   ```
+
+   mysqldumpslow 命令的具体参数如下：
+
+   - -a：不将数字抽象成N，字符串抽象成S
+   - -s:：是表示按照何种方式排序：
+     - c：访问次数 
+     - l：锁定时间 
+     - r：返回记录 
+     - t：查询时间
+     - al：平均锁定时间
+     - ar：平均返回记录数
+     - at：平均查询时间（默认方式）
+     - ac：平均查询次数
+   - -t:：即为返回前面多少条的数据
+   - -g：后边搭配一个正则匹配模式，大小写不敏感的
+
+5. 关闭慢查询日志
+
+   - 永久性关闭
+
+     ```mysql
+     [mysqld]
+     slow_query_log=OFF
+     
+     #或者，把slow_query_log一项注释掉 或 删除
+     #重启MySQL服务
+     ```
+
+   - 临时性关闭
+
+     ```mysql
+     SET GLOBAL slow_query_log=off
+     #重启MySQL服务
+     ```
+
+6. 删除慢查询日志
+
+## 四、查看SQL执行成本
+
+1. 查看SQL执行成本的PROFILE是否开启
+
+   ```mysql
+   show variables like 'profiling';
+   ```
+
+2. 开启PROFILE
+
+   ```mysql
+   set profiling = 'ON';
+   ```
+
+3. 查看当前会话中的profiles
+
+   ```mysql
+   #查看当前会话中的profile
+   show profile;
+   
+   #查看具体的SQL执行情况，其中Query_id来自于show profile输出的Query_id
+   show profile cpu,block io for query Query_id;
+   #输出的executing即为SQL的执行效率
+   ```
+
+## 五、分析查询语句：EXPLAIN
+
+### 一、版本情况
+
+- MySQL5.6.3以前只能EXPLAIN SELECT
+- MySQL5.6.3以后就可以EXPLAIN SELECT,UPDATE,DELETE
+
+### 二、基本语法
+
+```mysql
+EXPLAIN SELECT select_options
+或者
+DESCRIBE SELECT select_options
+```
+
+EXPLAIN语句输出的各个列的作用
+
+|     列名      |                          描述                          |
+| :-----------: | :----------------------------------------------------: |
+|      id       | 在一个大的查询语句中每个SELECT关键字都对应一个唯一的id |
+|  select_type  |            SELECT关键字对应的那个查询的类型            |
+|     table     |                          表名                          |
+|  partitions   |                     匹配的分区信息                     |
+|     type      |                   针对单表的访问方法                   |
+| possible_keys |                     可能用到的索引                     |
+|      key      |                    实际上使用的索引                    |
+|    key_len    |                  实际使用到的索引长度                  |
+|      ref      | 当使用索引列等值查询时，与索引列进行等值匹配的对象信息 |
+|     rows      |                预估的需要读取的记录条数                |
+|   filtered    |      某个表经过搜索条件过滤后剩余记录条数的百分比      |
+|     Extra     |                     一些额外的信息                     |
+
+### 三、EXPLAIN各列作用
+
+#### 一、table
+
+- 不论查询语句有多复杂，里面包含多个张表，到最后也是需要对每个表进行单表访问的，所以MySQL规定EXPLAIN语句输出的每条记录都对应着某个单表的访问方法，该条记录的table列代表着该表的表名（有时候不是真实的表名字，可能是简称，也可能是临时表，也可能是结果集）
+
+#### 二、id
+
+- 一般的一个SELECT关键字对应着一个id，但是SQL可能会优化我们的SQL，把SELECT语句减少，所以可能出现id会比SELECT关键字少的情况
+- id如果相同，可以认为是一组，从上往下顺序执行
+- 在所有组中，id值越大，优先级越高，越先执行
+- id中每个号码，表示一趟独立的查询，一个SQL的查询趟数越少越好
+
+#### 三、select_type
+
+- 一条大的查询语句中可能包含若干个SELECT关键字，每个SELECT关键字代表一个小的查询语句，而每个SELECT关键字的FROM子句中都包含若干张表（这些表用来做连接拆查询），每一张表都对应着执行计划输出中的一条记录，对于在同一个SELECT关键字中的表来说，它们的id值是相同的
+- MySQL为每一个SELECT关键字代表的小查询都定义了一个称之为select_type的属性，根据此属性就知道了小查询在整个大查询中扮演的角色
+
+#### 四、partitions
+
+- partitions代表分区表中的命中情况，非分区表，该项为NULL。一般情况下我们的查询语句的执行情况partitions列的值都是NULL
+
+#### 五、type
+
+- 执行计划的一条记录就代表MySQL对某个表的执行查询时的访问方法，又称访问类型，其中type列就表明这个访问方法是什么
+- 完整的访问方法为：system，const，eq_ref，ref，fulltext，ref_or_null，index_merge，unique_subquery，index_subquery，range，index，ALL。从前往后，性能依次降低。SQL中执行计划最好能达到system，const，eq_ref，ref级别，至少要达到range级别
+
+1. system：当表中只有一条记录并且该表使用的存储引擎的统计数据是精确的，如MyISAM、Memory存储引擎等，那么对该表的访问方法就是system
+2. const：当我们根据主键或者唯一二级索引列与常数进行等值匹配时，常数要与列的数据类型一致，则对单表的访问方法就是const
+3. eq_ref：在连接查询时，如果被驱动表（一般为join后面的表）是通过主键或唯一二级索引列等值匹配的方式进行访问的（如果该主键或唯一二级索引是联合索引的话，所有的索引列都必须进行等值比较），则对该被驱动表的访问方式就是eq_ref
+4. ref：当通过普通的二级索引列与常量进行等值匹配时来查询某个表，那么对该表的访问方法就可能是ref
+5. ref_or_null：当通过普通的二级索引列进行等值匹配查询，该索引列的值也可能是NULL值时，那么对该表的访问方法就可能是ref_or_null
+6. index_merge：单表访问方法时在某种场景下可以使用Intersection、union、sort_union这三种索引方式合并的方式来执行查询
+7. unique_subquery：针对一些包含在IN子查询中的查询语句，如果查询优化器决定将IN子查询转换为EXISTS子查询，而且子查询可以使用到主键进行等值匹配的话，那么该子查询执行计划的type就是unique_subquery
+8. range：如果使用索引获取某些范围区间的记录，那么就可能使用到range访问方法
+9. index：当我们可以使用索引覆盖（在使用联合索引时，查询的字段和过滤的字段都在联合索引字段中时，且可以不是联合索引的第一列，则叫索引覆盖），但需要扫描全部的索引记录时，该表的访问方法就是index
+10. all：全表扫描 
+
+#### 六、possible_keys和key
+
+1. possible_keys：表示的是在对某个表执行单表查询时可能用到的索引，一般查询涉及到的字段上若存在索引，则该索引将被列出，但不一定被查询出来，possible_keys所列出的索引越少越好，这样执行器在执行时就不用纠结
+2. key：表示实际用到的列，如果为NULL，则没有使用索引
+3. key并不是possible_keys的子集关系
+
+#### 七、key_len
+
+- 实际使用到的索引长度（即：字节数）。帮助检查是否充分的利用上了索引，值越大越好，主要针对联合索引有一定的意义
+
+#### 八、ref
+
+- 当使用索引列等值查询时，与索引列进行等值匹配的对象信息
+
+#### 九、rows
+
+- 预估的需要读取的记录条数，值越小越好
+
+#### 十、filtered
+
+- 某个表经过搜索条件过滤后剩余记录条数的百分比，值越大越好
+- 如果使用的是索引执行的单表扫描，那么计算时需要估计出满足除使用到对应索引的搜索条件外的其他搜索条件的记录有多少条
+- 对于单表查询，这个filtered列的值没有意义，更加关注连表查询中驱动表对应的执行计划的filtered值，它决定了被驱动表要执行的次数（即：rows*filtered）
+
+#### 十一、Extra
+
+- Extra列用来说明一些额外信息的，包含不适合在其他列中显示但十分重要的额外信息，可以根据这些额外信息来更准确的理解MySQL到底将如何执行给定的查询语句
+- No tables used：当查询语句中没有FROM子句时将会提示该额外信息
+- Impossible WHERE：查询语句中WHERE子句永远为FALSE时将会提示该额外信息
+- Using where：使用全表扫描来执行对某个表的查询，并且该语句WHERE子句中有针对该表的搜索条件时将会提示该额外信息
+- No matching min/max row：当查询列表处有MIN或MAX聚合函数，但是并没有符合WHERE子句中的搜索条件的记录时将会提示该额外信息
+- Using index：当查询列表以及搜索条件中只包含属于某个索引的列，也就是在可以使用覆盖索引的情况下将会显示该额外信息
+- Using index condition：有些搜索条件中虽然出现了索引项，但却不能使用到索引将提示该额外信息，比如模糊查询
+- Using join buffer (Block Nested Loop)：在连接查询执行过程中，当被驱动表不能有效地利用索引加快访问速度，MySQL一般会为其分配一块名为join buffer的内存块来加快查询速度，也就是基于块的嵌套循环算法
+- Not exists：当使用左连接时，如果WHERE子句中包含要求被驱动表的某个列等于NULL值的搜索条件，而且那个列又是不允许存储NULL值的，那么将提示该额外信息
+- Using intersect(...) 、 Using union(...) 和 Using sort_union(...) ：如果执行计划的Extra列出现了Using intersect(...)提示，说明准备使用Intersect索引合并的方式执行查询，括号中的...表示需要进行索引合并的索引名称；如果出现Using union(...)提示，说明准备使用Union索引合并的方式执行查询；如果出现Using sort_union(...)提示，说明准备使用Sort_Union索引合并的方式执行查询
+- Zero limit：当LIMIT子句的参数为0时，表示不打算从表中读取任何记录，将会提示该信息
+- Using filesort：很多情况下排序操作无法使用到索引，只能在内存中（记录较少的时候）或者磁盘中（记录较多的时候）进行排序，MySQL把这种在内存中或者磁盘上进行排序的方式称为文件排序（filesort）。如果某个查询需要使用文件排序的方式执行查询，就会提示该额外信息
+- Using temporary：在许多查询的执行过程中，MySQL可能会借助临时表来完成一些功能，比如去重、排序之类的，在执行许多包含DISTINICT、GROUP BY、UNION等子句的查询过程中，如果不能有效地利用索引来完成查询，MySQL很可能寻求通过建立内部的临时表来执行查询。如果查询中使用到了内部的临时表则会提示该额外信息。在执行计划中出翔Using temporary并不是一个好事，因为建立与维护临时表要付出很大成本的，所以最好能使用索引替代掉使用临时表
+
+### 四、EXPLAIN小结
+
+- EXPLAIN不考虑各种Cache
+- EXPLAIN不能显示MySQL在执行查询时所作的优化工作
+- EXPLAIN不会告诉我们关于触发器、存储过程的信息或者用户自定义函数对查询的影响情况
+- 部分统计信息是估算的，并非精确值
+
+### 五、EXPLAIN进阶使用
+
+#### 一、EXPLAIN四种输出格式
+
+1. 传统格式
+
+   ```mysql
+   EXPLAIN SELECT select_options
+   ```
+
+2. JSON格式
+
+   ```mysql
+   EXPLAIN FORMAT=JSON SELECT select_options
+   ```
+
+3. TREE格式
+
+   ```mysql
+   EXPLAIN FORMAT=TREE SELECT select_options
+   ```
+
+4. 可视化输出
+
+#### 二、SHOW WARNINGS的使用
+
+- 在使用EXPLAIN语句查看某个查询语句的执行计划后，紧接着还可以使用SHOW WARNINGS语句查看与这个查询的执行计划有关的一些扩展信息
+- 此语句也可以查询到优化后SQL执行语句
+
+
+
+
+
