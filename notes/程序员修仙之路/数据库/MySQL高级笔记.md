@@ -2829,3 +2829,58 @@ SET autocommit = 0;
 6. 其他的一些语句
 
 ## 五、事务的隔离级别
+
+### 一、数据的并发问题
+
+1. 脏写（Dirty Write）
+   - 对于两个事务Session A、Session B，如果事务Session A 修改了另一个 未提交事务Session B修改过 的数据，那就意味着发生了脏写
+2. 脏读（Dirty Read）
+   - 对于两个事务Session A、Session B，Session A读取了已经被Session B更新但还没有被提交的字段。之后若Session B回滚，Session A读取的内容就是临时且无效的
+3. 不可重复读（Non**-**Repeatable Read ）
+   - 对于两个事务Session A、Session B，Session A读取 了一个字段，然后Session B更新了该字段。 之后Session A再次读取同一个字段，值就不同了。那就意味着发生了不可重复读
+4.  幻读（Phantom）
+   - 对于两个事务Session A、Session B，Session A从一个表中读取 了一个字段，然后Session B在该表中 插入（只能是插入，删除不算）了一些新的行。 之后，如果Session A再次读取同一个表，就会多出几行。那就意味着发生了幻读
+   - 幻读只是重点强调读取到了之前读取没有获取到的记录
+5. 并发问题的严重性排序：脏写 > 脏读 > 不可重复读 > 幻读 
+
+### 二、SQL隔离级别
+
+舍弃一部分隔离性来换取一部分性能在这里就体现在：设立一些隔离级别，隔离级别越低，并发问题发生的就越多，隔离级别越高，数据库的并发性能越差，这4个隔离级别都可解决脏读的问题。SQL标准中设立了4个隔离级别
+
+1. READ UNCOMMITTED：读未提交，在该隔离级别，所有事务都可以看到其他未提交事务的执行结果。不能避免脏读、不可重复读、幻读
+2. READ COMMITTED：读已提交，它满足了隔离的简单定义，即一个事务只能看见已经提交事务所做的改变。这是大多数数据库系统的默认隔离级别（但不是MySQL默认的）。可以避免脏读，但不可重复读、幻读问题仍然存在
+3. REPEATABLE READ：可重复读，事务A在读到一条数据之后，此时事务B对该数据进行了修改并提交，那么事务A再读该数据，读到的还是原来的内容。可以避免脏读、不可重复读，但幻读问题仍然存在。这是MySQL的默认隔离级别
+4. SERIALIZABLE：可串行化，确保事务可以从一个表中读取相同的行。在这个事务持续期间，禁止其他事务对该表执行插入、更新和删除操作。所有的并发问题都可以避免，但性能十分低下。能避免脏读、不可重复读和幻读
+
+### 三、设置事务的隔离级别
+
+```mysql
+SET [GLOBAL|SESSION] TRANSACTION ISOLATION LEVEL 隔离级别;
+#其中，隔离级别格式：
+> READ UNCOMMITTED
+> READ COMMITTED
+> REPEATABLE READ
+> SERIALIZABLE
+
+#或
+
+SET [GLOBAL|SESSION] TRANSACTION_ISOLATION = '隔离级别'
+#其中，隔离级别格式：
+> READ-UNCOMMITTED
+> READ-COMMITTED
+> REPEATABLE-READ
+> SERIALIZABLE
+```
+
+关于设置时使用GLOBAL或SESSION的影响
+
+1. 使用GLOBAL关键字（在全局范围影响）
+   - 当前已经存在的会话无效
+   - 只对执行完该语句之后产生的会话起作用
+2. 使用SESSION关键字（在会话范围影响）
+   - 对当前会话的所有后续的事务有效
+   - 如果在事务之间执行，则对后续的事务有效
+   - 该语句可以在已经开启的事务中间执行，但不会影响当前正在执行的事务
+3. 数据库规定了多种事务隔离级别，不同隔离级别对应不同的干扰程度，隔离级别越高，数据一致性就越好，但并发性越弱
+
+# 十四、MySQL事务日志
