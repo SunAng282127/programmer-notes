@@ -2918,3 +2918,76 @@ SET [GLOBAL|SESSION] TRANSACTION_ISOLATION = '隔离级别'
    - redo log buffer刷盘到redo log file的过程并不是真正的刷到磁盘中去，只是刷入到文件系统缓存（page cache）中去（这是现代操作系统为了提高文件写入效率做的一个优化），真正的写入会交给系统自己来决定（比如page cache足够大了）
    - InnoDB给出innodb_flush_log_at_trx_commit参数，该参数控制commit提交事务时，如何将redo log buffer中的日志刷新到redo log file中。设置为0，表示每次事务提交时不进行刷盘操作（系统默认master thread每隔1s进行一次重做日志的同步）；设置为1，表示每次事务提交时都将进行同步，刷盘操作（默认值），设置为2，表示每次事务提交时都只把redo log buffer内容写入page cache，不进行同步。由os自己决定什么时候同步到磁盘文件
 8. 写入redo log buffer过程
+   - MySQL把对底层页面中的一次原子（不可再拆分）访问的过程称之为一个Mini-Transaction，简称mtr、一个事务可以包含若干语句，每一条语句是由若干mtr组成，每一个mtr又可以包含若干条redo日志
+   - 向log buffer中写入redo日志的过程是顺序的，也就是先往前边的block中写，当该block的空闲用完之后再往下一个block中写。所以InnoDB提供了一个buf-free的全局变量，该变量指明后续写入的redo日志应该写入到log buffer中的位置
+   - 一个mtr执行过程中可能产生若干条redo日志，这些redo日志是一个不可分割的组（同一个mtr的redo日志的位置相邻），所以并不是每生成一条redo日志，就将其插入到log buffer中，而是每个mtr运行过程中产生的日志先暂时存到一个地方，当该mtr结束的时候，将过程中产生的一组redo日志再全部复制到log buffer中 
+   - 不同的事物可能是并发执行的，每当一个mtr执行完成时，伴随该mtr生成的一组redo日志就需要被复制到log buffer中，也就是说不同事物的mtr可能时交替写入log buffer的
+   - 一个redo log block是由日志头、日志体、日志尾组成。日志头占用12字节，日志尾占用8字节，所以一个block真正能存储的数据就是512-12-8=492字节。一个block设计成512字节的原因时机械磁盘默认的扇区就是512字节，也就是一个block对应一个扇区
+9. 写入redo log file过程
+
+## 三、undo日志
+
+1. redo log是事务持久性的保证，undo log是事务原子性的保证。在事务中更新数据前要先写入一个undo log
+
+2. undo的理解
+
+   - 对记录进行增、删、改之前都要把回滚所需的东西记录下来，记录的不是数据本身，而是操作。比如插入时undo日志会记录一个该记录的删除操作，删除时undo日志会记录一个该记录的插入操作，修改时undo日志会记录一个该记录相反的update操作，将修改前的行放回去
+   - MySQL把这些为了回滚而记录的这些内容称之为撤销日志或者回滚日志（即undo log）。但是并不会记录查询操作，因为查询操作不会修改任何数据
+   - undo log会产生redo log，也就是undo log的产生会伴随着redo log的产生，这是因为undo log也需要持久性的保护
+
+3. undo的作用
+
+   - 回滚数据，undo是逻辑日志，只是将数据库逻辑地恢复到原来的样子，所有修改都被逻辑取消了，但是数据结构和页本身在回滚之后可能大不相同。在多用户并发系统中，数据库的主要任务就是协调对数据记录的并发访问，因此不能将一个页回滚到事务开始的样子，因为这样会影响其他事务正在进行的工作
+   - MVCC，当用户读取一行记录时，若该记录已经被其他事务占用，当前事务可以通过undo读取之前的行版本信息，以此实现非锁定读取
+
+4. undo的存储结构
+
+   - 回滚段与undo页：InnoDB对undo log的管理采用段的方式，也就是回滚段（rollback segment）。每个回滚段记录了1024个undo log segment，而在每个undo log segment段中进行undo页的申请
+
+   - 回滚段与事务
+
+     ```mysql
+     1. 每个事务只会使用一个回滚段，一个回滚段在同一时刻可能会服务于多个事务。
+     2. 当一个事务开始的时候，会制定一个回滚段，在事务进行的过程中，当数据被修改时，原始的数据会被复制到回滚段。
+     3. 在回滚段中，事务会不断填充盘区，直到事务结束或所有的空间被用完。如果当前的盘区不够用，事务会在段中请求扩展下一个盘区，如果所有已分配的盘区都被用完，事务会覆盖最初的盘区或者在回滚段允许的情况下扩展新的盘区来使用。
+     4. 回滚段存在于undo表空间中，在数据库中可以存在多个undo表空间，但同一时刻只能使用一个undo表空间。
+     5. 当事务提交时，InnoDB存储引擎会做以下两件事情：
+     	将undo log放入列表中，以供之后的清洗操作
+     	判断undo log所在的页是否可以重用，若可以分配给下个事务使用
+     ```
+
+   - 回滚段中的数据分类。事务提交后并不能马上删除undo log及undo log所在的页。这是因为可能还有其他事务需要通过undo log来得到行记录之前的版本。故事务提交时将undo log放入一个链表中，是否可以最终删除undo log及undo log所在页由purge线程判断
+
+     ```mysql
+     1. 未提交的回滚数据(uncommitted undo information)：该数据所关联的事务并未提交，用于实现读一致性，所以该数据不能被其他事务的数据覆盖
+     2. 已经提交但未过期的回滚数据(committed undo information)：该数据关联的事务已经提交，但是仍收到undo retention参数的操持时间的影响
+     3. 事务已经提交并过期的数据(expired undo information)：事务已经提交，而且数据保存时间已经超过undo retention参数指定的时间，属于已经过期的数据。当回滚段满了之后，会优先覆盖事务已经提交并过期的数据
+     ```
+
+5. undo的类型
+
+   - insert undo log是指在insert操作中产生的undo log。因为insert操作的本身，只对事务本身可见，对其他事务不可见（这是事务隔离性的要求），该undo log可以在事务提交后直接删除，不需要进行purge操作
+   - update undo log记录的是对delete和update操作产生的undo log。该undo log可能需要提供MVCC机制，因此不能在事务提交时就进行删除，提交时放入undo log链表，等待purce线程进行最后的删除
+
+6. undo log的生命周期
+
+   ![MySQL undo生命周期](../../../TyporaImage/MySQL%20undo%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F.png)
+
+   对于InnoDB引擎来说，每个行记录除了记录本身的数据之外，还有隐藏的列
+
+   - DB_ROW_ID：如果没有为表显式的定义主键，并且表中也没有定义唯一索引，那么InnoDB会自动为表添加一个row_id的隐藏列作为主键
+   - DB_TRX_ID：每个事务都会分配一个事务ID，当对某条记录发生变更时，就会将这个事务的事务ID写入trx_id中
+   - DB_ROLL_PTR：回滚指针，本质上就是指向undo log的指针
+
+   对于更新主键的操作，会把原来的数据deletemark（记录行的隐藏字段）标识打开，这时并没有真正的删除数据，真正的删除会交给清理线程去判断，然后在后面插入一条新的数据，新的数据也会产生undo log，并且undo log的序号会递增。每次对数据的变更都会产生一个undo log，当一条记录被变更多次时，那么就会产生多条undo log，undo log记录的时变更前的日志，并且每个undo log的序号是递增的，那么当要回滚的时候，按照序号依次向前推，就可以找到原始数据了
+
+   针对于insert undo log的删除，因为insert操作的记录，只对事务本身可见，对其他事务不可见，故undo log可以在事务提交后直接删除，不需要进行purge操作；针对于update undo log的删除，因为可能需要提供MVCC机制，因此不能再事务提交时进行删除，提交时放入undo log链表，等待purge线程进行最后的删除
+
+## 四、MySQL事务日志小结
+
+![MySQL事务日志大概流程](../../../TyporaImage/MySQL%E4%BA%8B%E5%8A%A1%E6%97%A5%E5%BF%97%E5%A4%A7%E6%A6%82%E6%B5%81%E7%A8%8B.png)
+
+- undo log是逻辑日志，对事务回滚时，只是将数据库逻辑地恢复到原来的样子
+- redo log是物理日志，记录的是数据页的物理变化，undo log不是redo log的逆过程
+
+# 十五、锁
