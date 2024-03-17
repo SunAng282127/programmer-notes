@@ -3504,9 +3504,665 @@ MySQL有不同类型的日志文件，用来存储不同类型的日志，分为
 
 ## 二、通用查询日志
 
+通用查询日志用来记录用户的所有操作，包括启动和关闭MySQL服务、所有用户的连接开始时间和截止时间、发给 MySQL数据库服务器的所有SQL指令等。当我们的数据发生异常时，查看通用查询日志，还原操作时的具体场景，可以帮助我们准确定位问题
 
+### 一、查看当前状态
 
+```mysql
+ SHOW VARIABLES LIKE '%general%';
+ #输出语句
+ #general_log OFF：通用查询日志处于关闭状态
+ #general_log_file 文件路径：通用查询日志文件的名称
+```
 
+### 二、启动/关闭日志
 
+1. 永久性方式
 
+   ```mysql
+   [mysqld]
+   general_log=ON #开启
+   general_log=OFF #关闭
+   general_log_file=[path[filename]] #日志文件所在目录路径，filename为日志文件名
+   #如果不指定目录和文件名，通用查询日志将默认存储在MySQL数据目录中的hostname.log文件中，hostname表示主机名
+   ```
 
+2. 临时性方式
+
+   ```mysql
+   SET GLOBAL general_log=on; #开启通用查询日志
+   SET GLOBAL general_log_file=’path/filename’; # 设置日志文件保存位置
+   SET GLOBAL general_log=off; #关闭通用查询日志
+   ```
+
+### 三、删除/刷新日志
+
+1. 删除日志：可手动使用命令行指令删除文件
+
+2. 刷新文件
+
+   ```mysql
+   mysqladmin -uroot -p flush-logs
+   #刷新MySQL数据目录，发现创建了新的日志文件。前提一定要开启通用日志
+   ```
+
+## 三、错误日志
+
+错误日志记录了MySQL服务器启动、停止运行的时间，以及系统启动、运行和停止过程中的诊断信息，包括错误、警告和提示等
+
+通过错误日志可以查看系统的运行状态，便于即时发现故障、修复故障，如果MySQL服务出现异常，错误日志是发现问题、解决问题的首选
+
+### 一、启动日志
+
+在MySQL数据库中，错误日志功能是默认开启的。而且错误日志无法被禁止。默认情况下，错误日志存储在MySQL数据库的数据文件夹下，名称默认为mysqld.log（Linux系统）或hostname.err（mac系统）。如果需要制定文件名，则需要在my.cnf或者my.ini中做配置，修改配置项后，需要重启MySQL服务以生效
+
+```mysql
+[mysqld]
+log-error=[path/[filename]] #path为日志文件所在的目录路径，filename为日志文件名
+```
+
+### 二、查看日志
+
+MySQL错误日志是以文本文件形式存储的，可以使用文本编辑器直接查。查询错误日志的存储路径
+
+```mysql
+SHOW VARIABLES LIKE 'log_err%';
+#执行结果中可以看到错误日志文件是mysqld.log，位于MySQL默认的数据目录下
+```
+
+### 三、删除/刷新日志
+
+对于很久以前的错误日志，数据库管理员查看这些错误日志的可能性不大，可以将这些错误日志删除，以保证MySQL服务器上的硬盘空间。MySQL的错误日志是以文本文件的形式存储在文件系统中的，可以直接删除
+
+```mysql
+install -omysql -gmysql -m0644 /dev/null /var/log/mysqld.log #先执行
+mysqladmin -uroot -p flush-logs #后执行
+```
+
+## 四、二进制日志
+
+### 一、二进制日志概述
+
+1. binlog即binary log，二进制日志文件，也叫作变更日志（update log）。它记录了数据库所有执行的DDL和DML等数据库更新事件的语句，但是不包含没有修改任何数据的语句（如数据查询语句select、show等）
+2. binlog主要应用场景
+   - 用于数据恢复：如果MySQL数据库意外停止，可以通过二进制日志文件来查看用户执行过的操作，对数据库服务器文件做过的修改，然后根据二进制日志文件中的记录来恢复数据库服务器
+   - 用于数据复制：由于日志的延续性和时效性，master把它的二进制日志传递给slaves来达到master-slave数据一致的目的
+
+### 二、查看日志
+
+```mysql
+#查看记录二进制日志是否开启：在MySQL8中默认情况下，二进制文件是开启的
+show variables like '%log_bin%';
+```
+
+1. log_bin_basename：是binlog日志的基本文件名，后面会追加标识来表示每一个文件
+2. log_bin_index：是binlog文件的索引文件，这个文件管理了所有的binlog文件的目录
+3. log_bin_trust_function_creatcrs：限制存储过程，这是因为二进制日志的一个重要功能是用于主从复制，而存储函数有可能导致主从的数据不一致。所以当开启二进制日志后，需要限制存储函数的创建、修改、调用
+4. log_bin_use_v1_row_events：此只读系统变量已弃用。ON表示使用版本1二进制日志行，OFF表示使用版本2二进制日志行（MySQL5.6默认值为2）
+
+### 三、日志参数设置
+
+1. 永久性方式：修改MySQL的my.cnf或my.ini文件可以设置二进制日志的相关参数。需要重启MySQL服务
+
+   ```mysql
+   [mysqld]
+   #启用二进制日志
+   log-bin=[path/[filename]] #打开日志
+   binlog_expire_logs_seconds=600 #此参数控制二进制日志文件保留的时长，单位是秒
+   max_binlog_size=100M #控制单个二进制日志大小，当前日志文件大小超过此变量时，执行切换动作
+   
+   #新建的文件夹需要使用mysql用户，使用下面的命令即可
+   chown -R -v mysql:mysql binlog
+   ```
+
+2. 临时性方式
+
+   ```mysql
+   # global级别
+   set global sql_log_bin=0;
+   
+   # session级别（MySQL8只有会话级别）
+   mysql> SET sql_log_bin=0;
+   ```
+
+3. 注意点：数据库文件最好不要与日志文件放在同一磁盘上，当数据库文件所在的磁盘发生故障时，可以使用日志文件恢复数据
+
+### 四、查看日志
+
+1. 当MySQL创建二进制日志文件时，先创建一个以“filename”为名称、以“.index”为后缀的文件，再创建一 个以“filename”为名称、以“.000001”为后缀的文件。MySQL服务 重新启动一次 ，以“.000001”为后缀的文件就会增加一个，并且后缀名按1递增。即日志文件的个数与MySQL服务启动的次数相同；如果日志长度超过了max_binlog_size 的上限（默认是1GB），就会创建一个新的日志文件
+
+2. 查看日志指令
+
+   ```mysql
+   #查看当前的二进制日志文件列表及大小
+   SHOW BINARY LOGS;
+   #输出的Log_name即可查询的日志文件名称
+   
+   #使用以下命令将以伪SQL的形式表现出来，但是同时显示示binlog格式的语句
+   mysqlbinlog -v "日志文件路径和名称"
+   
+   #使用以下命令将以伪SQL的形式表现出来，不显示示binlog格式的语句
+   mysqlbinlog -v --base64-output=DECODE-ROWS "日志文件路径和名称"
+   
+   #使用mysqlbinlog读取出的binlog日志的全文内容比较多，不容易分辨查看到pos点信息，使用show binlog events
+   show binlog events [IN 'log_name'] [FROM pos] [LIMIT [offset,] row_count];
+   	#IN 'log_name' ：指定要查询的binlog文件名（不指定就是第一个binlog文件）　
+   	#FROM pos ：指定从哪个pos起始点开始查起（不指定就是从整个文件首个pos点开始算）
+   	#LIMIT [offset] ：偏移量(不指定就是0)
+   	#row_count :查询总条数（不指定就是所有行）
+   ```
+
+### 五、使用日志恢复数据
+
+1. mysql恢复数据语法
+
+   ```mysql
+   mysqlbinlog [option] filename | mysql(数据库所在目录) –uuser -ppass -v 数据库名称
+   ```
+
+   - filename：是日志文件名
+
+   - option：可选项，比较重要的两对option参数是--start-date、--stop-date和--start-position、--stop-position 
+
+     ​	--start-date和--stop-date：可以指定恢复数据库的起始时间点和结束时间点
+
+     ​	--start-position和--stop-position：可以指定恢复数据的开始位置和结束位置
+
+     ​	--database：数据库名称
+
+2. 使用position的show binlog events方式
+
+   ```mysql
+   #第一步：先查看二进制文件的存储目录
+   show variables like '%log_bin%'; 
+   #其中log_bin_basename就是其日志存储目录
+   
+   #第二步：查看二进制文件的存储文件，如果要恢复的是最新的操作数据，则看最新的即可
+   SHOW BINARY LOGS;
+   
+   #第三步：刷新出一个新的日志来存储恢复的数据，并不需要使用之前的日志
+   flush logs;
+   
+   #第四步：使用show binlog events查看要恢复的pos，此时的pos的开始位置是在第一个要恢复的操作数据的BEGIN，结束位置在最后一个要恢复的操作数据的COMMIT
+   show binlog events [IN 'log_name'] [FROM pos] [LIMIT [offset,] row_count];
+   
+   #第五步：使用mysqlbinlog进行恢复
+   mysqlbinlog [option] filename|mysql –uuser -ppass;
+   ```
+
+3. 使用时间戳的mysqlbinlog方式
+
+   ```mysql
+   #第一步：先查看二进制文件的存储目录
+   show variables like '%log_bin%'; 
+   #其中log_bin_basename就是其日志存储目录
+   
+   #第二步：查看二进制文件的存储文件，如果要恢复的是最新的操作数据，则看最新的即可
+   SHOW BINARY LOGS;
+   
+   #第三步：刷新出一个新的日志来存储恢复的数据，并不需要使用之前的日志
+   flush logs;
+   
+   #第四步：使用mysqlbinlog查看要恢复的时间戳范围，此时的时间戳的开始位置是在第一个要恢复的操作数据的BEGIN，结束位置在最后一个要恢复的操作数据的COMMIT
+   mysqlbinlog -v "日志文件路径和名称"
+   
+   #第五步：使用mysqlbinlog进行恢复
+   mysqlbinlog [option] filename|mysql –uuser -ppass;
+   ```
+
+### 六、删除二进制日志
+
+MySQL的二进制文件可以配置自动删除，同时MySQL也提供了安全的手动删除二进制文件的方法。PURGE MASTER LOGS只删除指定部分的二进制日志文件，RESET MASTER删除所有的二进制日志文件
+
+1.  PURGE MASTER LOGS：删除指定日志文件
+
+   ```mysql
+   PURGE {MASTER | BINARY} LOGS TO ‘指定日志文件名’
+   PURGE {MASTER | BINARY} LOGS BEFORE ‘指定日期’
+   ```
+
+2. RESET MASTER：删除所有二进制日志文件，这是直接删除全部，慎用
+
+   ```mysql
+   RESET MASTER;
+   ```
+
+### 七、深入二进制日志
+
+#### 一、写入机制
+
+![MySQL binlog写入过程](../../../TyporaImage/MySQL binlog写入过程.png)
+
+- binlog的写入时机也非常简单，事务执行过程中，先把日志写到binlog cache，事务提交的时候，再把binlog cache写到binlog文件中。因为一个事务的binlog不能被拆开，无论这个事务多大，也要确保一次性写入，所以系统会给每个线程分配一个块内存作为binlog cache
+- write和fsync的时机，可以由参数sync_binlog控制，默认是0。为0的时候，表示每次提交事务都只write，由系统自行判断什么时候执行fsync。虽然性能得到提升，但是机器宕机（在刷盘的那个步骤宕机时），page cache里面的binglog会丢失
+- 为了安全起见，可以设置为1，表示每次提交事务都会执行fsync，就如同redo log刷盘流程一样。最后还有一种折中方式，可以设置为N(N>1)，表示每次提交事务都write，但累积N个事务后才fsync。在出现IO瓶颈的场景里，将sync_binlog设置成一个比较大的值，可以提升性能。同样的，如果机器宕机，会丢失最近N个事务的binlog日志
+
+#### 二、binlog与redolog对比
+
+1. redo log是物理日志，记录内容是“在某个数据页上做了什么修改”，属于InnoDB存储引擎层产生的
+2. binlog是逻辑日志，记录内容是语句的原始逻辑，类似于“给ID=2这一行的c字段加1”，属于MySQL Server层
+3. 虽然两者都是持久化的保证，但是侧重点不同
+   - redo log让InnoDB存储引擎拥有了崩溃恢复能力
+   - binlog保证了MySQL集群架构的数据一致性
+
+#### 三、两阶段提交
+
+在执行更新语句过程，会记录redo log与binlog两块日志，以基本的事务为单位，redo log在事务执行过程中可以不断写入，而binlog只有在提交事务时才写入，所以redo log与binlog的写入时机不一样
+
+为解决redo log与binlog两份日志之间的逻辑一致问题，InnoDB引擎使用两阶段提交方案，也就是在写入binlog日志前后把写入redo log的过程分为了两部分，分别为写入redo log（prepare阶段）和redo log（commit阶段）
+
+![MySQL 两阶段提交流程](../../../TyporaImage/MySQL 两阶段提交流程.png)
+
+## 五、中继日志
+
+### 一、中继日志介绍
+
+- 中继日志只在主从服务器架构的从服务器上存在。从服务器为了与主服务器保持一致，要从主服务器读取二进制日志的内容，并且把读取到的信息写入本地的日志文件中，这个从服务器本地的日志文件就叫中继日志。然后，从服务器读取中继日志，并根据中继日志的内容对从服务器的数据进行更新，完成主从服务器的数据同步 
+- 搭建好主从服务器之后，中继日志默认会保存在从服务器的数据目录下
+- 文件名的格式是：从服务器名-relay-bin.序号。中继日志还有一个索引文件：从服务器名-relay-bin.index，用来定位当前正在使用的中继日志
+
+### 二、中继日志查看
+
+- 中继日志与二进制日志的格式相同，可以使用mysqlbinlog工具进行查询
+
+### 三、恢复的典型错误
+
+- 如果从服务器宕机，有的时候为了系统恢复，要重装操作系统，这样就可能会导致你的服务器名称与之前不同。而中继日志里是包含从服务器名的。在这种情况下，就可能导致你恢复从服务器的时候，无法从宕机前的中继日志里读取数据，以为是日志文件损坏了，其实是名称不对了
+- 解决的方法也很简单，把从服务器的名称改回之前的名称
+
+# 十八、主从复制
+
+## 一、主从复制概述
+
+### 一、提升数据库并发能力
+
+1. 在实际工作中，常常将Redis作为缓存与MySQL配置来使用，当有请求的时候，首先会从缓存中进行查找，如果存在就直接取出，不存在再访问数据库，这样就提升了读取的效率，也减少了对后端数据库的访问压力。Redis的缓存架构是高并发架构中非常重要的一环
+2. 一般应用对数据库而言都是读多写少，也就是对数据库读取数据的压力比较大，有一个思路就是采用数据库集群的方案，做主从架构、进行读写分离，这样同样可以提升数据库的并发能力。但并不是所有的应用都需要对数据库进行主从架构的设置，毕竟设置架构本身是有成本的
+3. 如果我们的目的在于提升数据库高并发访问的效率，那么首先考虑的是如何优化SQL和索引，这种方式简单有效；其次才是采用缓存的策略，比如使用Redis将热点数据保存在内存数据库中，提升读取的效率；最后才是对数据库采用 主从架构，进行读写分离
+
+### 二、主从复制的作用
+
+1. 读写分离：可以通过主从复制的方式来同步数据，然后通过读写分离提高数据库并发处理能力。其中一个是master主库，负责写入操作，称之为写库；其他的都是slave从库，负责读取操作，称之为读库。当主库进行更新的时候，会自动将数据复制到从库中，而在客户端读取数据的时候，会从从库中进行读取
+2. 数据备份：通过主从复制将主库上的数据复制到了从库中，相当于是一种热备份机制，也就是在主库正常运行的情况下进行备份，不会影响到服务
+3. 具有高可用性：数据备份实际上是一种冗余的机制。通过这样冗余的方式可以换取数据库的高可用性，也就是当服务器出现故障或宕机的情况下，可以切换到从服务器上，保证服务的正常运行
+
+## 二、主从复制的原理
+
+Slave会从Master读取binlog来进行数据同步
+
+### 一、原理剖析
+
+#### 一、涉及的线程
+
+![MySQL主从复制流程图](../../../TyporaImage/MySQL主从复制流程图.png)
+
+- 实际上主从同步的原理就是基于binlog进行数据同步的。在主从复制过程中，会基于3 个线程来操作，一个主库线程，两个从库线程。不是所有版本的MySQL都默认开启服务器的二进制日志。在进行主从同步的时候，需要先检查服务器是否已经开启二进制日志。除非特殊指定，默认情况下从服务器会执行所有主服务器中保存的事件，也可以通过配置使从服务器执行特定的事件
+- 二进制日志转储线程（Binlog dump thread）是一个主库线程。当从库线程连接的时候，主库可以将二进制日志发送给从库，当主库读取事件（Event）的时候，会在binlog上加锁，读取完成之后，再将锁释放掉
+- 从库I/O线程会连接到主库，向主库发送请求更新binlog。这时从库的I/O线程就可以读取到主库的二进制日志转储线程发送的binlog更新部分，并且拷贝到本地的中继日志（Relay log）
+- 从库SQL线程会读取从库中的中继日志，并且执行日志中的事件，将从库中的数据与主库保持同步
+
+#### 二、复制三步骤
+
+1. Master将写操作记录到二进制日志（ binlog ）
+2. Slave将Master的binary log events拷贝到它的中继日志（ relay log ）
+3. Slave重做中继日志中的事件，将改变应用到自己的数据库中。 MySQL复制是异步的且串行化的，而且重启后从接入点开始复制
+
+#### 三、复制的问题
+
+- 延时
+
+### 二、复制基本原则
+
+- 每个Slave只有一个Master
+- 每个Slave/Mater只能有一个唯一的服务器ID
+- 每个Maste 可以有多个Slave 
+
+## 三、一主一从架构搭建
+
+![MySQL主从复制架构搭建](../../../TyporaImage/MySQL主从复制架构搭建.png)
+
+### 一、准备工作
+
+- 准备两台或多态数据库服务器
+- 每台服务器上安装的数据库版本最好一致
+
+### 二、主机配置文件
+
+建议mysql版本一致且后台以服务运行，主从所有配置项都配置在[mysqld]节点下，且都是小写字母
+
+1. 必选参数配置
+
+   ```mysql
+   #[必须]主服务器唯一ID
+   server-id=1
+   #[必须]启用二进制日志,指名路径。比如：自己本地的路径/log/mysqlbin
+   log-bin=/log/mysqlbin
+   ```
+
+2. 可选参数配置
+
+   ```mysql
+   #[可选] 0（默认）表示读写（主机），1表示只读（从机）
+   read-only=0
+   #设置日志文件保留的时长，单位是秒
+   binlog_expire_logs_seconds=6000
+   #控制单个二进制日志大小。此参数的最大和默认值是1GB
+   max_binlog_size=200M
+   #[可选]设置不要复制的数据库
+   binlog-ignore-db=test
+   #[可选]设置需要复制的数据库,默认全部记录
+   binlog-do-db=需要复制的主数据库名字
+   #[可选]设置binlog格式
+   binlog_format=STATEMENT
+   ```
+
+3. binlog格式设置
+
+   - STATEMENT模式（基于SQL语句的复制(statement-based replication, SBR)），binlog_format=STATEMENT
+
+     ```mysql
+     每一条会修改数据的sql语句会记录到binlog中。这是默认的binlog格式
+     SBR的优点：
+     	历史悠久，技术成熟;
+     	不需要记录每一行的变化，减少了binlog日志量，文件较小;
+     	binlog中包含了所有数据库更改信息，可以据此来审核数据库的安全等情况;
+     	binlog可以用于实时的还原，而不仅仅用于复制;
+     	主从版本可以不一样，从服务器版本可以比主服务器版本高
+     SBR的缺点：
+     	不是所有的UPDATE语句都能被复制，尤其是包含不确定操作的时候;
+     	使用以下函数的语句也无法被复制：LOAD_FILE()、UUID()、USER()、FOUND_ROWS()、SYSDATE()(除非启动	 时启用了 --sysdate-is-now 选项);
+     	INSERT ... SELECT 会产生比 RBR 更多的行级锁;
+     	复制需要进行全表扫描(WHERE 语句中没有使用到索引)的UPDATE时，需要比RBR请求更多的行级锁;
+     	对于有AUTO_INCREMENT字段的InnoDB表而言，INSERT语句会阻塞其他INSERT语句对于一些复杂的语句，在从	   服务器上的耗资源情况会更严重，而RBR模式下，只会对那个发生变化的记录产生影响;
+     	执行复杂语句如果出错的话，会消耗更多资源;
+     	数据表必须几乎和主服务器保持一致才行，否则可能会导致复制出错
+     ```
+
+   - ROW模式（基于行的复制(row-based replication, RBR)），binlog_format=ROW
+
+     ```mysql
+     5.1.5版本的MySQL才开始支持，不记录每条sql语句的上下文信息，仅记录哪条数据被修改了，修改成什么样了
+     RBR的优点：
+     	任何情况都可以被复制，这对复制来说是最安全可靠的。（比如：不会出现某些特定情况下的存储过程、		function、trigger的调用和触发无法被正确复制的问题）
+     	多数情况下，从服务器上的表如果有主键的话，复制就会快了很多;
+     	复制以下几种语句时的行锁更少：INSERT ... SELECT、包含AUTO_INCREMENT字段的INSERT、没有附带条件	 或者并没有修改很多记录的UPDATE或DELETE语句;
+     	执行INSERT，UPDATE，DELETE语句时锁更少;
+     	从服务器上采用 多线程 来执行复制成为可能
+     RBR的缺点：
+     	binlog大了很多;
+     	复杂的回滚时binlog中会包含大量的数据;
+     	主服务器上执行UPDATE语句时，所有发生变化的记录都会写到binlog中，而SBR只会写一次，这会导致频繁发		生binlog的并发写问题;
+     	无法从 binlog 中看到都复制了些什么语句
+     ```
+
+   - MIXED模式（混合模式复制(mixed-based replication, MBR)）
+
+     ```mysql
+     从5.1.8版本开始，MySQL提供了Mixed格式，实际上就是Statement与Row的结合
+     在Mixed模式下，一般的语句修改使用statment格式保存binlog。如一些函数，statement无法完成主从复制的操作，则采用row格式保存binlog;
+     MySQL会根据执行的每一条具体的sql语句来区分对待记录的日志形式，也就是在Statement和Row之间选择一种
+     ```
+
+### 三、从机配置文件
+
+要求主从所有配置项都配置在 my.cnf 的 [mysqld] 栏位下，且都是小写字母。修改配置后重启后台mysql服务，使配置生效。注意主从机都关闭防火墙
+
+1. 必选参数配置
+
+   ```mysql
+   #[必须]从服务器唯一ID
+   server-id=2
+   ```
+
+2. 可选参数配置
+
+   ```mysql
+   #[可选]启用中继日志
+   relay-log=mysql-relay
+   ```
+
+### 四、主机建立账户并授权
+
+1. 在非MySQL8数据库中授权
+
+   ```mysql
+   #在主机MySQL里执行授权主从复制的命令
+   GRANT REPLICATION SLAVE ON *.* TO '主机用户名'@'从机器数据库IP' IDENTIFIED BY '数据库密码';
+   ```
+
+2. 在MySQL8数据库中授权
+
+   ```mysql
+   CREATE USER '主机用户名'@'%' IDENTIFIED BY '主库密码';
+   GRANT REPLICATION SLAVE ON *.* TO '主机用户名'@'%';
+   #此语句必须执行
+   ALTER USER '主机用户名'@'%' IDENTIFIED WITH mysql_native_password BY '主库密码';
+   flush privileges;
+   ```
+
+3. 查询Master的状态，并记录下File和Position的值
+
+   ```mysql
+   show master status;
+   #执行完此步骤后不要再操作主服务器MySQL，防止主服务器状态值变化
+   ```
+
+### 五、从机配置需要复制的主机
+
+1. 从机上复制主机的命令
+
+   ```mysql
+   CHANGE MASTER TO
+   MASTER_HOST='主机的IP地址',
+   MASTER_USER='主机用户名',
+   MASTER_PASSWORD='主机用户名的密码',
+   MASTER_LOG_FILE='mysql-bin.具体数字',
+   MASTER_LOG_POS=具体值;
+   
+   #如果报错，则执行
+   STOP SLAVE first
+   ```
+
+2. 启动slave同步
+
+   ```mysql
+   #启动slave同步
+   START SLAVE;
+   
+   #如果报错，则执行
+   reset slave; #删除SLAVE数据库的relaylog日志文件，并重新启用新的relaylog文件
+   ```
+
+### 六、查看同步状态
+
+```mysql
+SHOW SLAVE STATUS;
+#如果Slave_IO_Running和Slave_SQL_Running的值都为Yes，则配置成功
+```
+
+如果不是成功，失败的原因可能有：
+
+- 网络不通
+- 账户密码错误 
+- 防火墙 
+- mysql配置文件问题 
+- 连接服务器时语法 
+- 主服务器mysql权限
+
+### 七、停止主从同步
+
+1. 停止主从同步命令
+
+   ```mysql
+   stop slave;
+   ```
+
+2. 重新配置主从
+
+   ```mysql
+   #如果停止从服务器复制功能，再使用需要重新配置主从。否则会报错
+   stop slave;
+   
+   #如果报错先执行
+   reset slave; 
+   #再执行
+   reset master; 
+   #删除Master中所有的binglog文件，并将日志索引文件清空，重新开始所有新的日志文件(慎用)
+   ```
+
+### 八、MyCat中间件需要学习
+
+## 四、同步数据一致性问题
+
+### 一、主从同步的要求
+
+- 读库和写库的数据一致(最终一致)
+- 写数据必须写到写库
+- 读数据必须到读库(不一定)
+
+### 二、主从延迟问题
+
+- 进行主从同步的内容是二进制日志，它是一个文件，在进行网络传输的过程中就一定会存在主从延迟（比如 500ms），这样就可能造成用户在从库上读取的数据不是最新的数据，也就是主从同步中的数据不一致性问题
+
+### 三、主从延迟问题原因
+
+1. 在网络正常的时候，日志从主库传给从库所需的时间是很短的，即T2-T1的值是非常小的。即网络正常情况下，主备延迟的主要来源是备库接收完binlog和执行完这个事务之间的时间差
+2. 主备延迟最直接的表现是，从库消费中继日志（relay log）的速度，比主库生产binlog的速度要慢。造成原因有
+   - 从库的机器性能比主库要差
+   - 从库的压力大 
+   - 大事务的执行
+
+### 四、减少主从延迟的方法
+
+1. 降低多线程大事务并发的概率，优化业务逻辑
+2. 优化SQL，避免慢SQL，减少批量操作，建议写脚本以update-sleep这样的形式完成
+3. 提高从库机器的配置，减少主库写binlog和从库读binlog的效率差
+4. 尽量采用短的链路，也就是主库和从库服务器的距离尽量要短，提升端口带宽，减少binlog传输的网络延时 
+5. 实时性要求的业务读强制走主库，从库只做灾备，备份
+
+### 五、解决一致性问题
+
+读写分离情况下，解决主从同步中数据不一致的问题，就是解决主从之间数据复制方式的问题，如果按照数据一致性从弱到强来进行划分，有以下 3 种复制方式
+
+1. 异步复制
+2. 半同步复制
+3. 组复制
+   - 异步复制和半同步复制都无法最终保证数据的一致性问题，半同步复制是通过判断从库响应的个数来决定是否返回给客户端，虽然数据一致性相比于异步复制有提升，但仍然无法满足对数据一致性要求高的场景
+   - 组复制技术，简称 MGR（MySQL Group Replication）。是 MySQL 在 5.7.17 版本中推出的一种新的数据复制技术，这种复制技术是基于Paxos协议的状态机复制
+   - MGR实现原理：首先我们将多个节点共同组成一个复制组，在 执行读写（RW）事务 的时候，需要通过一致性协议层（Consensus 层）的同意，也就是读写事务想要进行提交，必须要经过组里“大多数人”（对应 Node 节点）的同意，大多数指的是同意的节点数量需要大于（N/2+1），这样才可以进行提交，而不是原发起方一个说了算。而针对只读（RO）事务则不需要经过组内同意，直接COMMIT即可
+
+# 十九、数据库备份与恢复
+
+## 一、物理备份与逻辑备份
+
+1. 物理备份：备份数据文件，转储数据库物理文件到某一目录。物理备份恢复速度比较快，但占用空间比较大，MySQL中可以用xtrabackup工具来进行物理备份
+2. 逻辑备份：对数据库对象利用工具进行导出工作，汇总入备份文件内。逻辑备份恢复速度慢，但占用空间小，更灵活。MySQL中常用的逻辑备份工具为mysqldump。逻辑备份就是备份sql语句，在恢复的时候执行备份的sql语句实现数据库数据的重现
+
+## 二、mysqldump实现逻辑备份
+
+mysqldump命令执行时，可以将数据库备份成一个文本文件，该文件中实际上包含多个CREATE和INSERT语句，使用这些语句可以重新创建表和插入数据
+
+- 查出需要备份的表的结构，在文本文件中生成一个CREATE语句
+- 将表中的所有记录转换成一条INSERT语句
+
+### 一、备份一个数据库
+
+```mysql
+mysqldump –u 用户名称 –h 主机名称 –p密码 待备份的数据库名称[tbname, [tbname...]]> 备份文件名称.sql
+#备份的文件并非一定要求后缀名为.sql，例如后缀名为.txt的文件也是可以的
+#备份文件名称可以指明路径，如果不指明则直接备份到当前目录下
+```
+
+### 二、备份全部数据库
+
+```mysql
+mysqldump -u user -p xxxxxx --all-databases > 备份文件名称.sql
+mysqldump -u user -p xxxxxx -A > 备份文件名称.sql
+```
+
+### 三、备份部分数据库
+
+```mysql
+mysqldump –u user –h host –p --databases [数据库的名称1 [数据库的名称2...]] > 备份文件名称.sql
+#使用 --databases 或 -B 参数了，该参数后面跟数据库名称，多个数据库间用空格隔开
+```
+
+### 四、备份部分表
+
+```mysql
+mysqldump –u user –h host –p 数据库的名称 [表名1 [表名2...]] > 备份文件名称.sql
+```
+
+### 五、备份单表的部分数据
+
+```mysql
+mysqldump –u user –h host –p 数据库的名称 表名 --where='筛选条件' > 备份文件名称.sql
+```
+
+### 六、排除某些表的备份
+
+```mysql
+mysqldump –u user –h host –p 数据库的名称 --ignore-table=数据库名称.表名 > 备份文件名称.sql
+```
+
+### 七、只备份结构或只备份数据
+
+只备份结构的话可以使用--no-data简写为-d选项；只备份数据可以使用--no-create-info简写为-t选项
+
+- 只备份结构
+
+  ```mysql
+  mysqldump -u user -p xxxxxx 数据库名称 --no-data > 备份文件名称.sql
+  ```
+
+- 只备份数据
+
+  ```mysql
+  mysqldump -u user -p xxxxxx 数据库名称  --no-create-info > 备份文件名称.sql
+  ```
+
+### 八、备份中包含存储过程、函数、事件
+
+mysqldump备份默认是不包含存储过程，自定义函数及事件的。可以使用--routines或-R选项来备份存储过程及函数，使用--events或-E参数来备份事件
+
+```mysql
+mysqldump -u user -p xxxxxx -R -E 数据库名称  --no-create-info > 备份文件名称.sql
+```
+
+### 九、mysqldump常用选项
+
+```mysql
+--add-drop-database：在每个CREATE DATABASE语句前添加DROP DATABASE语句。
+--add-drop-tables：在每个CREATE TABLE语句前添加DROP TABLE语句。
+--add-locking：用LOCK TABLES和UNLOCK TABLES语句引用每个表转储。重载转储文件时插入得更快。
+--all-database, -A：转储所有数据库中的所有表。与使用--database选项相同，在命令行中命名所有数据库。
+--comment[=0|1]：如果设置为0，禁止转储文件中的其他信息，例如程序版本、服务器版本和主机。--skip-comments与--comments=0的结果相同。默认值为1，即包括额外信息。
+--compact：产生少量输出。该选项禁用注释并启用--skip-add-drop-tables、--no-set-names、--skip-disable-keys和--skip-add-locking选项。
+--compatible=name：产生与其他数据库系统或旧的MySQL服务器更兼容的输出，值可以为ansi、MySQL323、MySQL40、postgresql、oracle、mssql、db2、maxdb、no_key_options、no_table_options或者no_field_options。
+--complete_insert, -c：使用包括列名的完整的INSERT语句。
+--debug[=debug_options], -#[debug_options]：写调试日志
+--delete，-D：导入文本文件前清空表。
+--default-character-set=charset：使用charsets默认字符集。如果没有指定，就使用utf8。
+--delete--master-logs：在主复制服务器上，完成转储操作后删除二进制日志。该选项自动启用-masterdata。
+--extended-insert，-e：使用包括几个VALUES列表的多行INSERT语法。这样使得转储文件更小，重载文件时可以加速插入。
+--flush-logs，-F：开始转储前刷新MySQL服务器日志文件。该选项要求RELOAD权限。
+--force，-f：在表转储过程中，即使出现SQL错误也继续。
+--lock-all-tables，-x：对所有数据库中的所有表加锁。在整体转储过程中通过全局锁定来实现。该选项自动关闭--single-transaction和--lock-tables。
+--lock-tables，-l：开始转储前锁定所有表。用READ LOCAL锁定表以允许并行插入MyISAM表。对于事务表（例如InnoDB和BDB），--single-transaction是一个更好的选项，因为它根本不需要锁定表。
+--no-create-db，-n：该选项禁用CREATE DATABASE /*!32312 IF NOT EXIST*/db_name语句，如果给出--database
+或--all-database选项，就包含到输出中。
+--no-create-info，-t：只导出数据，而不添加CREATE TABLE语句。
+--no-data，-d：不写表的任何行信息，只转储表的结构。
+--opt：该选项是速记，它可以快速进行转储操作并产生一个能很快装入MySQL服务器的转储文件。该选项默认开启，但可以用--skip-opt禁用。
+--password[=password]，-p[password]：当连接服务器时使用的密码。
+-port=port_num，-P port_num：用于连接的TCP/IP端口号。
+--protocol={TCP|SOCKET|PIPE|MEMORY}：使用的连接协议。
+--replace，-r –replace和--ignore：控制替换或复制唯一键值已有记录的输入记录的处理。如果指定--replace，新行替换有相同的唯一键值的已有行；如果指定--ignore，复制已有的唯一键值的输入行被跳过。如果不指定这两个选项，当发现一个复制键值时会出现一个错误，并且忽视文本文件的剩余部分。
+--silent，-s：沉默模式。只有出现错误时才输出。
+--socket=path，-S path：当连接localhost时使用的套接字文件（为默认主机）。
+--user=user_name，-u user_name：当连接服务器时MySQL使用的用户名。
+--verbose，-v：冗长模式，打印出程序操作的详细信息。
+--xml，-X：产生XML输出
+```
+
+## 三、mysql命令恢复数据
