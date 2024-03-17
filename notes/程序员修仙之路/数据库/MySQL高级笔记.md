@@ -4076,8 +4076,8 @@ mysqldump –u 用户名称 –h 主机名称 –p密码 待备份的数据库�
 ### 二、备份全部数据库
 
 ```mysql
-mysqldump -u user -p xxxxxx --all-databases > 备份文件名称.sql
-mysqldump -u user -p xxxxxx -A > 备份文件名称.sql
+mysqldump -u user -p  --all-databases > 备份文件名称.sql
+mysqldump -u user -p -A > 备份文件名称.sql
 ```
 
 ### 三、备份部分数据库
@@ -4112,13 +4112,13 @@ mysqldump –u user –h host –p 数据库的名称 --ignore-table=数据库�
 - 只备份结构
 
   ```mysql
-  mysqldump -u user -p xxxxxx 数据库名称 --no-data > 备份文件名称.sql
+  mysqldump -u user -p  数据库名称 --no-data > 备份文件名称.sql
   ```
 
 - 只备份数据
 
   ```mysql
-  mysqldump -u user -p xxxxxx 数据库名称  --no-create-info > 备份文件名称.sql
+  mysqldump -u user -p  数据库名称  --no-create-info > 备份文件名称.sql
   ```
 
 ### 八、备份中包含存储过程、函数、事件
@@ -4126,7 +4126,7 @@ mysqldump –u user –h host –p 数据库的名称 --ignore-table=数据库�
 mysqldump备份默认是不包含存储过程，自定义函数及事件的。可以使用--routines或-R选项来备份存储过程及函数，使用--events或-E参数来备份事件
 
 ```mysql
-mysqldump -u user -p xxxxxx -R -E 数据库名称  --no-create-info > 备份文件名称.sql
+mysqldump -u user -p  -R -E 数据库名称  --no-create-info > 备份文件名称.sql
 ```
 
 ### 九、mysqldump常用选项
@@ -4166,3 +4166,128 @@ mysqldump -u user -p xxxxxx -R -E 数据库名称  --no-create-info > 备份文�
 ```
 
 ## 三、mysql命令恢复数据
+
+```mysql
+mysql –u user –p [数据库名称] < 备份文件名称.sql
+```
+
+### 一、单库备份中恢复单库
+
+```mysql
+#如果备份文件中包含了创建数据库的语句，则恢复的时候不需要指定数据库名称
+mysql –u user –p < 备份文件名称.sql
+#否则需要指定数据库名称
+mysql –u user –p 数据库名称 < 备份文件名称.sql
+```
+
+### 二、全量备份恢复
+
+```mysql
+#如果备份时使用了--all-databases参数备份了所有的数据库，则恢复的时候不需要指定数据库名称，对应的sql文件中包含有CREATE DATABASE语句，可通过该语句创建数据库。创建数据库后，可以执行sql文件中的USE语句选择数据库，再创建表并插入记录
+mysql –u user –p < 备份文件名称.sql
+#否则需要指定数据库名称
+mysql –u user –p 数据库名称 < 备份文件名称.sql
+```
+
+### 三、全量备份中恢复单库
+
+```mysql
+#首先将全量备份的sql文件中提取要恢复的库的sql
+sed -n '/^-- Current Database: `要恢复库的名称`/,/^-- Current Database: `/p' 全量备份文件名称.sql
+> 要恢复库的sql文件名称（可以是指定的全新的sql文件）
+#再执行单库的备份命令
+mysql –u user –p < 备份文件名称.sql
+#再重新登录即可看到恢复的数据
+```
+
+### 四、单库备份中恢复单表
+
+```mysql
+cat 已备份单库的sql文件 | sed -e '/./{H;$!d;}' -e 'x;/CREATE TABLE `表名`/!d;q' > 重新生成对应创建表结构的文件名称.sql
+cat 已备份单库的sql文件 | grep --ignore-case 'insert into `表名`' > 重新生成对应创建表数据的文件名称.sql
+#用shell语法分离出创建表的语句及插入数据的语句后 再依次导出即可完成恢复
+use 切换到指定的库;
+#再导入表结构和表数据
+source 重新生成对应创建表结构的文件名称.sql;
+source 重新生成对应创建表数据的文件名称.sql;
+```
+
+## 四、物理备份/恢复：直接复制整个数据库
+
+### 一、物理备份
+
+1. 直接将MySQL中的数据库文件复制出来。这种方法最简单，速度也最快。MySQL的数据库目录位置不一定相同
+   - 在Windows平台下，MySQL 8.0存放数据库的目录通常默认为 “ C:\ProgramData\MySQL\MySQL\Server 8.0\Data ”或者其他用户自定义目录
+   - 在Linux平台下，数据库目录位置通常为/var/lib/mysql/
+   - 在MAC OSX平台下，数据库目录位置通常为“/usr/local/mysql/data” 
+2. 为了保证备份的一致性。需要保证
+   - 方式一：备份前，将服务器停止
+   - 方式二：备份前，对相关表执行FLUSH TABLES WITH READ LOCK操作。这样当复制数据库目录中的文件时，允许其他客户继续查询表。同时，FLUSH TABLES语句来确保开始备份前将所有激活的索引页写入硬盘
+3. 这种方式方便、快速，但不是最好的备份方法，因为实际情况可能不允许停止MySQL服务器或者锁住表，而且这种方法对InnoDB存储引擎的表不适用。对于MyISAM存储引擎的表，这样备份和还原很方便，但是还原时最好是相同版本的MySQL数据库，否则可能会存在文件类型不同的情况
+4. 注意点
+   - 物理备份完毕后，执行UNLOCK TABLES来结算其他客户对表的修改行为
+
+### 二、物理恢复
+
+1. 将备份的数据库数据拷贝到数据目录下，并重启MySQL服务器
+
+2. 查询相关表的数据是否恢复。需要使用下面的chown操作
+
+   - 必须确保备份数据的数据库和待恢复的数据库服务器的主版本号相同。因为只有MySQL数据库主版本号相同时，才能保证这两个MySQL数据库文件类型是相同的
+
+   - 这种方式对MyISAM类型的表比较有效，对于InnoDB类型的表则不可用。因为InnoDB表的表空间不能直接复制
+
+   - 在Linux操作系统下，复制到数据库目录后，一定要将数据库的用户和组变成mysql
+
+     ```mysql
+     chown -R mysql.mysql /var/lib/mysql/dbname
+     #其中，两个mysql分别表示组和用户；“-R”参数可以改变文件夹下的所有子文件的用户和组；“dbname”参数表示数据库目录
+     #Linux操作系统下的权限设置非常严格。通常情况下，MySQL数据库只有root用户和mysql用户组下的mysql用户才可以访问，因此将数据库目录复制到指定文件夹后，一定要使用chown命令将文件夹的用户组变为mysql，将用户变为mysql
+     ```
+
+## 五、表的导出/导入
+
+### 一、表的导出
+
+1. 使用SELECT…INTO OUTFILE 导出文本文件
+
+   ```mysql
+   #前提准备
+   #mysql默认对导出的目录有权限限制，也就是说使用命令行进行导出的时候，需要指定目录进行操作
+   #查询secure_file_priv值
+   SHOW GLOBAL VARIABLES LIKE '%secure%';
+   #上面结果中显示，secure_file_priv变量的值为/var/lib/mysql-files/，导出目录设置为该目录
+   SELECT * FROM 表名 INTO OUTFILE "/var/lib/mysql-files/导出表数据文件名称.txt";
+   ```
+
+2. 使用mysqldump命令导出表结构生成文件和表数据文件
+
+   ```mysql
+   mysqldump -u user -p -T "/var/lib/mysql-files/" 数据库 表名
+   #mysqldump命令执行完毕后，在指定的目录/var/lib/mysql-files/下生成了表名.sql和表名.txt文件
+   ```
+
+3.  使用mysql命令导出文本文件
+
+   ```mysql
+   mysql -uroot -p --execute="SELECT * FROM 表名;" 数据库名称> "/var/lib/mysql-files/表名.txt"
+   ```
+
+### 二、表的导入
+
+1. 使用LOAD DATA INFILE方式导入文本文件
+
+   ```mysql
+   LOAD DATA INFILE '/var/lib/mysql-files/表的数据文件.txt' INTO TABLE 数据库名称.表名;
+   ```
+
+2. 使用mysqlimport方式导入文本文件
+
+   ```mysql
+   mysqlimport -u user -p 数据库名称 '/var/lib/mysql-files/备份表数据文件.txt'
+   ```
+
+## 六、数据库迁移
+
+
+
