@@ -39,6 +39,8 @@
 
 1. 使用`Spring Initializer`快速初始化一个Spring Boot工程
 
+   - 如若新版IDEA版本太新导致Java版本选择不了旧版本。就替换下载数据源：可以将https://start.spring.io/ 替换成 https://start.aliyun.com/阿里云的下载地址 
+
    <img src="https://image-bed-vz.oss-cn-hangzhou.aliyuncs.com/MyBatis-Plus/image-20220519140839640.png" alt="image-20220519140839640" style="zoom:80%;" />
 
    <img src="https://image-bed-vz.oss-cn-hangzhou.aliyuncs.com/MyBatis-Plus/image-20220519141335981.png" alt="image-20220519141335981" style="zoom:80%;" />
@@ -126,3 +128,192 @@
 - 泛型 `T` 为任意实体对象
 - 参数 `Serializable` 为任意类型主键 `Mybatis-Plus` 不推荐使用复合主键约定每一张表都有自己的唯一 `id` 主键
 - 对象 `Wrapper` 为条件构造器
+- MyBatis-Plus中的基本CRUD在内置的BaseMapper中都已得到了实现，因此我们继承该接口以后可以直接使用
+
+## 二、BaseMapper中提供的CRUD方法
+
+1. 增加：Insert
+
+   ```java
+   // 插入一条记录
+   int insert(T entity);
+   ```
+
+2. 删除：Delete
+
+   ```java
+   // 根据 entity 条件，删除记录
+   int delete(@Param(Constants.WRAPPER) Wrapper<T> wrapper);
+   // 删除（根据ID 批量删除）
+   int deleteBatchIds(@Param(Constants.COLLECTION) Collection<? extends Serializable> idList);
+   // 根据 ID 删除
+   int deleteById(Serializable id);
+   // 根据 columnMap 条件，删除记录
+   int deleteByMap(@Param(Constants.COLUMN_MAP) Map<String, Object> columnMap);
+   ```
+
+3. 修改：Update
+
+   ```java
+   // 根据 whereWrapper 条件，更新记录
+   int update(@Param(Constants.ENTITY) T updateEntity, @Param(Constants.WRAPPER) Wrapper<T> whereWrapper);
+   // 根据 ID 修改
+   int updateById(@Param(Constants.ENTITY) T entity);
+   ```
+
+4. 查询：Select
+
+   ```java
+   // 根据 ID 查询
+   T selectById(Serializable id);
+   // 根据 entity 条件，查询一条记录
+   T selectOne(@Param(Constants.WRAPPER) Wrapper<T> queryWrapper);
+   
+   // 查询（根据ID 批量查询）
+   List<T> selectBatchIds(@Param(Constants.COLLECTION) Collection<? extends Serializable> idList);
+   // 根据 entity 条件，查询全部记录
+   List<T> selectList(@Param(Constants.WRAPPER) Wrapper<T> queryWrapper);
+   // 查询（根据 columnMap 条件）
+   List<T> selectByMap(@Param(Constants.COLUMN_MAP) Map<String, Object> columnMap);
+   // 根据 Wrapper 条件，查询全部记录
+   List<Map<String, Object>> selectMaps(@Param(Constants.WRAPPER) Wrapper<T> queryWrapper);
+   // 根据 Wrapper 条件，查询全部记录。注意： 只返回第一个字段的值
+   List<Object> selectObjs(@Param(Constants.WRAPPER) Wrapper<T> queryWrapper);
+   
+   // 根据 entity 条件，查询全部记录（并翻页）
+   IPage<T> selectPage(IPage<T> page, @Param(Constants.WRAPPER) Wrapper<T> queryWrapper);
+   // 根据 Wrapper 条件，查询全部记录（并翻页）
+   IPage<Map<String, Object>> selectMapsPage(IPage<T> page, @Param(Constants.WRAPPER) Wrapper<T> queryWrapper);
+   // 根据 Wrapper 条件，查询总记录数
+   Integer selectCount(@Param(Constants.WRAPPER) Wrapper<T> queryWrapper);
+   ```
+
+## 三、调用Mapper层实现CRUD
+
+1. 插入：最终执行的结果为Mybatis-plus自动生成的主键。这是因为MyBatis-Plus在实现插入数据时，会默认基于雪花算法的策略生成id
+
+   ```java
+   @Test
+   public void testInsert(){
+       User user = new User();
+       user.setName("Vz");
+       user.setAge(21);
+       user.setEmail("vz@oz6.cn");
+       int result = userMapper.insert(user);
+       System.out.println(result > 0 ? "添加成功！" : "添加失败！");
+       System.out.println("受影响的行数为：" + result);
+       //1527206783590903810（当前 id 为雪花算法自动生成的id）
+       System.out.println("id自动获取" + user.getId());
+   }
+   ```
+
+2. 删除
+
+   ```、java
+   
+   // 删除一条数据
+   // int deleteById(Serializable id)
+   @Test
+   public void testDeleteById(){
+       int result = userMapper.deleteById(1527206783590903810L);
+       System.out.println(result > 0 ? "删除成功！" : "删除失败！");
+       System.out.println("受影响的行数为：" + result);
+   }
+   
+   // 根据ID批量删除数据
+   // int deleteBatchIds(@Param(Constants.COLLECTION) Collection<? extends Serializable> idList);
+   @Test
+   public void testDeleteBatchIds(){
+       List<Long> ids = Arrays.asList(6L,7L,8L);
+       int result = userMapper.deleteBatchIds(ids);
+       System.out.println(result > 0 ? "删除成功！" : "删除失败！");
+       System.out.println("受影响的行数为：" + result);
+   }
+   
+   // 根据Map条件删除数据
+   // int deleteByMap(@Param(Constants.COLUMN_MAP) Map<String, Object> columnMap);
+   @Test
+   public void testDeleteByMap(){
+       //当前演示为根据name和age删除数据
+       //执行SQL为：DELETE FROM user WHERE name = ? AND age = ?
+       Map<String,Object> map = new HashMap<>();
+       map.put("name","Vz");
+       map.put("age",21);
+       int result = userMapper.deleteByMap(map);
+       System.out.println(result > 0 ? "删除成功！" : "删除失败！");
+       System.out.println("受影响的行数为：" + result);
+   }
+   ```
+
+3. 修改
+
+   ```java
+   // 调用方法：int updateById(@Param(Constants.ENTITY) T entity);
+   @Test
+   public void testUpdateById(){
+       //执行SQL为： UPDATE user SET name=?, age=?, email=? WHERE id=?
+       User user = new User();
+       user.setId(6L);
+       user.setName("VzUpdate");
+       user.setAge(18);
+       user.setEmail("Vz@sina.com");
+       int result = userMapper.updateById(user);
+       System.out.println(result > 0 ? "修改成功！" : "修改失败！");
+       System.out.println("受影响的行数为：" + result);
+   }
+   ```
+
+4. 查询
+
+   ```java
+   // 根据ID查询用户信息
+   // 调用方法：T selectById(Serializable id);
+   @Test
+   public void testSelectById(){
+       User user = userMapper.selectById(1L);
+       System.out.println(user);
+   }
+   
+   // 根据多个ID查询多个用户信息
+   // 调用方法：List<T> selectBatchIds(@Param(Constants.COLLECTION) Collection<? extends 		Serializable> idList);
+   @Test
+   public void testSelectBatchIds(){
+       //执行SQL为：SELECT id,name,age,email FROM user WHERE id IN ( ? , ? , ? )
+       List<Long> ids = Arrays.asList(1L,2L,3L);
+       List<User> users = userMapper.selectBatchIds(ids);
+       users.forEach(System.out::println);
+   }
+   
+   // 根据Map条件查询用户信息
+   // List<T> selectByMap(@Param(Constants.COLUMN_MAP) Map<String, Object> columnMap);
+   @Test
+   public void testSelectByMap(){
+       //执行SQL为：SELECT id,name,age,email FROM user WHERE age = ?
+       Map<String,Object> map = new HashMap<>();
+       map.put("age",18);
+       List<User> users = userMapper.selectByMap(map);
+       users.forEach(System.out::println);
+   }
+   
+   // 查询所有用户信息
+   // 调用方法：List<T> selectList(@Param(Constants.WRAPPER) Wrapper<T> queryWrapper);
+   @Test
+   void testSelectList(){
+       List<User> users = userMapper.selectList(null);
+       users.forEach(System.out::println);
+   }
+   ```
+
+## 四、通用Service
+
+- 通用Service CRUD封装`IService`接口，进一步封装CRUD采用 `get 查询单行` `remove 删除` `list 查询集合` `page 分页` 前缀命名方式区分 `Mapper` 层避免混淆，
+- 泛型 `T` 为任意实体对象
+- 建议如果存在自定义通用Service方法的可能，请创建自己的 `IBaseService` 继承 `Mybatis-Plus` 提供的基类
+- 对象 `Wrapper` 为 条件构造器
+- MyBatis-Plus中有一个接口 **`IService`**和其实现类 **`ServiceImpl`**，封装了常见的业务层逻辑
+- 因此我们在使用的时候仅需在自己定义的**`Service`**接口中继承**`IService`**接口，在自己的实现类中实现自己的Service并继承**`ServiceImpl`**即可
+
+## 五、调用Iservic中的CRUD方法
+
+
+
