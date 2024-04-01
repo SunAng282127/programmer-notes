@@ -209,7 +209,7 @@
 
 2. 删除
 
-   ```、java
+   ```java
    
    // 删除一条数据
    // int deleteById(Serializable id)
@@ -306,7 +306,7 @@
 
 ## 四、通用Service
 
-- 通用Service CRUD封装`IService`接口，进一步封装CRUD采用 `get 查询单行` `remove 删除` `list 查询集合` `page 分页` 前缀命名方式区分 `Mapper` 层避免混淆，
+- 通用Service CRUD封装`IService`接口，进一步封装CRUD采用 `get 查询单行` `remove 删除` `list 查询集合` `page 分页` 前缀命名方式区分 `Mapper` 层避免混淆
 - 泛型 `T` 为任意实体对象
 - 建议如果存在自定义通用Service方法的可能，请创建自己的 `IBaseService` 继承 `Mybatis-Plus` 提供的基类
 - 对象 `Wrapper` 为 条件构造器
@@ -315,5 +315,499 @@
 
 ## 五、调用Iservic中的CRUD方法
 
+1. 增加：Save、SaveOrUpdate
 
+   ```java
+   // 插入一条记录（选择字段，策略插入）
+   boolean save(T entity);
+   // 插入（批量）
+   boolean saveBatch(Collection<T> entityList);
+   // 插入（批量）
+   boolean saveBatch(Collection<T> entityList, int batchSize);
+   
+   // TableId 注解存在更新记录，否则插入一条记录
+   boolean saveOrUpdate(T entity);
+   // 根据updateWrapper尝试更新，否则继续执行saveOrUpdate(T)方法进行插入操作
+   boolean saveOrUpdate(T entity, Wrapper<T> updateWrapper);
+   // 批量修改插入
+   boolean saveOrUpdateBatch(Collection<T> entityList);
+   // 批量修改插入
+   boolean saveOrUpdateBatch(Collection<T> entityList, int batchSize);
+   ```
+
+2. 删除：Remove
+
+   ```java
+   // 根据 entity 条件，删除记录
+   boolean remove(Wrapper<T> queryWrapper);
+   // 根据 ID 删除
+   boolean removeById(Serializable id);
+   // 根据 columnMap 条件，删除记录
+   boolean removeByMap(Map<String, Object> columnMap);
+   // 删除（根据ID 批量删除）
+   boolean removeByIds(Collection<? extends Serializable> idList);
+   ```
+
+3. 修改：Update
+
+   ```java
+   // 根据 UpdateWrapper 条件，更新记录 需要设置sqlset
+   boolean update(Wrapper<T> updateWrapper);
+   // 根据 whereWrapper 条件，更新记录
+   boolean update(T updateEntity, Wrapper<T> whereWrapper);
+   // 根据 ID 选择修改
+   boolean updateById(T entity);
+   // 根据ID 批量更新
+   boolean updateBatchById(Collection<T> entityList);
+   // 根据ID 批量更新
+   boolean updateBatchById(Collection<T> entityList, int batchSize);
+   ```
+
+4. 查询：Get、List、Count
+
+   ```java
+   // 根据 ID 查询
+   T getById(Serializable id);
+   // 根据 Wrapper，查询一条记录。结果集，如果是多个会抛出异常，随机取一条加上限制条件 wrapper.last("LIMIT 1")
+   T getOne(Wrapper<T> queryWrapper);
+   // 根据 Wrapper，查询一条记录
+   T getOne(Wrapper<T> queryWrapper, boolean throwEx);
+   // 根据 Wrapper，查询一条记录
+   Map<String, Object> getMap(Wrapper<T> queryWrapper);
+   // 根据 Wrapper，查询一条记录
+   <V> V getObj(Wrapper<T> queryWrapper, Function<? super Object, V> mapper);
+   
+   
+   // 查询所有
+   List<T> list();
+   // 查询列表
+   List<T> list(Wrapper<T> queryWrapper);
+   // 查询（根据ID 批量查询）
+   Collection<T> listByIds(Collection<? extends Serializable> idList);
+   // 查询（根据 columnMap 条件）
+   Collection<T> listByMap(Map<String, Object> columnMap);
+   // 查询所有列表
+   List<Map<String, Object>> listMaps();
+   // 查询列表
+   List<Map<String, Object>> listMaps(Wrapper<T> queryWrapper);
+   // 查询全部记录
+   List<Object> listObjs();
+   // 查询全部记录
+   <V> List<V> listObjs(Function<? super Object, V> mapper);
+   // 根据 Wrapper 条件，查询全部记录
+   List<Object> listObjs(Wrapper<T> queryWrapper);
+   // 根据 Wrapper 条件，查询全部记录
+   <V> List<V> listObjs(Wrapper<T> queryWrapper, Function<? super Object, V> mapper);
+   
+   // 查询总记录数
+   int count();
+   // 根据 Wrapper 条件，查询总记录数
+   int count(Wrapper<T> queryWrapper);
+   ```
+
+5. 分页：Page
+
+   ```java
+   // 根据 ID 查询
+   T getById(Serializable id);
+   // 根据Wrapper查询一条记录。结果集，如果是多个会抛出异常，随机取一条加上限制条件wrapper.last("LIMIT 1")
+   T getOne(Wrapper<T> queryWrapper);
+   // 根据 Wrapper，查询一条记录
+   T getOne(Wrapper<T> queryWrapper, boolean throwEx);
+   // 根据 Wrapper，查询一条记录
+   Map<String, Object> getMap(Wrapper<T> queryWrapper);
+   // 根据 Wrapper，查询一条记录
+   <V> V getObj(Wrapper<T> queryWrapper, Function<? super Object, V> mapper);
+   ```
+
+## 六、调用Service层操作数据
+
+- 我们在自己的Service接口中通过继承MyBatis-Plus提供的IService接口，不仅可以获得其提供的CRUD方法，而且还可以使用自身定义的方法
+
+- 创建`UserService`并继承`IService`
+
+  ```java
+  /**
+    * UserService继承IService模板提供的基础功能 
+    */
+  public interface UserService extends IService<User> {}
+  ```
+
+- 创建`UserService`的实现类并继承`ServiceImpl`
+
+  ```java
+  /**
+    * ServiceImpl实现了IService，提供了IService中基础功能的实现 
+    * 若ServiceImpl无法满足业务需求，则可以使用自定的UserService定义方法，并在实现类中实现
+    */
+  @Service
+  public class UserServiceImpl extends ServiceImpl<UserMapper,User> implements UserService{}
+  ```
+
+- 测试查询记录数：int count();
+
+  ```
+  @Test
+  public void testGetCount(){
+      //查询总记录数
+      //执行的SQL为：SELECT COUNT( * ) FROM user
+      long count = userService.count();
+      System.out.println("总记录数：" + count);
+  }
+  ```
+
+- 测试批量插入数据：boolean saveBatch(Collection<T> entityList);
+
+  ```java
+  @Test
+  public void test(){
+      List<User> list = new ArrayList<>();
+      for (int i = 1; i <= 10; i++) {
+          User user = new User();
+          user.setName("Vz"+i);
+          user.setAge(20+i);
+          list.add(user);
+      }
+      boolean b = userService.saveBatch(list);
+      System.out.println(b ? "添加成功！" : "添加失败！");
+  }
+  ```
+
+# 四、常用注解
+
+## 一、@TableName
+
+1. 在使用MyBatis-Plus实现基本的CRUD时，我们并没有指定要操作的表，只是在Mapper接口继承BaseMapper时，若设置了泛型User，而操作的表为user表，由此得出结论，MyBatis-Plus在确定操作的表时，由BaseMapper的泛型决定，即实体类型决定，且默认操作的表名和实体类型的类名一致（实体类是驼峰式命名，数据库表是下划线式命名也可对应）
+
+2. 如若表名和实体名称不一致则会抛出异常Table 'mybatis_plus.user' doesn't exist
+
+3. 解决表名和实体名称不一样的问题
+
+   - 使用注解解决问题：在实体类类型上添加`@TableName("表名")`，标识实体类对应的表，即可成功执行SQL语句
+
+     ```java
+     @Data
+     @TableName("t_user")
+     public class User {
+         private Long id;
+         private String name;
+         private Integer age;
+         private String email;
+     }
+     ```
+
+   - 使用全局配置解决问题：在开发的过程中，我们经常遇到以上的问题，即实体类所对应的表都有固定的前缀，例如 `t_` 或 `tbl_` 此时，可以使用MyBatis-Plus提供的全局配置，为实体类所对应的表名设置默认的前缀，那么就不需要在每个实体类上通过@TableName标识实体类对应的表
+
+     ```yaml
+     mybatis-plus:
+       global-config:
+         db-config:
+           # 设置实体类所对应的表的统一前缀
+           table-prefix: t_
+     ```
+
+## 二、@TableId
+
+1. MyBatis-Plus在实现CRUD时，会默认将id作为主键列，并在插入数据时，默认基于雪花算法的策略生成id
+
+2. 若主键id不是属性id则会抛出异常`Field '属性' doesn't have a default value`
+
+3. 解决问题：在实体类中uid属性上通过`@TableId`将其标识为主键，即可成功执行SQL语句
+
+   ```java
+   @Date
+   public class User {
+       @TableId
+       private Long uid;
+       private String name;
+       private Integer age;
+       private String email;
+   }
+   ```
+
+4. @TableId的value属性：若实体类中主键对应的属性为id，而表中表示主键的字段为uid，此时若只在属性id上添加注解@TableId，则抛出异常**Unknown column 'id' in 'field list'**，即MyBatis-Plus仍然会将id作为表的主键操作，而表中表示主键的是字段uid此时需要通过@TableId注解的value属性，指定表中的主键字段，`@TableId("uid")`或`@TableId(value="uid")`
+
+5. @TableId的type属性
+
+   - type属性用来定义主键策略：默认雪花算法
+
+   - 常用的主键策略
+
+     |            值            |                            描述                            |
+     | :----------------------: | :--------------------------------------------------------: |
+     | IdType.ASSIGN_ID（默认） |  基于雪花算法的策略生成数据id，与数据库id是否设置自增无关  |
+     |       IdType.AUTO        | 使用数据库的自增策略，注意，该类型请确保数据库设置了id自增 |
+
+   - 配置全局主键策略
+
+     ```yaml
+     #MyBatis-Plus相关配置
+     mybatis-plus:
+       configuration:
+         #配置日志
+         log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+       global-config:
+         db-config:
+           #配置mp的主键策略为自增
+           id-type: auto
+           # 设置实体类所对应的表的统一前缀
+           table-prefix: t_
+     ```
+
+## 三、@TbaleField
+
+- MyBatis-Plus在执行SQL语句时，要保证实体类中的属性名和表中的字段名一致
+
+  - 若实体类中的属性使用的是驼峰命名风格，而表中的字段使用的是下划线命名风格。此时MyBatis-Plus会自动将下划线命名风格转化为驼峰命名风格
+
+  - 若实体类中的属性和表中的字段不满足驼峰式和下划线式命名，则需要在实体类属性上使用`@TableField("数据库字段名")`设置属性所对应的字段名
+
+    ```java
+    public class User {
+        @TableId("uid")
+        private Long id;
+        @TableField("username")
+        private String name;
+        private Integer age;
+        private String email;
+    }
+    ```
+
+## 四、@TableLogic
+
+1. 逻辑删除概述
+
+   - 物理删除：真实删除，将对应数据从数据库中删除，之后查询不到此条被删除的数据
+   - 逻辑删除：假删除，将对应数据中代表是否被删除字段的状态修改为“被删除状态”，之后在数据库中仍旧能看到此条数据记录
+   - 使用场景：可以进行数据恢复
+
+2. 实现逻辑删除
+
+   - 数据库中创建逻辑删除状态列，设置默认值为0
+
+   - 实体类中添加逻辑删除属性
+
+     ```java
+     @TableLogic
+     private int isDeleted;
+     ```
+
+   - 执行删除功能代码，真正执行的是修改代码
+
+     ```java
+     public void testDeleteById(){
+         int result = userMapper.deleteById(id数值);
+         System.out.println(result > 0 ? "删除成功！" : "删除失败！");
+         System.out.println("受影响的行数为：" + result);
+     }
+     ```
+
+# 五、条件构造器
+
+## 一、Wrapper介绍
+
+![image-20220521092812125](../../../TyporaImage/image-20220521092812125.png)
+
+- `Wrapper` ： 条件构造抽象类，最顶端父类
+
+  - `AbstractWrapper `：用于查询条件封装，生成sql的where条件
+    - `QueryWrapper `：查询条件封装
+
+    - `UpdateWrapper `：Update条件封装
+
+    - `AbstractLambdaWrapper `：使用Lambda 语法
+      - `LambdaQueryWrapper `：用于Lambda语法使用的查询Wrapper
+      - `LambdaUpdateWrapper `：Lambda 更新封装Wrapper
+
+## 二、QueryWrapper
+
+1. 组装查询条件
+
+   ```java
+   public void test01(){
+       //查询用户名包含a，年龄在20到30之间，邮箱信息不为null的用户信息
+       QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+       queryWrapper.like("username","a").between("age",20,30).isNotNull("email");
+       List<User> users = userMapper.selectList(queryWrapper);
+       users.forEach(System.out::println);
+   }
+   ```
+
+2. 组装排序条件
+
+   ```java
+   public void test02(){
+       //查询用户信息，按照年龄的降序排序，若年龄相同，则按照id升序排序
+       QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+       queryWrapper.orderByDesc("age").orderByAsc("id");
+       List<User> users = userMapper.selectList(queryWrapper);
+       users.forEach(System.out::println);
+   }
+   ```
+
+3. 组装删除条件
+
+   ```java
+   public void test03(){
+       //删除邮箱地址为null的用户信息
+       QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+       queryWrapper.isNull("email");
+       int result = userMapper.delete(queryWrapper);
+       System.out.println(result > 0 ? "删除成功！" : "删除失败！");
+       System.out.println("受影响的行数为：" + result);
+   }
+   ```
+
+4. 条件的优先级
+
+   ```java
+   // 括号的优先级最高
+   // and的优先级高于or
+   public void test04(){
+       //将（年龄大于20并且用户名中包含有a）或邮箱为null的用户信息修改
+       UpdateWrapper<User> updateWrapper = new UpdateWrapper<>();
+       updateWrapper.gt("age",20).like("username","a").or().isNull("email");
+       User user = new User();
+       user.setName("Oz");
+       user.setEmail("test@oz6.com");
+   
+       int result = userMapper.update(user, updateWrapper);
+       System.out.println(result > 0 ? "修改成功！" : "修改失败！");
+       System.out.println("受影响的行数为：" + result);
+   }
+   
+   public void test05(){
+       //将用户名中包含有a并且（年龄大于20或邮箱为null）的用户信息修改
+       UpdateWrapper<User> updateWrapper = new UpdateWrapper<>();
+       // 通过username筛选完成后，再通过其他条件筛选
+       updateWrapper.like("username","a").and(i->i.gt("age",20).or().isNull("email"));
+       User user = new User();
+       user.setName("Vz7797");
+       user.setEmail("test@ss8o.com");
+   
+       int result = userMapper.update(user, updateWrapper);
+       System.out.println(result > 0 ? "修改成功！" : "修改失败！");
+       System.out.println("受影响的行数为：" + result);
+   }
+   ```
+
+5. 组装select子句
+
+   ```java
+   public void test06(){
+       //查询用户的用户名、年龄、邮箱信息
+       QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+       queryWrapper.select("username","age","email");
+       List<Map<String, Object>> maps = userMapper.selectMaps(queryWrapper);
+       maps.forEach(System.out::println);
+   }
+   ```
+
+6. 实现子查询
+
+   ```java
+   public void test07(){
+       //查询id小于等于100的用户信息
+       QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+       queryWrapper.inSql("uid", "select uid from t_user where uid <= 100");
+       List<User> list = userMapper.selectList(queryWrapper);
+       list.forEach(System.out::println);
+   }
+   ```
+
+7. 实现复杂SQL语句，还是使用Mybatis的方法，直接在xml中使用即可
+
+## 三、UpdateWrapper
+
+- UpdateWrapper不仅拥有QueryWrapper的组装条件功能，还提供了set方法进行修改对应条件的数据库信息
+
+  ```java
+  public void test08(){
+      //将用户名中包含有a并且（年龄大于20或邮箱为null）的用户信息修改
+      UpdateWrapper<User> updateWrapper = new UpdateWrapper<>();
+      updateWrapper.like("username","a").and( i ->      i.gt("age",20).or().isNull("email")).set("email","svip@qq.com");
+      int result = userMapper.update(null, updateWrapper);
+      System.out.println(result > 0 ? "修改成功！" : "修改失败！");
+      System.out.println("受影响的行数为：" + result);
+  }
+  ```
+
+## 四、condition
+
+1. 在真正开发的过程中，组装条件是常见的功能，而这些条件数据来源于用户输入，是可选的，因此我们在组装这些条件时，必须先判断用户是否选择了这些条件，若选择则需要组装该条件，若没有选择则一定不能组装，以免影响SQL执行的结果
+
+2. 方法一：low🖊写法
+
+   ```java
+   public void test09(){
+        String username = "a";
+        Integer ageBegin = null;
+        Integer ageEnd = 30;
+        QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+        if(StringUtils.isNotBlank(username)){
+            //isNotBlank判断某个字符创是否不为空字符串、不为null、不为空白符
+            queryWrapper.like("user_name", username);
+        }
+        if(ageBegin != null){
+            queryWrapper.ge("age", ageBegin);
+        }
+        if(ageEnd != null){
+            queryWrapper.le("age", ageEnd);
+        }
+        List<User> list = userMapper.selectList(queryWrapper);
+        list.forEach(System.out::println);
+    }
+   ```
+
+3. 方法二：华丽写法
+
+   ```java
+   public void test10(){
+       String username = "a";
+       Integer ageBegin = null;
+       Integer ageEnd = 30;
+       QueryWrapper<User> queryWrapper = new QueryWrapper<>();
+       queryWrapper.like(StringUtils.isNotBlank(username), "user_name", username)
+           .ge(ageBegin != null, "age", ageBegin)
+           .le(ageEnd != null, "age", ageEnd);
+       List<User> list = userMapper.selectList(queryWrapper);
+       list.forEach(System.out::println);
+   }
+   ```
+
+## 五、LambdaQueryWrapper
+
+- 功能等同于QueryWrapper，提供了Lambda表达式的语法可以避免填错列名
+
+  ```java
+  public void test11(){
+      String username = "a";
+      Integer ageBegin = null;
+      Integer ageEnd = 30;
+      LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
+      queryWrapper.like(StringUtils.isNotBlank(username), User::getName, username)
+          .ge(ageBegin != null, User::getAge, ageBegin)
+          .le(ageEnd != null, User::getAge, ageEnd);
+      List<User> list = userMapper.selectList(queryWrapper);
+      list.forEach(System.out::println);
+  }
+  ```
+
+## 六、LambdaUpdateWrapper
+
+- 功能等同于UpdateWrapper，提供了Lambda表达式的语法可以避免填错列名
+
+  ```java
+  public void test12(){
+      //将用户名中包含有a并且（年龄大于20或邮箱为null）的用户信息修改
+      LambdaUpdateWrapper<User> updateWrapper = new LambdaUpdateWrapper<>();
+      updateWrapper.like(User::getName, "a")
+          .and(i -> i.gt(User::getAge, 20).or().isNull(User::getEmail));
+      updateWrapper.set(User::getName, "小黑").set(User::getEmail,"abc@atguigu.com");
+      int result = userMapper.update(null, updateWrapper);
+      System.out.println("result："+result);
+  }
+  ```
+
+# 六、常用插件
 
