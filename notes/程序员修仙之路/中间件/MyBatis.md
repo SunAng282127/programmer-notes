@@ -39,7 +39,7 @@
    - 轻量级，性能出色  
 
    - SQL和Java编码分开，功能边界清晰。Java代码专注业务、SQL语句专注数据  
-   - 开发效率稍逊于HIbernate，但是完全能够接受
+   - 开发效率稍逊于Hibernate，但是完全能够接受
 
 # 二、Mybatis搭建
 
@@ -697,7 +697,7 @@ List<User> getUserByLike(@Param("username") String username);
    	<select id="getAllEmp" resultType="Emp">
    		select eid,emp_name empName,age,sex,email from t_emp
    	</select>
-   	```
+   ```
    2. 可以在MyBatis的核心配置文件中的`setting`标签中，
       设置一个全局配置信息mapUnderscoreToCamelCase，可以在查询表中数据时，自动将_类型的字段名转换为驼峰，
       例如：字段名user_name，设置了mapUnderscoreToCamelCase，此时字段名就会转换为userName。
@@ -706,6 +706,8 @@ List<User> getUserByLike(@Param("username") String username);
           <setting name="mapUnderscoreToCamelCase" value="true"/>
       </settings>
    	```
+   ```
+   
    ```
 
 ## 二、多对一映射处理
