@@ -1039,3 +1039,301 @@
 
   ![image-20220521230448577](../../../TyporaImage/image-20220521230448577.png)
 
+# 七、通用枚举
+
+- 表中的有些字段值是固定的，例如性别（男或女），此时我们可以使用MyBatis-Plus的通用枚举来实现
+
+- 数据库表添加字段`sex`
+
+  ![image-20220521231317777](../../../TyporaImage/image-20220521231317777.png)
+
+- 创建通用枚举类型
+
+  ```java
+  @Getter
+  public enum SexEnum {
+      MALE(1, "男"),
+      FEMALE(2, "女");
+  
+      @EnumValue //将注解所标识的属性的值存储到数据库中
+      private int sex;
+      private String sexName;
+  
+      SexEnum(Integer sex, String sexName) {
+          this.sex = sex;
+          this.sexName = sexName;
+      }
+  }
+  ```
+
+- User实体类中添加属性sex
+
+  ```java
+  public class User {
+      private Long id;
+      @TableField("username")
+      private String name;
+      private Integer age;
+      private String email;
+  
+      @TableLogic
+      private int isDeleted;  //逻辑删除
+  
+      private SexEnum sex;
+  }
+  ```
+
+- 配置扫描通用枚举
+
+  ```yaml
+  #MyBatis-Plus相关配置
+  mybatis-plus:
+    #指定mapper文件所在的地址
+    mapper-locations: classpath:mapper/*.xml
+    configuration:
+      #配置日志
+      log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    global-config:
+      banner: off
+      db-config:
+        #配置mp的主键策略为自增
+        id-type: auto
+        # 设置实体类所对应的表的统一前缀
+        table-prefix: t_
+    #配置类型别名所对应的包
+    type-aliases-package: com.atguigu.mybatisplus.pojo
+    # 扫描通用枚举的包
+    type-enums-package: com.atguigu.mybatisplus.enums
+  ```
+
+- 执行测试方法
+
+  ```java
+  @Test
+  public void test(){
+      User user = new User();
+      user.setName("admin");
+      user.setAge(33);
+      user.setSex(SexEnum.MALE);
+      int result = userMapper.insert(user);
+      System.out.println("result:"+result);
+  }
+  ```
+
+# 八、多数据源
+
+- 多数据源适用于多种场景：纯粹多库、 读写分离、 一主多从、 混合模式等
+- 多数据源使用案例
+
+1. 创建数据库及表
+
+   - 创建数据库`mybatis_plus_1`和表`product`
+
+   - 添加测试数据
+
+     ```sql
+     INSERT INTO product (id, NAME, price) VALUES (1, '外星人笔记本', 100);
+     ```
+
+   - 删除`mybatis_plus`和表`product`
+
+     ```sql
+     use mybatis_plus; 
+     DROP TABLE IF EXISTS product;
+     ```
+
+2. 新建工程引入依赖
+
+   - 创建一个SpringBoot工程并选择MySQL驱动及Lombak依赖
+
+   - 引入MyBaits-Plus的依赖及多数据源的依赖
+
+     ```xml
+     <dependency>
+         <groupId>com.baomidou</groupId>
+         <artifactId>mybatis-plus-boot-starter</artifactId>
+         <version>3.5.1</version>
+     </dependency>
+     
+     <dependency>
+         <groupId>com.baomidou</groupId>
+         <artifactId>dynamic-datasource-spring-boot-starter</artifactId>
+         <version>3.5.0</version>
+     </dependency>
+     ```
+
+3. 编写配置文件
+
+   ```yaml
+   spring:
+     # 配置数据源信息
+     datasource:
+       dynamic:
+         # 设置默认的数据源或者数据源组,默认值即为master
+         primary: master
+         # 严格匹配数据源,默认false.true未匹配到指定数据源时抛异常,false使用默认数据源
+         strict: false
+         datasource:
+           master:
+             url: jdbc:mysql://localhost:3306/mybatis_plus?characterEncoding=utf-8&useSSL=false
+             driver-class-name: com.mysql.cj.jdbc.Driver
+             username: root
+             password: 132537
+           slave_1:
+             url: jdbc:mysql://localhost:3306/mybatis_plus_1?characterEncoding=utf-8&useSSL=false
+             driver-class-name: com.mysql.cj.jdbc.Driver
+             username: root
+             password: 132537
+   ```
+
+4. 创建实体类
+
+   - 新建一个`User`实体类（如果数据库表名有t_前缀记得配置）
+
+     ```java
+     @Data
+     public class User {
+         private Long id;
+         private String name;
+         private Integer age;
+         private String email;
+     }
+     ```
+
+   - 新建一个实体类`Product`
+
+     ```java
+     @Data
+     public class Product {
+         private Long id;
+         private String name;
+         private Integer price;
+         private Integer version;
+     }
+     ```
+
+5. 创建Mapper及Service
+
+   - 新建接口`UserMapper`
+
+     ```java
+     public interface UserMapper extends BaseMapper<User> {}
+     ```
+
+   - 新建接口`ProductMapper`
+
+     ```java
+     public interface ProductMapper extends BaseMapper<Product> {}
+     ```
+
+   - 新建Service接口`UserService`指定操作的数据源
+
+     ```java
+     @DS("master") //指定操作的数据源，master为user表
+     public interface UserService extends IService<User> {}
+     ```
+
+   - 新建Service接口`ProductService`指定操作的数据源
+
+     ```java
+     @DS("slave_1")
+     public interface ProductService extends IService<Product> {}
+     ```
+
+6. 编写测试方法
+
+   - 在启动类中添加注解`@MapperScan()`或者在Mapper层和Service层加上@Mapper和@service
+
+     ```java
+     class TestDatasourceApplicationTests {
+     	@Resource
+     	UserService userService;
+     
+     	@Resource
+     	ProductService productService;
+     
+     	@Test
+     	void contextLoads() {
+     		User user = userService.getById(1L);
+     		Product product = productService.getById(1L);
+     		System.out.println("User = " + user);
+     		System.out.println("Product = " + product);
+     	}
+     
+     }
+     ```
+
+# 九、MyBatisX插件
+
+## 一、MyBatisX介绍
+
+- MyBatis-Plus为我们提供了强大的mapper和service模板，能够大大的提高开发效率
+- 但是在真正开发过程中，MyBatis-Plus并不能为我们解决所有问题，例如一些复杂的SQL，多表联查，我们就需要自己去编写代码和SQL语句，我们该如何快速的解决这个问题呢，这个时候可以使用MyBatisX插件
+- MyBatisX一款基于IDEA的快速开发插件，为效率而生
+
+## 二、MyBatisX的使用
+
+1. 安装MyBatisX插件：打开IDEA，File-> Setteings->Plugins->MyBatisX，搜索栏搜索MyBatisX然后安装
+
+2. 快速生成代码
+
+   - 新建一个Spring Boot项目引入依赖（创建工程时记得勾选lombok及mysql驱动）
+
+     ```xml
+     <dependency>
+         <groupId>com.baomidou</groupId>
+         <artifactId>mybatis-plus-boot-starter</artifactId>
+         <version>3.5.1</version>
+     </dependency>
+     
+     <dependency>
+         <groupId>com.baomidou</groupId>
+         <artifactId>dynamic-datasource-spring-boot-starter</artifactId>
+         <version>3.5.0</version>
+     </dependency>
+     ```
+
+   - 配置数据源信息
+
+     ```yaml
+     spring:
+       datasource:
+         type: com.zaxxer.hikari.HikariDataSource
+         driver-class-name: com.mysql.cj.jdbc.Driver
+         url: jdbc:mysql://localhost:3306/mybatis_plus?characterEncoding=utf-8&useSSL=false
+         username: root
+         password: 132537
+     ```
+
+   - 在IDEA中与数据库建立链接
+
+     ![image-20220522120758740](../../../TyporaImage/image-20220522120758740.png)
+
+   - 填写数据库信息并保存
+
+     ![image-20220522121434468](../../../TyporaImage/image-20220522121434468.png)
+
+   - 找到我们需要生成的表点击右键
+
+     ![image-20220522121613909](../../../TyporaImage/image-20220522121613909.png)
+
+   - 填写完信息以后下一步
+
+     ![image-20220522122127649](../../../TyporaImage/image-20220522122127649.png)
+
+   - 继续填写信息
+
+     ![image-20220522122525598](../../../TyporaImage/image-20220522122525598.png)
+
+   - 大功告成
+
+     ![image-20220522122612334](../../../TyporaImage/image-20220522122612334.png)
+
+3. 快速生成CRUD
+
+   - MyBaitsX可以根据我们在Mapper接口中输入的方法名快速帮我们生成对应的sql语句
+
+     ![image-20220522123143852](https://image-bed-vz.oss-cn-hangzhou.aliyuncs.com/MyBatis-Plus/image-20220522123143852.png)
+
+     ![image-20220522123202310](../../../TyporaImage/image-20220522123202310.png)
+
