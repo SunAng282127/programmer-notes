@@ -1110,7 +1110,7 @@ mvn install:install-file
 ```
 
 - 将`<jar-path>`替换为要安装的JAR文件的完整路径
-- 将`<groupId>`、`<groupId>`和`<version>`替换为JAR文件分配的Maven坐标（组ID、项目ID和版本）
+- 将`<groupId>`、`<artifactId>`和`<version>`替换为JAR文件分配的Maven坐标（组ID、项目ID和版本）
 - 如果JAR文件不是JAR扩展名，则需要修改`-Dpackaging`参数为适当的扩展名（例如，对于 WAR 文件，将其修改为 `war`）
 
 # 九、Maven综合案例
