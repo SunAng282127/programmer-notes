@@ -1,3 +1,11 @@
+
+
+
+
+
+
+
+
 # 一、Spring概述
 
 ## 一、Spring概述
@@ -3617,7 +3625,7 @@ public class SpringJUnit4Test {
 }
 ```
 
-# 七、事务
+# 七、事务Transaction
 
 ## 一、JdbcTemplate
 
@@ -4384,4 +4392,140 @@ public class SpringJUnit4Test {
      <version>6.0.2</version>
    </dependency>
    ```
+
+# 八、资源操作Resources
+
+## 一、Spring Resources概述
+
+- Java的标准java.net.URL类和各种URL前缀的标准处理程序无法满足所有对low-level资源的访问，比如：没有标准化的 URL 实现可用于访问需要从类路径或相对于 ServletContext 获取的资源。并且缺少某些Spring所需要的功能，例如检测某资源是否存在等。**而Spring的Resource声明了访问low-level资源的能力**
+
+## 二、Resource接口
+
+1. Spring的Resource接口位于org.springframework.core.io中。 旨在成为一个更强大的接口，用于抽象对低级资源的访问。以下显示了Resource接口定义的方法
+
+   ```java
+   public interface Resource extends InputStreamSource {
+   
+       boolean exists();
+   
+       boolean isReadable();
+   
+       boolean isOpen();
+   
+       boolean isFile();
+   
+       URL getURL() throws IOException;
+   
+       URI getURI() throws IOException;
+   
+       File getFile() throws IOException;
+   
+       ReadableByteChannel readableChannel() throws IOException;
+   
+       long contentLength() throws IOException;
+   
+       long lastModified() throws IOException;
+   
+       Resource createRelative(String relativePath) throws IOException;
+   
+       String getFilename();
+   
+       String getDescription();
+   }
+   ```
+
+2. Resource接口继承了InputStreamSource接口，提供了很多InputStreamSource所没有的方法。InputStreamSource接口，只有一个方法：
+
+   ```java
+   public interface InputStreamSource {
+   
+       InputStream getInputStream() throws IOException;
+   
+   }
+   ```
+
+3. Spring的Resource接口中方法
+
+   - getInputStream()：找到并打开资源，返回一个InputStream以从资源中读取。预计每次调用都会返回一个新的InputStream()，调用者有责任关闭每个流
+   - exists()：返回一个布尔值，表明某个资源是否以物理形式存在
+   - isOpen()：返回一个布尔值，指示此资源是否具有开放流的句柄。如果为true，InputStream就不能够多次读取，只能够读取一次并且及时关闭以避免内存泄漏。对于所有常规资源实现，返回false，但是InputStreamResource除外
+   - getDescription()：返回资源的描述，用来输出错误的日志。这通常是完全限定的文件名或资源的实际URL
+   - isReadable()：表明资源的目录读取是否通过getInputStream()进行读取
+   - isFile()：表明这个资源是否代表了一个文件系统的文件
+   - getURL()：返回一个URL句柄，如果资源不能够被解析为URL，将抛出IOException
+   - getURI()：返回一个资源的URI句柄
+   - getFile()：返回某个文件，如果资源不能够被解析称为绝对路径，将会抛出FileNotFoundException
+   - lastModified()：资源最后一次修改的时间戳
+   - createRelative()：创建此资源的相关资源
+   - getFilename()：资源的文件名是什么。例如：最后一部分的文件名为myfile.txt
+
+## 三、Resource的实现类
+
+Resource 接口是 Spring 资源访问策略的抽象，它本身并不提供任何资源访问实现，具体的资源访问由该接口的实现类完成——每个实现类代表一种资源访问策略。Resource一般包括这些实现类：
+
+- UrlResource
+- ClassPathResource
+- FileSystemResource
+- ServletContextResource
+- InputStreamResource
+- ByteArrayResource
+
+### 一、UrlResource访问网络资源
+
+1. UrlResource是Resource的一个实现类，用来访问网络资源，它支持URL的绝对路径
+
+2. URL的前缀
+
+   - http：该前缀用于访问基于HTTP协议的网络资源
+   - ftp：该前缀用于访问基于FTP协议的网络资源
+   - file：该前缀用于从文件系统中读取资源
+
+3. 访问基于HTTP协议的网络资源
+
+   - 创建一个maven子模块spring6-resources，配置Spring依赖（参考前面）
+
+     ![image-20221207102315185](../../../TyporaImage/spring6/image-20221207102315185.png)
+
+   - UrlResource实现类
+
+     ```java
+     public class UrlResourceDemo {
+     
+         public static void loadAndReadUrlResource(String path){
+             // 创建一个 Resource 对象
+             UrlResource url = null;
+             try {
+                 url = new UrlResource(path);
+                 // 获取资源名
+                 System.out.println(url.getFilename());
+                 System.out.println(url.getURI());
+                 // 获取资源描述
+                 System.out.println(url.getDescription());
+                 //获取资源内容
+                 System.out.println(url.getInputStream().read());
+             } catch (Exception e) {
+                 throw new RuntimeException(e);
+             }
+         }
+         
+         public static void main(String[] args) {
+             //访问网络资源
+             loadAndReadUrlResource("http://www.baidu.com");
+         }
+     }
+     ```
+
+4. 在项目根路径下创建文件，从文件系统中读取资源，方法不变，修改调用传递路径
+
+   ```java
+   public static void main(String[] args) {
+       //1 访问网络资源
+   	//loadAndReadUrlResource("http://www.baidu.com");
+       
+       //2 访问文件系统资源
+       loadAndReadUrlResource("file:spring.xml");
+   }
+   ```
+
+### 二、ClassPathResource访问类路径下资源
 
