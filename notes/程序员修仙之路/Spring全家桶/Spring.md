@@ -4453,7 +4453,7 @@ public class SpringJUnit4Test {
 
 ## 三、Resource的实现类
 
-Resource 接口是 Spring 资源访问策略的抽象，它本身并不提供任何资源访问实现，具体的资源访问由该接口的实现类完成——每个实现类代表一种资源访问策略。Resource一般包括这些实现类：
+Resource接口是Spring资源访问策略的抽象，它本身并不提供任何资源访问实现，具体的资源访问由该接口的实现类完成——每个实现类代表一种资源访问策略。Resource一般包括这些实现类：
 
 - UrlResource
 - ClassPathResource
@@ -4605,5 +4605,119 @@ Resource 接口是 Spring 资源访问策略的抽象，它本身并不提供任
 
 ## 五、ResourceLoader接口
 
+### 一、ResourceLoader概述
 
+1. Spring提供如下两个标志性接口：
+   - ResourceLoader：该接口实现类的实例可以获得一个Resource实例
+   - ResourceLoaderAware：该接口实现类的实例将获得一个ResourceLoader的引用
+2. 在ResourceLoader接口里有如下方法：
+   - Resource getResource(String location)： 该接口仅有这个方法，用于返回一个Resource实例。ApplicationContext实现类都实现ResourceLoader接口，因此ApplicationContext可直接获取Resource实例
+
+### 二、使用演示
+
+1. ClassPathXmlApplicationContext获取Resource实例
+
+   ```java
+   public class Demo1 {
+   
+       public static void main(String[] args) {
+           ApplicationContext ctx = new ClassPathXmlApplicationContext();
+   //        通过ApplicationContext访问资源
+   //        ApplicationContext实例获取Resource实例时，
+   //        默认采用与ApplicationContext相同的资源访问策略
+           Resource res = ctx.getResource("springs.txt");
+           System.out.println(res.getFilename());
+       }
+   }
+   ```
+
+2. FileSystemApplicationContext获取Resource实例
+
+   ```java
+   public class Demo2 {
+   
+       public static void main(String[] args) {
+           ApplicationContext ctx = new FileSystemXmlApplicationContext();
+           Resource res = ctx.getResource("springs.txt");
+           System.out.println(res.getFilename());
+       }
+   }
+   ```
+
+### 三、ResourceLoader总结
+
+1. Spring将采用和ApplicationContext相同的策略来访问资源。也就是说，如果ApplicationContext是FileSystemXmlApplicationContext，res就是FileSystemResource实例；如果ApplicationContext是ClassPathXmlApplicationContext，res就是ClassPathResource实例
+
+2. 当Spring应用需要进行资源访问时，实际上并不需要直接使用Resource实现类，而是调用ResourceLoader实例的getResource()方法来获得资源，ReosurceLoader将会负责选择Reosurce实现类，也就是确定具体的资源访问策略，从而将应用程序和具体的资源访问策略分离开来
+
+3. 另外，使用ApplicationContext访问资源时，可通过不同前缀指定强制使用指定的ClassPathResource、FileSystemResource等实现类
+
+   ```java
+   Resource res = ctx.getResource("calsspath:springs.xml");
+   Resrouce res = ctx.getResource("file:springs.xml");
+   Resource res = ctx.getResource("http://localhost:8080/springs.xml");
+   ```
+
+## 六、ResourceLoaderAware接口
+
+1. ResourceLoaderAware接口实现类的实例将获得一个ResourceLoader的引用，ResourceLoaderAware接口也提供了一个setResourceLoader()方法，该方法将由Spring容器负责调用，Spring容器会将一个ResourceLoader对象作为该方法的参数传入
+
+2. 如果把实现ResourceLoaderAware接口的Bean类部署在Spring容器中，Spring容器会将自身当成ResourceLoader作为setResourceLoader()方法的参数传入。由于ApplicationContext的实现类都实现了ResourceLoader接口，Spring容器自身完全可作为ResorceLoader使用
+
+3. 演示ResourceLoaderAware使用
+
+   - 创建实现ResourceLoaderAware接口的类
+
+     ```java
+     public class TestBean implements ResourceLoaderAware {
+     
+         private ResourceLoader resourceLoader;
+     
+         //实现ResourceLoaderAware接口必须实现的方法
+     	//如果把该Bean部署在Spring容器中，该方法将会由Spring容器负责调用。
+     	//SPring容器调用该方法时，Spring会将自身作为参数传给该方法。
+         public void setResourceLoader(ResourceLoader resourceLoader) {
+             this.resourceLoader = resourceLoader;
+         }
+     
+         //返回ResourceLoader对象的应用
+         public ResourceLoader getResourceLoader(){
+             return this.resourceLoader;
+         } 
+     }
+     ```
+
+   - 创建bean.xml文件，配置TestBean
+
+     ```xml
+     <?xml version="1.0" encoding="UTF-8"?>
+     <beans xmlns="http://www.springframework.org/schema/beans"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd">
+     
+         <bean id="testBean" class="com.spring6.resouceloader.TestBean"></bean>
+     </beans>
+     ```
+
+   - 测试
+
+     ```java
+     public class Demo3 {
+     
+         public static void main(String[] args) {
+             //Spring容器会将一个ResourceLoader对象作为该方法的参数传入
+             ApplicationContext ctx = new ClassPathXmlApplicationContext("bean.xml");
+             TestBean testBean = ctx.getBean("testBean",TestBean.class);
+             //获取ResourceLoader对象
+             ResourceLoader resourceLoader = testBean.getResourceLoader();
+             System.out.println("Spring容器将自身注入到ResourceLoaderAware Bean 中 ？ ：" + (resourceLoader == ctx));
+             //加载其他资源
+             Resource resource = resourceLoader.getResource("springs.txt");
+             System.out.println(resource.getFilename());
+             System.out.println(resource.getDescription());
+         }
+     }
+     ```
+
+## 七、使用Resource作为属性
 
