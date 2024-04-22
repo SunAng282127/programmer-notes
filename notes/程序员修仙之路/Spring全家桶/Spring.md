@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 # 一、Spring概述
 
 ## 一、Spring概述
@@ -4528,4 +4520,90 @@ Resource 接口是 Spring 资源访问策略的抽象，它本身并不提供任
    ```
 
 ### 二、ClassPathResource访问类路径下资源
+
+1. ClassPathResource用来访问类加载路径下的资源，相对于其他的Resource实现类，其主要优势是方便访问类加载路径里的资源，尤其对于Web应用，ClassPathResource可自动搜索位于classes下的资源文件，无须使用绝对路径访问
+
+2. 在类路径下创建文件spring.xml（随意的文件），使用ClassPathResource访问
+
+3. ClassPathResource实现类
+
+   ```java
+   public class ClassPathResourceDemo {
+   
+       public static void loadAndReadUrlResource(String path) throws Exception{
+           // 创建一个 Resource 对象
+           ClassPathResource resource = new ClassPathResource(path);
+           // 获取文件名
+           System.out.println("resource.getFileName = " + resource.getFilename());
+           // 获取文件描述
+           System.out.println("resource.getDescription = "+ resource.getDescription());
+           //获取文件内容
+           InputStream in = resource.getInputStream();
+           byte[] b = new byte[1024];
+           while(in.read(b)!=-1) {
+               System.out.println(new String(b));
+           }
+       }
+   
+       public static void main(String[] args) throws Exception {
+           loadAndReadUrlResource("spring.xml");
+       }
+   }
+   ```
+
+4. ClassPathResource实例可使用ClassPathResource构造器显式地创建，但更多的时候它都是隐式地创建的。当执行Spring的某个方法时，该方法接受一个代表资源路径的字符串参数，当Spring识别该字符串参数中包含`classpath:`前缀后，系统会自动创建ClassPathResource对象
+
+### 三、FileSystemResource访问文件系统资源
+
+1. Spring提供的FileSystemResource类用于访问文件系统资源，使用FileSystemResource来访问文件系统资源并没有太大的优势，因为Java提供的File类也可用于访问文件系统资源
+
+2. 使用FileSystemResource访问文件系统资源
+
+   ```java
+   public class FileSystemResourceDemo {
+   
+       public static void loadAndReadUrlResource(String path) throws Exception{
+           //相对路径
+           FileSystemResource resource = new FileSystemResource("spring.xml");
+           //绝对路径
+           //FileSystemResource resource = new FileSystemResource("C:\\spring.xml");
+           // 获取文件名
+           System.out.println("resource.getFileName = " + resource.getFilename());
+           // 获取文件描述
+           System.out.println("resource.getDescription = "+ resource.getDescription());
+           //获取文件内容
+           InputStream in = resource.getInputStream();
+           byte[] b = new byte[1024];
+           while(in.read(b)!=-1) {
+               System.out.println(new String(b));
+           }
+       }
+   
+       public static void main(String[] args) throws Exception {
+           loadAndReadUrlResource("spring.xml");
+       }
+   }
+   ```
+
+3. FileSystemResource实例可使用FileSystemResource构造器显示地创建，但更多的时候它都是隐式创建。执行Spring的某个方法时，该方法接受一个代表资源路径的字符串参数，当Spring识别该字符串参数中包含`file:`前缀后，系统将会自动创建FileSystemResource对象
+
+### 四、ServletContextResource
+
+- 这是ServletContext资源的Resource实现，它解释相关Web应用程序根目录中的相对路径。它始终支持流(stream)访问和URL访问，但只有在扩展Web应用程序存档且资源实际位于文件系统上时才允许java.io.File访问。无论它是在文件系统上扩展还是直接从JAR或其他地方（如数据库）访问，实际上都依赖于Servlet容器
+
+### 五、InputStreamResource
+
+- InputStreamResource 是给定的输入流(InputStream)的Resource实现。它的使用场景在没有特定的资源实现的时候使用(感觉和@Component 的适用场景很相似)。与其他Resource实现相比，这是已打开资源的描述符。 因此，它的isOpen()方法返回true。如果需要将资源描述符保留在某处或者需要多次读取流，请不要使用它
+
+### 六、ByteArrayResource
+
+- 字节数组的Resource实现类。通过给定的数组创建了一个ByteArrayInputStream。它对于从任何给定的字节数组加载内容非常有用，而无需求助于单次使用的InputStreamResource
+
+## 四、Resource类图
+
+![image-20221206232920494](../../../TyporaImage/image-20221206232920494.png)
+
+## 五、ResourceLoader接口
+
+
 
