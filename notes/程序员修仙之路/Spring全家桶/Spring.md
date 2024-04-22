@@ -4515,15 +4515,15 @@ Resource接口是Spring资源访问策略的抽象，它本身并不提供任何
    	//loadAndReadUrlResource("http://www.baidu.com");
        
        //2 访问文件系统资源
-       loadAndReadUrlResource("file:spring.xml");
+       loadAndReadUrlResource("file:springs.xml");
    }
    ```
 
 ### 二、ClassPathResource访问类路径下资源
 
-1. ClassPathResource用来访问类加载路径下的资源，相对于其他的Resource实现类，其主要优势是方便访问类加载路径里的资源，尤其对于Web应用，ClassPathResource可自动搜索位于classes下的资源文件，无须使用绝对路径访问
+1. ClassPathResource用来访问类加载路径下的资源，相对于其他的Resource实现类，其主要优势是方便访问类加载路径里的资源，尤其对于Web应用，ClassPathResource可自动搜索位于WEB-INF/classes下的资源文件，无需使用绝对路径访问
 
-2. 在类路径下创建文件spring.xml（随意的文件），使用ClassPathResource访问
+2. 在类路径下创建文件springs.xml（随意的文件），使用ClassPathResource访问
 
 3. ClassPathResource实现类
 
@@ -4546,7 +4546,7 @@ Resource接口是Spring资源访问策略的抽象，它本身并不提供任何
        }
    
        public static void main(String[] args) throws Exception {
-           loadAndReadUrlResource("spring.xml");
+           loadAndReadUrlResource("springs.xml");
        }
    }
    ```
@@ -4564,9 +4564,9 @@ Resource接口是Spring资源访问策略的抽象，它本身并不提供任何
    
        public static void loadAndReadUrlResource(String path) throws Exception{
            //相对路径
-           FileSystemResource resource = new FileSystemResource("spring.xml");
+           FileSystemResource resource = new FileSystemResource("springs.xml");
            //绝对路径
-           //FileSystemResource resource = new FileSystemResource("C:\\spring.xml");
+           //FileSystemResource resource = new FileSystemResource("C:\\springs.xml");
            // 获取文件名
            System.out.println("resource.getFileName = " + resource.getFilename());
            // 获取文件描述
@@ -4580,7 +4580,7 @@ Resource接口是Spring资源访问策略的抽象，它本身并不提供任何
        }
    
        public static void main(String[] args) throws Exception {
-           loadAndReadUrlResource("spring.xml");
+           loadAndReadUrlResource("springs.xml");
        }
    }
    ```
@@ -4590,6 +4590,7 @@ Resource接口是Spring资源访问策略的抽象，它本身并不提供任何
 ### 四、ServletContextResource
 
 - 这是ServletContext资源的Resource实现，它解释相关Web应用程序根目录中的相对路径。它始终支持流(stream)访问和URL访问，但只有在扩展Web应用程序存档且资源实际位于文件系统上时才允许java.io.File访问。无论它是在文件系统上扩展还是直接从JAR或其他地方（如数据库）访问，实际上都依赖于Servlet容器
+- 当程序试图直接通过File来访问Web Context下相对路径下的资源时，应该先使用ServletContext的getRealPath()方法来取得资源的绝对路径，再以该绝对路径来创建File对象
 
 ### 五、InputStreamResource
 
@@ -4687,7 +4688,7 @@ Resource接口是Spring资源访问策略的抽象，它本身并不提供任何
      }
      ```
 
-   - 创建bean.xml文件，配置TestBean
+   - 创建springs.xml文件，配置TestBean
 
      ```xml
      <?xml version="1.0" encoding="UTF-8"?>
@@ -4706,7 +4707,7 @@ Resource接口是Spring资源访问策略的抽象，它本身并不提供任何
      
          public static void main(String[] args) {
              //Spring容器会将一个ResourceLoader对象作为该方法的参数传入
-             ApplicationContext ctx = new ClassPathXmlApplicationContext("bean.xml");
+             ApplicationContext ctx = new ClassPathXmlApplicationContext("springs.xml");
              TestBean testBean = ctx.getBean("testBean",TestBean.class);
              //获取ResourceLoader对象
              ResourceLoader resourceLoader = testBean.getResourceLoader();
@@ -4721,3 +4722,253 @@ Resource接口是Spring资源访问策略的抽象，它本身并不提供任何
 
 ## 七、使用Resource作为属性
 
+1. 当应用程序中的Bean实例需要访问资源时，Spring有更好的解决方法：直接利用依赖注入。从这个意义上来看，Spring框架不仅充分利用了策略模式来简化资源访问，而且还将策略模式和IoC进行充分地结合，最大程度地简化了 Spring资源访问
+
+2. 归纳起来，如果Bean实例需要访问资源，有如下两种解决方案：
+
+   - 代码中获取Resource实例
+   - 使用依赖注入
+
+3. 对于第一种方式，当程序获取Resource实例时，总需要提供Resource所在的位置，不管通过FileSystemResource创建实例，还是通过ClassPathResource创建实例，或者通过ApplicationContext的getResource()方法获取实例，都需要提供资源位置。这意味着：资源所在的物理位置将被耦合到代码中，如果资源位置发生改变，则必须改写程序。因此，通常建议采用第二种方法，让Spring为Bean实例依赖注入资源
+
+4. 示例代码
+
+   - 创建依赖注入类，定义属性和方法
+
+     ```java
+     public class ResourceBean {
+         
+         private Resource res;
+         
+         public void setRes(Resource res) {
+             this.res = res;
+         }
+         public Resource getRes() {
+             return res;
+         }
+         
+         public void parse(){
+             System.out.println(res.getFilename());
+             System.out.println(res.getDescription());
+         }
+     }
+     ```
+
+   - 创建spring配置文件，配置依赖注入
+
+     ```xml
+     <?xml version="1.0" encoding="UTF-8"?>
+     <beans xmlns="http://www.springframework.org/schema/beans"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd">
+     
+         <bean id="resourceBean" class="com.spring6.resouceloader.ResourceBean" >
+           <!-- 可以使用file:、http:、ftp:等前缀强制Spring采用对应的资源访问策略 -->
+           <!-- 如果不采用任何前缀，则Spring将采用与该ApplicationContext相同的资源访问策略来访问资源 -->
+             <property name="res" value="classpath:springs.txt"/>
+         </bean>
+     </beans>
+     ```
+
+   - 测试
+
+     ```java
+     public class Demo4 {
+     
+         public static void main(String[] args) {
+             ApplicationContext ctx =
+                     new ClassPathXmlApplicationContext("springs.xml");
+             ResourceBean resourceBean = ctx.getBean("resourceBean",ResourceBean.class);
+             resourceBean.parse();
+         }
+     }
+     ```
+
+## 八、应用程序上下文和资源路径
+
+### 一、概述
+
+- 不管以怎样的方式创建ApplicationContext实例，都需要为ApplicationContext指定配置文件，Spring允许使用一份或多分XML配置文件。当程序创建ApplicationContext实例时，通常也是以Resource的方式来访问配置文件的，所以ApplicationContext完全支持ClassPathResource、FileSystemResource、ServletContextResource等资源访问方式
+
+### 二、ApplicationContext确定资源访问策略通常有两种方法：
+
+- 使用ApplicationContext实现类指定访问策略
+- 使用前缀指定访问策略
+
+### 三、ApplicationContext实现类指定访问策略
+
+1. 创建ApplicationContext对象时，通常可以使用如下实现类：
+   - ClassPathXMLApplicationContext：对应使用ClassPathResource进行资源访问
+   - FileSystemXmlApplicationContext：对应使用FileSystemResource进行资源访问
+   - XmlWebApplicationContext ： 对应使用ServletContextResource进行资源访问
+2. 当使用ApplicationContext的不同实现类时，就意味着Spring使用响应的资源访问策略
+
+### 四、使用前缀指定访问策略
+
+- classpath前缀使用
+
+  ```java
+  public class Demo1 {
+  
+      public static void main(String[] args) {
+          /*
+           * 通过搜索文件系统路径下的xml文件创建ApplicationContext，
+           * 但通过指定classpath:前缀强制搜索类加载路径
+           * classpath:springs.xml
+           * */
+          ApplicationContext ctx =
+                  new ClassPathXmlApplicationContext("classpath:springs.xml");
+          System.out.println(ctx);
+          Resource resource = ctx.getResource("springs.txt");
+          System.out.println(resource.getFilename());
+          System.out.println(resource.getDescription());
+      }
+  }
+  ```
+
+- classpath通配符使用
+
+  - `classpath*:`前缀提供了加载多个XML配置文件的能力，当使用`classpath*:`前缀来指定XML配置文件时，系统将搜索类加载路径，找到所有与文件名匹配的文件，分别加载文件中的配置定义，最后合并成一个ApplicationContext
+
+    ```java
+    ApplicationContext ctx = new ClassPathXmlApplicationContext("classpath*:springs.xml");
+    System.out.println(ctx);
+    ```
+
+  - 当使用`classpath*:`前缀时，Spring将会搜索类加载路径下所有满足该规则的配置文件
+
+  - 如果不是采用`classpath*:`前缀，而是改为使用`classpath:`前缀，Spring则只加载第一个符合条件的XML文件
+
+  - 注意点：`classpath*:`前缀仅对ApplicationContext有效。实际情况是，创建ApplicationContext时，分别访问多个配置文件(通过ClassLoader的getResource方法实现)。因此，`classpath*:`前缀不可用于Resource
+
+- 通配符其他使用
+
+  - 一次性加载多个配置文件的方式：指定配置文件时使用通配符
+
+    ```java
+    ApplicationContext ctx = new ClassPathXmlApplicationContext("classpath:bean*.xml");
+    ```
+
+  - Spring允许将`classpath*:`前缀和通配符结合使用：
+
+    ```java
+    ApplicationContext ctx = new ClassPathXmlApplicationContext("classpath*:bean*.xml");
+    ```
+
+# 九、国际化i18n
+
+## 一、i18n概述
+
+- 国际化也称作i18n，其来源是英文单词internationalization的首末字符i和n，18为中间的字符数。由于软件发行可能面向多个国家，对于不同国家的用户，软件显示不同语言的过程就是国际化。通常来讲，软件中的国际化是通过配置文件来实现的，假设要支撑两种语言，那么就需要两个版本的配置文件
+
+## 二、Java国际化
+
+1. Java自身是支持国际化的，java.util.Locale用于指定当前用户所属的语言环境等信息，java.util.ResourceBundle用于查找绑定对应的资源文件。Locale包含了language信息和country信息，Locale创建默认locale对象时使用的静态方法：
+
+   ```java
+       /**
+        * This method must be called only for creating the Locale.*
+        * constants due to making shortcuts.
+        */
+       private static Locale createConstant(String lang, String country) {
+           BaseLocale base = BaseLocale.createInstance(lang, country);
+           return getInstance(base, null);
+       }
+   ```
+
+2. 配置文件命名规则：basename_language_country.properties
+
+   - 必须遵循以上的命名规则，java才会识别。其中，basename是必须的，语言和国家是可选的。这里存在一个优先级概念，如果同时提供了messages.properties和messages_zh_CN.propertes两个配置文件，如果提供的locale符合zh_CN，那么优先查找messages_zh_CN.propertes配置文件，如果没查找到，再查找messages.properties配置文件
+   - 所有的配置文件必须放在classpath中，一般放在resources目录下
+
+3. 演示Java国际化
+
+   - 创建子模块，引入spring依赖
+   - 在resource目录下创建两个配置文件：messages_zh_CN.propertes和messages_en_GB.propertes
+
+4. 测试
+
+   ```java
+   public class Demo1 {
+   
+       public static void main(String[] args) {
+           System.out.println(ResourceBundle.getBundle("messages",
+                   new Locale("en","GB")).getString("test"));
+   
+           System.out.println(ResourceBundle.getBundle("messages",
+                   new Locale("zh","CN")).getString("test"));
+       }
+   }
+   ```
+
+## 三、Spring6国际化
+
+### 一、MessageSource接口
+
+1. spring中国际化是通过MessageSource这个接口来支持的
+2. 常见实现类
+   - ResourceBundleMessageSource：这个是基于Java的ResourceBundle基础类实现，允许仅通过资源名加载国际化资源
+   - ReloadableResourceBundleMessageSource：这个功能和第一个类的功能类似，多了定时刷新功能，允许在不重启系统的情况下，更新资源的信息
+   - StaticMessageSource：它允许通过编程的方式提供国际化信息，可以通过这个来实现db中存储国际化信息的功能
+
+### 二、使用Spring6国际化
+
+1. 创建资源文件：国际化文件命名格式：基本名称 _ 语言 _ 国家.properties
+
+2. {0},{1}这样内容，就是动态参数
+
+3. 创建messages_en_US.properties
+
+   ```properties
+   www.baidu.com=welcome {0},时间:{1}
+   ```
+
+4. 创建messages_zh_CN.properties
+
+   ```properties
+   www.baidu.com=欢迎 {0},时间:{1}
+   ```
+
+5. 创建spring配置文件，配置MessageSource
+
+   ```properties
+   <?xml version="1.0" encoding="UTF-8"?>
+   <beans xmlns="http://www.springframework.org/schema/beans"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd">
+   
+       <bean id="messageSource"
+             class="org.springframework.context.support.ResourceBundleMessageSource">
+           <property name="basenames">
+               <list>
+                   <value>messages</value>
+               </list>
+           </property>
+           <property name="defaultEncoding">
+               <value>utf-8</value>
+           </property>
+       </bean>
+   </beans>
+   ```
+
+6. 测试
+
+   ```java
+   public class Demo2 {
+   
+       public static void main(String[] args) {
+           
+           ApplicationContext context = new ClassPathXmlApplicationContext("springs.xml");
+           
+           //传递动态参数，使用数组形式对应{0} {1}顺序
+           Object[] objs = new Object[]{"Sunny",new Date().toString()};
+   
+           //www.baidu.com为资源文件的key值,
+           //objs为资源文件value值所需要的参数,Local.CHINA为国际化为语言
+           String str=context.getMessage("www.baidu.com", objs, Locale.CHINA);
+           System.out.println(str);
+       }
+   }
+   ```
+
+   
