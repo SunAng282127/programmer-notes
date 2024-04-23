@@ -4971,4 +4971,423 @@ Resource接口是Spring资源访问策略的抽象，它本身并不提供任何
    }
    ```
 
+
+# 十、数据校验Validation
+
+## 一、Spring Validation概述
+
+- 在开发中，我们经常遇到参数校验的需求，比如用户注册的时候，要校验用户名不能为空、用户名长度不超过20个字符、手机号是合法的手机号格式等等。如果使用普通方式，我们会把校验的代码和真正的业务处理逻辑耦合在一起，而且如果未来要新增一种校验逻辑也需要在修改多个地方。而spring validation允许通过注解的方式来定义对象校验规则，把校验和业务逻辑分离开，让代码编写更加方便。Spring Validation其实就是对Hibernate Validator进一步的封装，方便在Spring中使用
+
+## 二、Spring中校验方式分类
+
+1. 通过实现org.springframework.validation.Validator接口，然后在代码中调用这个类
+2. 按照Bean Validation方式来进行校验，即通过注解的方式
+3. 基于方法实现校验
+4. 还可以实现自定义校验
+
+## 三、通过Validator接口实现
+
+1. 创建子模块
+
+2. 引入相关依赖
+
+   ```xml
+   <dependencies>
+       <dependency>
+           <groupId>org.hibernate.validator</groupId>
+           <artifactId>hibernate-validator</artifactId>
+           <version>7.0.5.Final</version>
+       </dependency>
    
+       <dependency>
+           <groupId>org.glassfish</groupId>
+           <artifactId>jakarta.el</artifactId>
+           <version>4.0.1</version>
+       </dependency>
+   </dependencies>
+   ```
+
+3. 创建实体类，定义属性和方法
+
+   ```java
+   public class Person {
+       private String name;
+       private int age;
+   
+       public String getName() {
+           return name;
+       }
+       public void setName(String name) {
+           this.name = name;
+       }
+       public int getAge() {
+           return age;
+       }
+       public void setAge(int age) {
+           this.age = age;
+       }
+   }
+   ```
+
+4. 创建类实现Validator接口，实现接口方法指定校验规则
+
+   ```java
+   public class PersonValidator implements Validator {
+   
+       @Override
+       public boolean supports(Class<?> clazz) {
+           return Person.class.equals(clazz);
+       }
+   
+       @Override
+       public void validate(Object object, Errors errors) {
+           ValidationUtils.rejectIfEmpty(errors, "name", "name.empty");
+           Person p = (Person) object;
+           if (p.getAge() < 0) {
+               errors.rejectValue("age", "error value < 0");
+           } else if (p.getAge() > 110) {
+               errors.rejectValue("age", "error value too old");
+           }
+       }
+   }
+   ```
+
+   - 上面定义的类，其实就是实现接口中对应的方法
+   - supports方法用来表示此校验用在哪个类型上
+   - validate是设置校验逻辑的地点，其中ValidationUtils，是Spring封装的校验工具类，帮助快速实现校验
+
+5. 使用上述Validator进行测试
+
+   ```java
+   public class TestMethod1 {
+   
+       public static void main(String[] args) {
+           //创建person对象
+           Person person = new Person();
+           person.setName("lucy");
+           person.setAge(-1);
+           
+           // 创建Person对应的DataBinder
+           DataBinder binder = new DataBinder(person);
+   
+           // 设置校验
+           binder.setValidator(new PersonValidator());
+   
+           // 由于Person对象中的age属性不合规，所以校验不通过
+           binder.validate();
+   
+           //输出结果
+           BindingResult results = binder.getBindingResult();
+           System.out.println(results.getAllErrors());
+       }
+   }
+   ```
+
+## 四、Bean Validation注解实现
+
+1. 使用Bean Validation校验方式，就是如何将Bean Validation需要使用的javax.validation.ValidatorFactory和javax.validation.Validator注入到容器中。spring默认有一个实现类LocalValidatorFactoryBean，它实现了上面Bean Validation中的接口，并且也实现了org.springframework.validation.Validator接口
+
+2. 创建配置类，配置LocalValidatorFactoryBean
+
+   ```java
+   @Configuration
+   @ComponentScan("com..sunny.spring6.validation")
+   public class ValidationConfig {
+   
+       @Bean
+       public LocalValidatorFactoryBean validator() {
+           return new LocalValidatorFactoryBean();
+       }
+   }
+   ```
+
+3. 创建实体类，使用注解定义校验规则
+
+   ```java
+   public class User {
+   
+       @NotNull
+       private String name;
+   
+       @Min(0)
+       @Max(120)
+       private int age;
+   
+       public String getName() {
+           return name;
+       }
+       public void setName(String name) {
+           this.name = name;
+       }
+       public int getAge() {
+           return age;
+       }
+       public void setAge(int age) {
+           this.age = age;
+       }
+   }
+   ```
+
+   - @NotNull：限制必须不为null
+   - @NotEmpty：只作用于字符串类型，字符串不为空，并且长度不为0
+   - @NotBlank：只作用于字符串类型，字符串不为空，并且trim()后不为空串
+   - @DecimalMax(value)：限制必须为一个不大于指定值的数字
+   - @DecimalMin(value)：限制必须为一个不小于指定值的数字
+   - @Max(value)：限制必须为一个不大于指定值的数字
+   - @Min(value)：限制必须为一个不小于指定值的数字
+   - @Pattern(value)：限制必须符合指定的正则表达式
+   - @Size(max,min)：限制字符长度必须在min到max之间
+   - @Email：验证注解的元素值是Email，也可以通过正则表达式和flag指定自定义的email格式
+
+4. 使用两种不同的校验器实现
+
+   - 使用jakarta.validation.Validator校验
+
+     ```java
+     @Service
+     public class MyService1 {
+     
+         @Autowired
+         private Validator validator;
+     
+         public  boolean validator(User user){
+             Set<ConstraintViolation<User>> sets =  validator.validate(user);
+             return sets.isEmpty();
+         }
+     }
+     ```
+
+   - 使用org.springframework.validation.Validator校验
+
+     ```java
+     @Service
+     public class MyService2 {
+     
+         @Autowired
+         private Validator validator;
+     
+         public boolean validaPersonByValidator(User user) {
+             BindException bindException = new BindException(user, user.getName());
+             validator.validate(user, bindException);
+             return bindException.hasErrors();
+         }
+     }
+     ```
+
+5. 测试
+
+   ```java
+   public class TestMethod2 {
+   
+       @Test
+       public void testMyService1() {
+           ApplicationContext context = new AnnotationConfigApplicationContext(ValidationConfig.class);
+           MyService1 myService = context.getBean(MyService1.class);
+           User user = new User();
+           user.setAge(-1);
+           boolean validator = myService.validator(user);
+           System.out.println(validator);
+       }
+   
+       @Test
+       public void testMyService2() {
+           ApplicationContext context = new AnnotationConfigApplicationContext(ValidationConfig.class);
+           MyService2 myService = context.getBean(MyService2.class);
+           User user = new User();
+           user.setName("lucy");
+           user.setAge(130);
+           user.setAge(-1);
+           boolean validator = myService.validaPersonByValidator(user);
+           System.out.println(validator);
+       }
+   }
+   ```
+
+## 五、基于方法实现校验
+
+1. 创建配置类，配置MethodValidationPostProcessor
+
+   ```java
+   @Configuration
+   @ComponentScan("com.sunny.spring6.validation")
+   public class ValidationConfig {
+   
+       @Bean
+       public MethodValidationPostProcessor validationPostProcessor() {
+           return new MethodValidationPostProcessor();
+       }
+   }
+   ```
+
+2. 创建实体类，使用注解设置校验规则
+
+   ```java
+   public class User {
+   
+       @NotNull
+       private String name;
+   
+       @Min(0)
+       @Max(120)
+       private int age;
+   
+       @Pattern(regexp = "^1(3|4|5|7|8)\\d{9}$",message = "手机号码格式错误")
+       @NotBlank(message = "手机号码不能为空")
+       private String phone;
+   
+       public String getName() {
+           return name;
+       }
+       public void setName(String name) {
+           this.name = name;
+       }
+       public int getAge() {
+           return age;
+       }
+       public void setAge(int age) {
+           this.age = age;
+       }
+       public String getPhone() {
+           return phone;
+       }
+       public void setPhone(String phone) {
+           this.phone = phone;
+       }
+   }
+   ```
+
+3. 定义Service类，通过注解操作对象
+
+   ```java
+   @Service
+   @Validated
+   public class MyService {
+       
+       public String testParams(@NotNull @Valid User user) {
+           return user.toString();
+       }
+   }
+   ```
+
+4. 测试
+
+   ```java
+   public class TestMethod3 {
+   
+       @Test
+       public void testMyService1() {
+           ApplicationContext context = new AnnotationConfigApplicationContext(ValidationConfig.class);
+           MyService myService = context.getBean(MyService.class);
+           User user = new User();
+           user.setAge(-1);
+           myService.testParams(user);
+       }
+   }
+   ```
+
+## 六、实现自定义校验
+
+1. 自定义校验注解
+
+   ```java
+   @Target({ElementType.METHOD, ElementType.FIELD, ElementType.ANNOTATION_TYPE, ElementType.CONSTRUCTOR, ElementType.PARAMETER})
+   @Retention(RetentionPolicy.RUNTIME)
+   @Documented
+   @Constraint(validatedBy = {CannotBlankValidator.class})
+   public @interface CannotBlank {
+       //默认错误消息
+       String message() default "不能包含空格";
+   
+       //分组
+       Class<?>[] groups() default {};
+   
+       //负载
+       Class<? extends Payload>[] payload() default {};
+   
+       //指定多个时使用
+       @Target({ElementType.METHOD, ElementType.FIELD, ElementType.ANNOTATION_TYPE, ElementType.CONSTRUCTOR, ElementType.PARAMETER, ElementType.TYPE_USE})
+       @Retention(RetentionPolicy.RUNTIME)
+       @Documented
+       @interface List {
+           CannotBlank[] value();
+       }
+   }
+   ```
+
+2. 编写真正的校验类
+
+   ```java
+   public class CannotBlankValidator implements ConstraintValidator<CannotBlank, String> {
+   
+           @Override
+           public void initialize(CannotBlank constraintAnnotation) {
+           }
+   
+           @Override
+           public boolean isValid(String value, ConstraintValidatorContext context) {
+                   //null时不进行校验
+                   if (value != null && value.contains(" ")) {
+                           //获取默认提示信息
+                           String defaultConstraintMessageTemplate = context.getDefaultConstraintMessageTemplate();
+                           System.out.println("default message :" + defaultConstraintMessageTemplate);
+                           //禁用默认提示信息
+                           context.disableDefaultConstraintViolation();
+                           //设置提示语
+                           context.buildConstraintViolationWithTemplate("can not contains blank").addConstraintViolation();
+                           return false;
+                   }
+                   return true;
+           }
+   }
+   ```
+
+# 十一、提前编译AOT
+
+## 一、AOT概述
+
+### 一、JIT与AOT的区别
+
+1. JIT和AOT 这个名词是指两种不同的编译方式，这两种编译方式的主要区别在于是否在“运行时”进行编译
+
+   - JIT， Just-in-time，动态(即时)编译，边运行边编译：在程序运行时，根据算法计算出热点代码，然后进行JIT实时编译，这种方式吞吐量高，有运行时性能加成，可以跑得更快，并可以做到动态生成代码等，但是相对启动速度较慢，并需要一定时间和调用频率才能触发JIT的分层机制。JIT 缺点就是编译需要占用运行时资源，会导致进程卡顿
+   - AOT，Ahead Of Time，指运行前编译，预先编译
+
+2. AOT编译能直接将源代码转化为机器码，内存占用低，启动速度快，可以无需runtime运行，直接将 runtime静态链接至最终的程序中，但是无运行时性能加成，不能根据程序运行情况做进一步的优化，AOT缺点就是在程序运行前编译会使程序安装的时间增加
+
+3. 简单来讲，JIT即时编译指的是在程序的运行过程中，将字节码转换为可在硬件上直接运行的机器码，并部署至托管环境中的过程。而AOT编译指的则是，在程序运行之前，便将字节码转换为机器码的过程
+
+   > .java -> .class -> (使用jaotc编译工具) -> .so（程序函数库,即编译好的可以供其他程序使用的代码和数据）
+
+   ![image-20221207113544080](../../../TyporaImage\spring6\image-20221207113544080.png)
+
+4. AOT的优缺点
+
+   - 优点：
+     - Java虚拟机加载已经预编译成二进制库，可以直接执行。不必等待及时编译器的预热，减少Java应用给人带来“第一次运行慢” 的不良体验
+     - 在程序运行前编译，可以避免在运行时的编译性能消耗和内存消耗；可以在程序运行初期就达到最高性能，程序启动速度快；运行产物只有机器码，打包体积小
+   - 缺点：
+     - 由于是静态提前编译，不能根据硬件情况或程序运行情况择优选择机器指令序列，理论峰值性能不如JIT，没有动态能力，同一份产物不能跨平台运行
+     - 第一种即时编译(JIT)是默认模式，Java Hotspot虚拟机使用它在运行时将字节码转换为机器码。后者提前编译(AOT)由新颖的GraalVM编译器支持，并允许在构建时将字节码直接静态编译为机器码
+     - 现在正处于云原生，降本增效的时代，Java相比于Go、Rust等其他编程语言非常大的弊端就是启动编译和启动进程非常慢，这对于根据实时计算资源，弹性扩缩容的云原生技术相冲突，Spring6借助AOT技术在运行时内存占用低，启动速度快，逐渐的来满足Java在云原生时代的需求，对于大规模使用Java应用的商业公司可以考虑尽早调研使用JDK17，通过云原生技术为公司实现降本增效
+
+## 二、Graalvm
+
+1. Spring6支持的AOT技术，这个GraalVM就是底层的支持，Spring也对GraalVM本机映像提供了一流的支持。GraalVM是一种高性能JDK，旨在加速用Java和其他JVM语言编写的应用程序的执行，同时还为JavaScript、Python和许多其他流行语言提供运行时。 GraalVM提供两种运行Java应用程序的方法：在HotSpot JVM上使用Graal即时(JIT)编译器或作为提前(AOT)编译的本机可执行文件。 GraalVM的多语言能力使得在单个应用程序中混合多种编程语言成为可能，同时消除了外语调用成本。GraalVM向HotSpot Java虚拟机添加了一个用Java编写的高级即时(JIT)优化编译器
+2. GraalVM具有以下特性：
+   - 一种高级优化编译器，它生成更快、更精简的代码，需要更少的计算资源
+   - AOT本机图像编译提前将Java应用程序编译为本机二进制文件，立即启动，无需预热即可实现最高性能
+   - Polyglot编程在单个应用程序中利用流行语言的最佳功能和库，无需额外开销
+   - 高级工具在Java和多种语言中调试、监视、分析和优化资源消耗
+3. 总的来说对云原生的要求不算高短期内可以继续使用2.7.X的版本和JDK8，不过Spring官方已经对 Spring6进行了正式版发布
+
+## 三、Native Image
+
+- 目前业界除了这种在JVM中进行AOT的方案，还有另外一种实现Java AOT的思路，那就是直接摒弃JVM，和C/C++一样通过编译器直接将代码编译成机器代码，然后运行。这无疑是一种直接颠覆Java语言设计的思路，那就是GraalVM Native Image。它通过C语言实现了一个超微缩的运行时组件——Substrate VM，基本实现了JVM的各种特性，但足够轻量、可以被轻松内嵌，这就让Java语言和工程摆脱JVM的限制，能够真正意义上实现和C/C++一样的AOT编译。这一方案在经过长时间的优化和积累后，已经拥有非常不错的效果，基本上成为Oracle官方首推的Java AOT解决方案
+- Native Image是一项创新技术，可将Java代码编译成独立的本机可执行文件或本机共享库。在构建本机可执行文件期间处理的Java字节码包括所有应用程序类、依赖项、第三方依赖库和任何所需的 JDK类。生成的自包含本机可执行文件特定于不需要JVM的每个单独的操作系统和机器体系结构
+
+
+
+
+
+
+
