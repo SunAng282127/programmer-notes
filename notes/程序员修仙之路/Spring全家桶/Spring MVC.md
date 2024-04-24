@@ -495,7 +495,7 @@
 
    - SpringMVC中处理编码的过滤器一定要配置到其他过滤器之前，否则无效
 
-     ```java
+     ```xml
      <!--配置springMVC的编码过滤器-->
      <filter>
          <filter-name>CharacterEncodingFilter</filter-name>
