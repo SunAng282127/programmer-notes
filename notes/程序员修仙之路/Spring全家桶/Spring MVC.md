@@ -1241,9 +1241,150 @@
 
 # 九、文件上传和下载
 
+## 一、文件下载
 
+- 使用ResponseEntity实现下载文件的功能
 
+  ```java
+  @RequestMapping("/testDown")
+  public ResponseEntity<byte[]> testResponseEntity(HttpSession session) throws IOException {
+      //获取ServletContext对象
+      ServletContext servletContext = session.getServletContext();
+      //获取服务器中文件的真实路径
+      String realPath = servletContext.getRealPath("/static/img/1.jpg");
+      //创建输入流
+      InputStream is = new FileInputStream(realPath);
+      //创建字节数组
+      byte[] bytes = new byte[is.available()];
+      //将流读到字节数组中
+      is.read(bytes);
+      //创建HttpHeaders对象设置响应头信息
+      MultiValueMap<String, String> headers = new HttpHeaders();
+      //设置要下载方式以及下载文件的名字
+      headers.add("Content-Disposition", "attachment;filename=1.jpg");
+      //设置响应状态码
+      HttpStatus statusCode = HttpStatus.OK;
+      //创建ResponseEntity对象
+      ResponseEntity<byte[]> responseEntity = new ResponseEntity<>(bytes, headers, statusCode);
+      //关闭输入流
+      is.close();
+      return responseEntity;
+  }
+  ```
 
+## 二、文件上传
+
+1. 文件上传要求form表单的请求方式必须为post，并且添加属性enctype="multipart/form-data"
+
+2. SpringMVC中将上传的文件封装到MultipartFile对象中，通过此对象可以获取文件相关信息
+
+3. 上传步骤
+
+   - 添加依赖
+
+     ```xml
+     <!-- https://mvnrepository.com/artifact/commons-fileupload/commons-fileupload -->
+     <dependency>
+         <groupId>commons-fileupload</groupId>
+         <artifactId>commons-fileupload</artifactId>
+         <version>1.3.1</version>
+     </dependency>
+     ```
+
+   - 在SpringMVC的配置文件中添加配置
+
+     ```xml
+     <!--必须通过文件解析器的解析才能将文件转换为MultipartFile对象-->
+     <bean id="multipartResolver" class="org.springframework.web.multipart.commons.CommonsMultipartResolver"></bean>
+     ```
+
+   - 控制器方法
+
+     ```java
+     @RequestMapping("/testUp")
+     public String testUp(MultipartFile photo, HttpSession session) throws IOException {
+         //获取上传的文件的文件名
+         String fileName = photo.getOriginalFilename();
+         //处理文件重名问题
+         String hzName = fileName.substring(fileName.lastIndexOf("."));
+         fileName = UUID.randomUUID().toString() + hzName;
+         //获取服务器中photo目录的路径
+         ServletContext servletContext = session.getServletContext();
+         String photoPath = servletContext.getRealPath("photo");
+         File file = new File(photoPath);
+         if(!file.exists()){
+             file.mkdir();
+         }
+         String finalPath = photoPath + File.separator + fileName;
+         //实现上传功能
+         photo.transferTo(new File(finalPath));
+         return "success";
+     }
+     ```
+
+# 十、拦截器
+
+1.  拦截器的配置
+
+   - SpringMVC中的拦截器用于拦截控制器方法的执行
+
+   - SpringMVC中的拦截器需要实现HandlerInterceptor接口
+
+     ```java
+     public class FirstInterceptor implements HandlerInterceptor {
+         @Override
+         public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+             //session中有user的信息就通过，否则给出提示信息，重定向到登录页面
+             HttpSession session = request.getSession();
+             //登录成功时要将user放到session中
+             User user = (User)session.getAttribute("user");
+             if(user!=null)
+                 return true;
+             //转发到登录页面
+             request.setAttribute("msg","您尚未登录，请先登录！");
+             request.getRequestDispatcher("/WEB-INF/jsp/login.jsp").forward(request,response);
+             return false;
+         }
+     
+         @Override
+         public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) throws Exception {
+     
+         }
+     
+         @Override
+         public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
+     
+         }
+     
+     }
+     ```
+
+   - SpringMVC的拦截器必须在SpringMVC的配置文件中进行配置
+
+     ```xml
+     <bean id="firstInterceptor" class="com.sunny.interceptor.FirstInterceptor"></bean>
+     <mvc:interceptor>
+         <mvc:mapping path="/**"/>
+         <mvc:exclude-mapping path="/testRequestEntity"/>
+         <ref bean="firstInterceptor"></ref>
+     </mvc:interceptor>
+     <!-- 
+     以上配置方式可以通过ref或bean标签设置拦截器，通过mvc:mapping设置需要拦截的请求，通过mvc:exclude-mapping设置需要排除的请求，即不需要拦截的请求
+     -->
+     ```
+
+2. 拦截器的三个抽象方法
+
+   - preHandle：控制器方法执行之前执行preHandle()，其boolean类型的返回值表示是否拦截或放行，返回true为放行，即调用控制器方法；返回false表示拦截，即不调用控制器方法
+   - postHandle：控制器方法执行之后，视图被渲染之前执行postHandle()
+   - afterComplation：处理完视图和模型数据，渲染视图完毕之后执行afterComplation()
+
+3. 多个拦截器的执行顺序
+
+   - 若每个拦截器的preHandle()都返回true
+     - 此时多个拦截器的执行顺序和拦截器在SpringMVC的配置文件的配置顺序有关；preHandle()会按照配置的顺序执行，而postHandle()和afterComplation()会按照配置的反序执行
+   - 若某个拦截器的preHandle()返回了false
+     - preHandle()返回false和它之前的拦截器的preHandle()都会执行，postHandle()都不执行，返回false的拦截器之前的拦截器的afterComplation()会执行
 
 
 
