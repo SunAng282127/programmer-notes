@@ -152,6 +152,12 @@
 5. 设置配置
 
    - maven工程的resource文件夹中创建application.properties文件
+
+     ```properties
+     # 设置端口号
+     server.port=8888
+     ```
+
    - [更多配置信息](https://docs.spring.io/spring-boot/docs/2.3.7.RELEASE/reference/html/appendix-application-properties.html#common-application-properties-server)
 
 6. 打包配置
