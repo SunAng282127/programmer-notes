@@ -674,6 +674,7 @@ public @interface SpringBootConfiguration {
 
 ### 三、@EnableAutoConfiguration
 
+- 意思为开启自动配置功能的注解
 - 重点在于`@AutoConfigurationPackage`，`@Import(AutoConfigurationImportSelector.class)`
 
 ```java
@@ -702,4 +703,153 @@ public @interface EnableAutoConfiguration {
 
 - @Import(AutoConfigurationImportSelector.class)
 
-1. 
+1. `AutoConfigurationImportSelector.class`类利用`getAutoConfigurationEntry(annotationMetadata);`给容器中批量导入一些组件
+
+2. 调用`List<String> configurations = getCandidateConfigurations(annotationMetadata, attributes)`获取到所有需要导入到容器中的配置类（组件）
+
+3. 利用工厂加载 `Map<String, List<String>> loadSpringFactories(@Nullable ClassLoader classLoader);`得到所有的组件
+
+4. 从包中`META-INF/spring.factories`位置来加载一个文件
+
+   - 默认扫描我们当前系统里面所有`META-INF/spring.factories`位置的文件
+   - `spring-boot-autoconfigure-2.3.4.RELEASE.jar`包里面也有`META-INF/spring.factories`，而且还是主要的
+   - 在`spring-boot-autoconfigure-2.3.4.RELEASE.jar/META-INF/spring.factories`虽然有127个场景的所有自动配置启动的时候默认全部加载，但是`xxxxAutoConfiguration`按照条件装配规则（`@Conditional`），最终会按需配置
+
+   ![在这里插入图片描述](../../../TyporaImage/SpringBoot/20210205005536620.png)
+
+   ```properties
+   # 文件里面写死了spring-boot一启动就要给容器中加载的所有配置类
+   # 如spring-boot-autoconfigure-2.3.4.RELEASE.jar/META-INF/spring.factories
+   # Auto Configure
+   org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+   org.springframework.boot.autoconfigure.admin.SpringApplicationAdminJmxAutoConfiguration,\
+   org.springframework.boot.autoconfigure.aop.AopAutoConfiguration,\
+   ...
+   ```
+
+## 三、自动配置流程
+
+- 以`DispatcherServletAutoConfiguration`的内部类`DispatcherServletConfiguration`为例子
+
+  ```java
+  @Bean
+  @ConditionalOnBean(MultipartResolver.class)  //容器中有这个类型组件
+  @ConditionalOnMissingBean(name = DispatcherServlet.MULTIPART_RESOLVER_BEAN_NAME) //容器中没有这个名字multipartResolver的组件，但是用户配置了文件上传的配置类，也会导入此配置类
+  public MultipartResolver multipartResolver(MultipartResolver resolver) {
+  	//给@Bean标注的方法传入了对象参数，这个参数的值就会从容器中找
+  	//SpringMVC multipartResolver。防止有些用户配置的文件上传解析器不符合规范
+  	return resolver;//给容器中加入了文件上传解析器；
+  }
+  ```
+
+- SpringBoot默认会在底层配好所有的组件，但是**如果用户自己配置了以用户的优先**
+
+- 自动配置总结
+
+  - SpringBoot先加载所有的自动配置类`xxxxxAutoConfiguration`
+  - 每个自动配置类按照条件进行生效，默认都会绑定配置文件指定的值（xxxxProperties里面读取，xxxProperties和配置文件进行了绑定）
+  - 生效的配置类就会给容器中装配很多组件
+  - 只要容器中有这些组件，相当于这些功能就有了
+  - 定制化配置
+    - 用户直接自己@Bean替换底层的组件
+    - 用户去看这个组件是获取的配置文件什么值就去修改配置文件中对应的值
+  - **xxxxxAutoConfiguration ---> 组件 ---> xxxxProperties里面拿值  ----> application.properties**
+
+# 六、SpringBoot最佳实践
+
+## 一、SpringBoot应用如何编写
+
+1. 引入场景依赖
+   - [官方文档](https://docs.spring.io/spring-boot/docs/current/reference/html/using-spring-boot.html#using-boot-starter)
+2. 查看自动配置了哪些（选做）
+   - 自己分析，引入场景对应的自动配置一般都生效了
+   - 配置文件中debug=true开启自动配置报告
+     - Negative（不生效的自动配置类）
+     - Positive（生效的自动配置类）
+3. 是否需要修改或者自定义配置文件
+   - 参照文档修改配置项
+     - [官方文档](https://docs.spring.io/spring-boot/docs/current/reference/html/appendix-application-properties.html#common-application-properties)
+     - 自己分析。xxxxProperties绑定了配置文件的哪些
+   - 自定义加入或者替换组件
+     - @Bean、@Component...
+   - 自定义器XXXXXCustomizer
+   - ......
+
+## 二、Lombok简化开发
+
+1. Lombok用标签方式代替构造器、getter/setter、toString()、hashCode()、equals()等鸡肋代码
+
+2. Lombok的使用
+
+   - 引入依赖
+
+     ```xml
+      <dependency>
+          <groupId>org.projectlombok</groupId>
+          <artifactId>lombok</artifactId>
+     </dependency>
+     ```
+
+   - IDEA中File->Settings->Plugins，搜索安装Lombok插件
+
+3. 常用方法替代
+
+   ```java
+   @NoArgsConstructor
+   @AllArgsConstructor
+   // 如果是使用无参-全参之间的构造器则需要重写自己手写构造器
+   @Data
+   @ToString
+   @EqualsAndHashCode
+   public class User {
+   
+       private String name;
+       private Integer age;
+   
+       private Pet pet;
+   
+       public User(String name,Integer age){
+           this.name = name;
+           this.age = age;
+       }
+   }
+   ```
+
+4. 简化日志开发：使用`@Slf4j`即可，在代码中使用`log.`即可
+
+   ```java
+   @Slf4j
+   @RestController
+   public class HelloController {
+       @RequestMapping("/hello")
+       public String handle01(@RequestParam("name") String name){
+           log.info("请求进来了....");
+           return "Hello, Spring Boot 2!"+"你好："+name;
+       }
+   }
+   ```
+
+## 三、dev-tools热更新
+
+1. dev-tools并不是真正意义上的热更新，只是重启项目而已，但是修改页面后不需要重新启动，Java代码修改后还是要重启
+
+2. 添加依赖
+
+   ```xml
+   <dependencies>
+       <dependency>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-devtools</artifactId>
+           <optional>true</optional>
+       </dependency>
+   </dependencies>
+   ```
+
+3. 使用方法：在IDEA中，项目或者页面修改以后使用按键Ctrl+F9，也就是rebuild
+
+## 四、Spring Initailizr
+
+- [Spring Initailizr](https://start.spring.io/)是创建SpringBoot工程向导
+- 在IDEA中，菜单栏New -> Project -> Spring Initailizr，需要什么依赖选择什么依赖即可
+
+# 七、配置文件
