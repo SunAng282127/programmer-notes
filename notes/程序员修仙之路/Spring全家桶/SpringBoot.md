@@ -1,4 +1,4 @@
-# 一、SpringBoot2介绍
+# 一、SpringBoot介绍
 
 ## 一、SpringBoot官网
 
@@ -11,7 +11,7 @@
 
 2. Spring的能力
 
-   ![Spring](../../../TyporaImage/springboot/20210205004146543.png)
+   ![Spring](C:/Users/MC/AppData/TyporaImage/springboot/20210205004146543.png)
 
 3. Spring的生态
 
@@ -27,7 +27,7 @@
 
    - 响应式编程
 
-     ![springboot](../../../TyporaImage/20210205004250581.png)
+     ![springboot](C:/Users/MC/AppData/TyporaImage/20210205004250581.png)
 
 ## 三、SpringBoot的优缺点
 
@@ -90,96 +90,96 @@
 
 ### 六、上云的解决
 
-![在这里插入图片描述](../../../TyporaImage/springboot/20210205004621290.png)
+![在这里插入图片描述](C:/Users/MC/AppData/TyporaImage/springboot/20210205004621290.png)
 
 ## 五、微服务与分布式的联系
 
 1.  分布式系统是一种架构范式 
-   - 分布式系统是一种软件架构的设计方式，用于解决多台计算机协同工作的问题。微服务架构是在这种分布式系统的背景下提出的一种服务组织方式 
+    - 分布式系统是一种软件架构的设计方式，用于解决多台计算机协同工作的问题。微服务架构是在这种分布式系统的背景下提出的一种服务组织方式 
 2.  微服务是一种实现方式 
-   - 微服务是一种软件架构风格，它可以在分布式系统中应用。微服务架构将一个大型应用划分为一组小型、自治的服务，每个服务都有自己的业务逻辑，可以独立开发、部署和运行。微服务通常运行在分布式环境中，利用分布式系统的特性 
-   - 微服务是分布式系统的一种形式： 微服务是分布式系统的一种实现形式，它采用了分布式的原则和理念。微服务通过将应用划分为小型服务并通过网络进行通信，体现了分布式系统的核心概念 
-3. 总体而言，微服务架构可以视为是在分布式系统的基础上演进而来的一种服务架构，它更强调服务的独立性、自治性和松耦合，适用于构建灵活、可维护的大型应用系统。分布式系统作为一种更广泛的概念，包括了各种架构和设计方式，而微服务是其中一种具体的实践方式 
+    - 微服务是一种软件架构风格，它可以在分布式系统中应用。微服务架构将一个大型应用划分为一组小型、自治的服务，每个服务都有自己的业务逻辑，可以独立开发、部署和运行。微服务通常运行在分布式环境中，利用分布式系统的特性 
+    - 微服务是分布式系统的一种形式： 微服务是分布式系统的一种实现形式，它采用了分布式的原则和理念。微服务通过将应用划分为小型服务并通过网络进行通信，体现了分布式系统的核心概念 
+3.  总体而言，微服务架构可以视为是在分布式系统的基础上演进而来的一种服务架构，它更强调服务的独立性、自治性和松耦合，适用于构建灵活、可维护的大型应用系统。分布式系统作为一种更广泛的概念，包括了各种架构和设计方式，而微服务是其中一种具体的实践方式 
 
 # 二、SpringBoot入门案例
 
 1.  可以使用Spring Initializr来初始化项目
 
-   ```xml
-   <?xml version="1.0" encoding="UTF-8"?>
-   <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-            xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-       <modelVersion>4.0.0</modelVersion>
-       <groupId>com.sunny</groupId>
-       <artifactId>demo</artifactId>
-       <version>0.0.1-SNAPSHOT</version>
-       <name>demo</name>
-       <description>demo</description>
-       <properties>
-           <java.version>1.8</java.version>
-           <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-           <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-           <spring-boot.version>2.6.13</spring-boot.version>
-       </properties>
-       <dependencies>
-           <dependency>
-               <groupId>org.springframework.boot</groupId>
-               <artifactId>spring-boot-starter-web</artifactId>
-           </dependency>
-   
-           <dependency>
-               <groupId>org.springframework.boot</groupId>
-               <artifactId>spring-boot-starter-test</artifactId>
-               <scope>test</scope>
-           </dependency>
-       </dependencies>
-       <dependencyManagement>
-           <dependencies>
-               <dependency>
-                   <groupId>org.springframework.boot</groupId>
-                   <artifactId>spring-boot-dependencies</artifactId>
-                   <version>${spring-boot.version}</version>
-                   <type>pom</type>
-                   <scope>import</scope>
-               </dependency>
-           </dependencies>
-       </dependencyManagement>
-   
-       <build>
-           <plugins>
-               <plugin>
-                   <groupId>org.apache.maven.plugins</groupId>
-                   <artifactId>maven-compiler-plugin</artifactId>
-                   <version>3.8.1</version>
-                   <configuration>
-                       <source>1.8</source>
-                       <target>1.8</target>
-                       <encoding>UTF-8</encoding>
-                   </configuration>
-               </plugin>
-               <plugin>
-                   <groupId>org.springframework.boot</groupId>
-                   <artifactId>spring-boot-maven-plugin</artifactId>
-                   <version>${spring-boot.version}</version>
-                   <configuration>
-                       <mainClass>com.sunny.bootdemo.DemoApplication</mainClass>
-                       <skip>true</skip>
-                   </configuration>
-                   <executions>
-                       <execution>
-                           <id>repackage</id>
-                           <goals>
-                               <goal>repackage</goal>
-                           </goals>
-                       </execution>
-                   </executions>
-               </plugin>
-           </plugins>
-       </build>
-   
-   </project>
-   
-   ```
+    ```xml
+    <?xml version="1.0" encoding="UTF-8"?>
+    <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+        <modelVersion>4.0.0</modelVersion>
+        <groupId>com.sunny</groupId>
+        <artifactId>demo</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <name>demo</name>
+        <description>demo</description>
+        <properties>
+            <java.version>1.8</java.version>
+            <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+            <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+            <spring-boot.version>2.6.13</spring-boot.version>
+        </properties>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-web</artifactId>
+            </dependency>
+    
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-test</artifactId>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+        <dependencyManagement>
+            <dependencies>
+                <dependency>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-dependencies</artifactId>
+                    <version>${spring-boot.version}</version>
+                    <type>pom</type>
+                    <scope>import</scope>
+                </dependency>
+            </dependencies>
+        </dependencyManagement>
+    
+        <build>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.8.1</version>
+                    <configuration>
+                        <source>1.8</source>
+                        <target>1.8</target>
+                        <encoding>UTF-8</encoding>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
+                    <configuration>
+                        <mainClass>com.sunny.bootdemo.DemoApplication</mainClass>
+                        <skip>true</skip>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>repackage</id>
+                            <goals>
+                                <goal>repackage</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </build>
+    
+    </project>
+    
+    ```
 
 2. 创建主程序
 
@@ -244,5 +244,462 @@
 
    - 将jar包直接在目标服务器执行即可
 
+# 三、SpringBoot特性
+
+## 一、依赖管理特性
+
+1. 父项目做依赖管理
+
+   ```xml
+   <!-- 依赖管理：在项目中引入spring-boot-starter-parent即可 -->
+   <parent>
+   	<groupId>org.springframework.boot</groupId>
+   	<artifactId>spring-boot-starter-parent</artifactId>
+   	<version>2.3.4.RELEASE</version>
+   </parent>
+   
+   <!-- spring-boot-starter-parent的父依赖为spring-boot-dependencies，在项目中可以不引入。
+        spring-boot-dependencies几乎声明了所有开发中常用的依赖的版本号，自动版本仲裁机制，
+        即不需要在<dependency>标签中在声明<version>标签，使用默认的版本号 -->
+   <parent>
+   	<groupId>org.springframework.boot</groupId>
+   	<artifactId>spring-boot-dependencies</artifactId>
+   	<version>2.3.4.RELEASE</version>
+   </parent>
+   ```
+
+2. 开发导入starter场景启动器
+
+   - 见到很多`spring-boot-starter-*` ： `*`就某种场景，这种写法都是官方提供的依赖包
+
+   - 只要引入`starter`，这个场景的所有常规需要的依赖我们都自动引入
+
+   - [更多SpringBoot所有支持的场景](https://docs.spring.io/spring-boot/docs/current/reference/html/using-spring-boot.html#using-boot-starter)
+
+   - 见到的  `*-spring-boot-starter`： 第三方为我们提供的简化开发的场景启动器，这种写法都是非官方或者自定义的依赖包
+
+   - 所有场景启动器最底层的依赖
+
+     ```xml
+     <dependency>
+     	<groupId>org.springframework.boot</groupId>
+     	<artifactId>spring-boot-starter</artifactId>
+     	<version>2.3.4.RELEASE</version>
+     	<scope>compile</scope>
+     </dependency>
+     ```
+
+3. 无需关注版本号，自动版本仲裁
+
+   - 引入依赖默认都可以不写版本
+   - 引入非版本仲裁的jar，要写版本号，可以先点进去看具体的版本是什么，然后需要修改再修改
+
+4. 可以修改默认版本号
+
+   - 查看spring-boot-dependencies里面规定当前依赖的版本用的key，如mysql驱动依赖包
+
+     ```xml
+     <!-- mysql驱动依赖包的key -->
+     <mysql.version>8.0.33</mysql.version>
+     
+     <dependency>
+             <groupId>mysql</groupId>
+             <artifactId>mysql-connector-java</artifactId>
+             <version>${mysql.version}</version>
+             <exclusions>
+               <exclusion>
+                 <groupId>com.google.protobuf</groupId>
+                 <artifactId>protobuf-java</artifactId>
+               </exclusion>
+             </exclusions>
+     </dependency>
+     ```
+
+   - 在当前项目里面重写配置，只需要重写`<properties>`标签中的版本号即可，就可代表重新加载了指定版本的依赖包，如下面的代码
+
+     ```xml
+     <properties>
+     	<mysql.version>5.1.43</mysql.version>
+     </properties>
+     
+     ```
+
+## 二、自动配置特性
+
+1. 自动配好Tomcat
+
+   - 引入Tomcat依赖
+   - 配置Tomcat
+
+   ```xml
+   <dependency>
+   	<groupId>org.springframework.boot</groupId>
+   	<artifactId>spring-boot-starter-tomcat</artifactId>
+   	<version>2.3.4.RELEASE</version>
+   	<scope>compile</scope>
+   </dependency>
+   
+   ```
+
+2. 自动配好SpringMVC
+
+   - 引入SpringMVC全套组件
+   - 自动配好SpringMVC常用组件（功能）
+
+3. 自动配好Web常见功能，如：字符编码问题、文件上传等
+
+   - SpringBoot帮我们配置好了所有web开发的常见场景
+
+   ```java
+   public static void main(String[] args) {
+       //1、返回我们IOC容器
+       ConfigurableApplicationContext run = SpringApplication.run(MainApplication.class, args);
+   
+       //2、查看容器里面的组件
+       String[] names = run.getBeanDefinitionNames();
+       for (String name : names) {
+           System.out.println(name);
+       }
+   }
+   
+   ```
+
+4. 默认的包结构
+
+   - 主程序所在包及其下面的所有子包里面的组件都会被默认扫描进来
+   - 无需以前的包扫描配置，想要改变扫描路径则使用
+     - @SpringBootApplication(scanBasePackages="com.sunny")
+     - @ComponentScan("指定扫描路径")
+
+5. @SpringBootApplication等同于@SpringBootConfiguration、@EnableAutoConfiguration、@ComponentScan("com.sunny")这三个注解加一起
+
+6. 各种配置拥有默认值
+
+   - 默认配置最终都是映射到某个类（大部分都是配置类）上，如：`MultipartProperties`
+   - 配置文件的值最终会绑定每个类（大部分都是配置类）上，这个类会在容器中创建对象
+
+7. 按需加载所有自动配置项
+
+   - 因为有非常多的starter，在项目中引入了哪些场景则这个场景的自动配置才会开启
+   - SpringBoot所有的自动配置功能都在spring-boot-autoconfigure包里面
+
+8. ......
+
+# 四、底层注解
+
+## 一、@Configuration
+
+1. @Configuration简介
+
+   - @Configuration标注的类为配置类，配置类本身也是组件
+
+2. 基本使用
+
+   - Full模式与Lite模式
+   - 示例
+
+   ```java
+   /**
+    * 1、配置类里面使用@Bean标注在方法上给容器注册组件，默认也是单实例的
+    * 2、配置类本身也是组件
+    * 3、proxyBeanMethods：代理bean的方法
+    *      Full(proxyBeanMethods = true)（保证每个@Bean方法被调用多少次返回的组件都是单实例的）（默认）
+    *      Lite(proxyBeanMethods = false)（每个@Bean方法被调用多少次返回的组件都是新创建的）
+    */
+   @Configuration(proxyBeanMethods = false)
+   // @Configuration注解告诉SpringBoot这是一个配置类，等同于配置文件
+   public class MyConfig {
+   
+       /**
+        * Full：外部无论对配置类中的这个组件注册方法调用多少次获取的都是之前注册容器中的单实例对象，
+                外部调用对象时都需要检查一下容器中是否已存在该实例对象
+        * Lite：外部对配置类中的这个组件注册方法调用获取的是注册容器中的实例对象，非单例对象，都是全新对象，
+                外部调用对象时不需要检查容器中是否已存在该实例对象，直接创建
+        * @return
+        */
+       @Bean 
+       // 给容器中添加组件。以方法名作为组件的id，也可以在@bean中指定组件的id，@Bean("usero1")即可
+       // 返回类型就是组件类型。
+       // 返回的值，就是组件在容器中的实例
+       public User user01(){
+           User zhangsan = new User("zhangsan", 18);
+           //user组件依赖了Pet组件
+           zhangsan.setPet(tomcatPet());
+           return zhangsan;
+       }
+   
+       @Bean("tom")
+       public Pet tomcatPet(){
+           return new Pet("tomcat");
+       }
+   }
+   
+   ```
+
+3. @Configuration测试代码如下
+
+   ```java
+   @SpringBootConfiguration
+   @EnableAutoConfiguration
+   @ComponentScan("com.sunny.boot")
+   public class MainApplication {
+   
+       public static void main(String[] args) {
+       	//1、返回IOC容器
+           ConfigurableApplicationContext run = SpringApplication.run(MainApplication.class, args);
+   
+       	//2、查看容器里面的组件
+           String[] names = run.getBeanDefinitionNames();
+           for (String name : names) {
+               System.out.println(name);
+           }
+   
+       	//3、从容器中获取组件
+           Pet tom01 = run.getBean("tom", Pet.class);
+           Pet tom02 = run.getBean("tom", Pet.class);
+           System.out.println("组件："+(tom01 == tom02));
+   
+      		//4、com.sunny.boot.config.MyConfig$$EnhancerBySpringCGLIB$$51f1e1ca@1654a892
+           MyConfig bean = run.getBean(MyConfig.class);
+           System.out.println(bean);
+   
+       	// 如果@Configuration(proxyBeanMethods = true)代理对象调用方法。
+           // SpringBoot总会检查这个组件是否在容器中有。
+           // 保持组件单实例
+           User user = bean.user01();
+           User user1 = bean.user01();
+           System.out.println(user == user1);
+   
+           User user01 = run.getBean("user01", User.class);
+           Pet tom = run.getBean("tom", Pet.class);
+   
+           System.out.println("用户的宠物："+(user01.getPet() == tom));
+       }
+   }
+   
+   ```
+
+4. 最佳实战
+
+   - 配置类组件之间**无依赖关系**用Lite模式加速容器启动过程，减少判断
+   - 配置类组件之间**有依赖关系**，方法会被调用得到之前单实例组件，用Full模式（默认）
+
+## 二、@Import
+
+1. @Bean、@Component、@Controller、@Service、@Repository，它们是Spring的基本标签，在Spring Boot中并未改变它们原来的功能
+2. @Import({User.class, DBHelper.class})给容器中自动创建出这两个类型的组件、**默认组件的名字就是全类名**
+3. @Import注解一般放在有注解的类上
+
+## 三、@Conditional
+
+1. @Conditional简介
+
+   - 条件装配：满足Conditional指定的条件，则进行组件注入
+   - 使用范围：可以使用在类上，也可以使用在方法上，使用位置不同则作用范围不同
+
+2. 派生类
+
+   ![在这里插入图片描述](C:/Users/MC/AppData/TyporaImage/Springboot/20210205005453173.png)
+
+3. 个别派生类使用举例
+
+   ```java
+   @Configuration(proxyBeanMethods = false)
+   @ConditionalOnMissingBean(name = "tom")
+   // @ConditionalOnMissingBean表示没有tom名字的Bean时，MyConfig类的Bean才能生效
+   @ConditionalOnBean(name = "tom")
+   // @ConditionalOnBean表示有tom名字的Bean时，MyConfig类的Bean才能生效
+   public class MyConfig {
+   
+       @Bean
+       public User user01(){
+           User zhangsan = new User("zhangsan", 18);
+           zhangsan.setPet(tomcatPet());
+           return zhangsan;
+       }
+   
+       @Bean("tom22")
+       public Pet tomcatPet(){
+           return new Pet("tomcat");
+       }
+   }
+   
+   ```
 
 
+## 四、@ImportResource
+
+1. 若之前的项目使用bean.xml文件生成配置bean，然而现在使用配置类来注入Bean，bean.xml还想用，那么就可以使用@ImportResource
+
+2. bean.xml：
+
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <beans ...">
+   
+       <bean id="haha" class="com.lun.boot.bean.User">
+           <property name="name" value="zhangsan"></property>
+           <property name="age" value="18"></property>
+       </bean>
+   
+       <bean id="hehe" class="com.lun.boot.bean.Pet">
+           <property name="name" value="tomcat"></property>
+       </bean>
+   </beans>
+   ```
+
+3. 使用方法
+
+   ```java
+   @ImportResource("classpath:beans.xml")
+   public class MyConfig {
+   ...
+   }
+   ```
+
+## 五、@ConfigurationProperties
+
+1. @ConfigurationProperties的作用是使用Java读取到properties文件中的内容，并且把它封装到JavaBean中，以供随时使用
+
+2. @ConfigurationProperties + @Component配合使用
+
+   - 假设有配置文件application.properties
+
+     ```properties
+     mycar.brand=BYD
+     mycar.price=100000
+     ```
+
+   - 只有在容器中的组件（任何组件都是如此），才会拥有SpringBoot提供的强大功能
+
+     ```java
+     @Component
+     @ConfigurationProperties(prefix = "mycar")
+     public class Car {
+         
+         private String brand;
+         
+         private String price;
+         
+     	...
+     }
+     ```
+
+3. @EnableConfigurationProperties + @ConfigurationProperties配合使用
+
+   - 开启Car配置绑定功能
+
+   - 把这个Car这个组件自动注册到容器中
+
+     ```java
+     @EnableConfigurationProperties(Car.class)
+     public class MyConfig {
+     ...
+     }
+     
+     
+     @ConfigurationProperties(prefix = "mycar")
+     public class Car {
+         
+         private String brand;
+         
+         private String price;
+         
+     	...
+     }
+     ```
+
+# 五、自动配置源码分析
+
+## 一、自动包规则原理
+
+- SpringBoot应用的启动类
+
+  ```java
+  @SpringBootApplication
+  public class MainApplication {
+  
+      public static void main(String[] args) {
+          SpringApplication.run(MainApplication.class, args);
+      }
+  
+  }
+  ```
+
+- 分析`@SpringBootApplication`
+
+  ```java
+  @Target(ElementType.TYPE)
+  @Retention(RetentionPolicy.RUNTIME)
+  @Documented
+  @Inherited
+  @SpringBootConfiguration
+  @EnableAutoConfiguration
+  @ComponentScan(
+      excludeFilters = {@Filter(
+      type = FilterType.CUSTOM,
+      classes = {TypeExcludeFilter.class}
+  ), @Filter(
+      type = FilterType.CUSTOM,
+      classes = {AutoConfigurationExcludeFilter.class}
+  )}
+  )
+  public @interface SpringBootApplication {
+      ...
+  }
+  ```
+
+- `@SpringBootApplication`重点在于`@SpringBootConfiguration`，`@EnableAutoConfiguration`，`@ComponentScan`
+
+### 一、@SpringBootConfiguration
+
+- `@Configuration`代表当前是一个配置类
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Configuration
+public @interface SpringBootConfiguration {
+    @AliasFor(
+        annotation = Configuration.class
+    )
+    boolean proxyBeanMethods() default true;
+}
+```
+
+### 二、@ComponentScan
+
+- 指定扫描Spring注解
+
+### 三、@EnableAutoConfiguration
+
+- 重点在于`@AutoConfigurationPackage`，`@Import(AutoConfigurationImportSelector.class)`
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Inherited
+@AutoConfigurationPackage
+@Import(AutoConfigurationImportSelector.class)
+public @interface EnableAutoConfiguration {
+    String ENABLED_OVERRIDE_PROPERTY = "spring.boot.enableautoconfiguration";
+
+    Class<?>[] exclude() default {};
+
+    String[] excludeName() default {};
+}
+```
+
+1. @AutoConfigurationPackage
+   - 标签名直译为：自动配置包，指定了默认的包规则
+   - 利用Registrar给容器中导入一系列组件
+   - 将指定的一个包下的所有组件导入进MainApplication所在包下，也就是导入主程序所在包及子包下的所有组件
+2. @Import(AutoConfigurationImportSelector.class)
+
+## 二、初始加载自动配置类
+
+- @Import(AutoConfigurationImportSelector.class)
+
+1. 
