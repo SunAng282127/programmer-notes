@@ -853,3 +853,311 @@ public @interface EnableAutoConfiguration {
 - 在IDEA中，菜单栏New -> Project -> Spring Initailizr，需要什么依赖选择什么依赖即可
 
 # 七、配置文件
+
+1. YAML的意思其实是："Yet Another Markup Language"（仍是一种标记语言），同以前的properties用法。当properties文件与YAML文件同时存在时，先加载properties文件中的内容，再加载YAML文件中的内容，当properties文件中的内容与YAML文件的内容有重复时，则遵循优先原则，使用properties文件中的内容
+
+2. YAML**非常适合用来做以数据为中心的配置文件**
+
+3. 基本语法
+
+   - key: value；kv之间有空格
+   - 大小写敏感
+   - 使用缩进表示层级关系
+   - 缩进不允许使用tab，只允许空格，在IDEA中允许使用tab
+   - 缩进的空格数不重要，只要相同层级的元素左对齐即可
+   - '#'表示注释
+   - 字符串无需加引号，如果要加，单引号''、双引号""表示字符串内容会被转义、不转义。也就是说单引号会将转义字符`/`再转义成普通字符串，而双引号不会处理转义字符。例如`"张三\n李四"`，则会换行，使用单引号时不会换行
+
+4. 数据类型
+
+   - 字面量：单个的、不可再分的值。date、boolean、string、number、null
+
+     ```yaml
+     k: v
+     ```
+
+   - 对象：键值对的集合。map、hash、set、object 
+
+     ```yaml
+     #行内写法：  
+     
+     k: {k1:v1,k2:v2,k3:v3}
+     
+     #或
+     
+     k: 
+       k1: v1
+       k2: v2
+       k3: v3
+     ```
+
+   - 数组：一组按次序排列的值。array、list、queue
+
+     ```yaml
+     #行内写法：  
+     
+     k: [v1,v2,v3]
+     
+     #或者
+     
+     k:
+      - v1
+      - v2
+      - v3
+     ```
+
+5. 实例
+
+   - Java代码
+
+     ```java
+     @Data
+     @Component
+     @ConfigurationProperties(prefix="person")
+     public class Person {
+         private String userName;
+         private Boolean boss;
+         private Date birth;
+         private Integer age;
+         private Pet pet;
+         private String[] interests;
+         private List<String> animal;
+         private Map<String, Object> score;
+         private Set<Double> salarys;
+         private Map<String, List<Pet>> allPets;
+     }
+     
+     @Data
+     public class Pet {
+         private String name;
+         private Double weight;
+     }
+     ```
+
+   - yaml代码
+
+     ```yaml
+     person:
+       userName: zhangsan
+       boss: false
+       birth: 2019/12/12 20:12:33
+       age: 18
+       pet: 
+         name: tomcat
+         weight: 23.4
+       interests: [篮球,游泳]
+       animal: 
+         - jerry
+         - mario
+       score:
+         english: 
+           first: 30
+           second: 40
+           third: 50
+         math: [131,140,148]
+         chinese: {first: 128,second: 136}
+       salarys: [3999,4999.98,5999.99]
+       allPets:
+         sick:
+           - {name: tom}
+           - {name: jerry,weight: 47}
+         health: [{name: mario,weight: 47}]
+     ```
+
+6. YAML取值
+
+   - @value注解方式： 读取到的数据特别零散 
+
+     ```java
+     @RestController
+     @RequestMapping("/person")
+     public class PersonController {
+         
+         @Value("${person.userName}")
+         private String userName;
+      
+         @GetMapping("/{id}")
+         public String getById(@PathVariable Integer id){
+             System.out.println(userName);
+             return "hello";
+         }
+     }
+     ```
+
+   - Environment对象：SpringBoot可以使用`@Autowired`注解注入`Environment`对象的方式读取数据。这种方式 SpringBoot会将配置文件中所有的数据封装到`Environment`对象中，如果需要使用哪个数据只需要通过调用 `Environment`对象的`getProperty(String name)`方法获取
+
+     ```java
+     @RestController
+     @RequestMapping("/person")
+     public class PersonController {
+         
+         @Autowired
+         private Environment env;
+         
+         @GetMapping("/{id}")
+         public String getById(@PathVariable Integer id){
+             System.out.println(env.getProperty("person.userName"));
+             return "hello , spring boot!";
+         }
+     }
+     ```
+
+   - 对自定义数据类型：将实体类bean的创建交给Spring管理，在类上添加@Component注解；使用@ConfigurationProperties注解表示加载配置文件，在该注解中也可以使用prefix属性指定只加载指定前缀的数据 
+
+     ```java
+     @RestController
+     @RequestMapping("/person")
+     public class PersonController {
+         
+         @Autowired
+         private Person person;
+         
+         @GetMapping("/{id}")
+         public String getById(@PathVariable Integer id){
+             System.out.println(person.getUserName);
+             return "hello , spring boot!";
+         }
+     }
+     ```
+
+7. 配置文件-自定义类绑定的配置提示
+
+   - 自定义的类和配置文件绑定一般没有提示。若要提示，添加如下依赖：
+
+     ```xml
+     <dependency>
+         <groupId>org.springframework.boot</groupId>
+         <artifactId>spring-boot-configuration-processor</artifactId>
+         <optional>true</optional>
+     </dependency>
+     
+     <!-- 下面插件作用是工程打包时，不将spring-boot-configuration-processor打进包内，让其只在编码的时候有用 -->
+     <build>
+         <plugins>
+             <plugin>
+                 <groupId>org.springframework.boot</groupId>
+                 <artifactId>spring-boot-maven-plugin</artifactId>
+                 <configuration>
+                     <excludes>
+                         <exclude>
+                             <groupId>org.springframework.boot</groupId>
+                             <artifactId>spring-boot-configuration-processor</artifactId>
+                         </exclude>
+                     </excludes>
+                 </configuration>
+             </plugin>
+         </plugins>
+     </build>
+     ```
+
+# 八、Web场景开发
+
+## 一、web开发简介
+
+1. 大多场景我们都无需自定义配置
+
+2. 自动配置的资源有
+
+   - 内容协商视图解析器和BeanName视图解析器
+   - 静态资源（包括webjars）
+   - 自动注册 `Converter，GenericConverter，Formatter `
+   - 支持 `HttpMessageConverters` （配合内容协商理解原理）
+   - 自动注册 `MessageCodesResolver` （国际化用）
+   - 静态index.html 页支持
+   - 自定义 `Favicon`  
+   - 自动使用 `ConfigurableWebBindingInitializer` ，（DataBinder负责将请求数据绑定到JavaBean上）
+
+   > If you want to keep those Spring Boot MVC customizations and make more [MVC customizations](https://docs.spring.io/spring/docs/5.2.9.RELEASE/spring-framework-reference/web.html#mvc) (interceptors, formatters, view controllers, and other features), you can add your own `@Configuration` class of type `WebMvcConfigurer` but **without** `@EnableWebMvc`.
+   >
+   > **不用@EnableWebMvc注解。使用** **`@Configuration`** **+** **`WebMvcConfigurer`** **自定义规则**
+
+   > If you want to provide custom instances of `RequestMappingHandlerMapping`, `RequestMappingHandlerAdapter`, or `ExceptionHandlerExceptionResolver`, and still keep the Spring Boot MVC customizations, you can declare a bean of type `WebMvcRegistrations` and use it to provide custom instances of those components.
+   >
+   > **声明** **`WebMvcRegistrations`** **改变默认底层组件**
+
+   > If you want to take complete control of Spring MVC, you can add your own `@Configuration` annotated with `@EnableWebMvc`, or alternatively add your own `@Configuration`-annotated `DelegatingWebMvcConfiguration` as described in the Javadoc of `@EnableWebMvc`.
+   >
+   > **使用** **`@EnableWebMvc+@Configuration+DelegatingWebMvcConfiguration 全面接管SpringMVC`**
+
+## 二、静态资源规则与定制化
+
+1. 静态资源目录
+
+   - 只要静态资源放在类路径下： 也就是`resources`目录下`/static` or `/public` or `/resources` or `/META-INF/resources`
+
+   - 访问：当前项目根路径/ + 静态资源名 
+
+   - 原理：静态映射/**
+
+   - 请求进来，先去找Controller看能不能处理。不能处理的所有请求又都交给静态资源处理器。静态资源也找不到则响应404页面
+
+   - 也可以改变默认的静态资源路径，如果改变默认的资源路径，那么`/static`，`/public`,`/resources`, `/META-INF/resources`则会失效
+
+     ```yaml
+     resources:
+       static-locations: [classpath:/abc/]
+     ```
+
+2. 静态资源访问前缀
+
+   - 静态资源默认访问前缀为无，访问路径为：当前项目根路径/ + 静态资源名 
+
+   - 设置前缀后的访问路径为：当前项目 + static-path-pattern + 静态资源名 = 静态资源文件夹下找
+
+     ```yaml
+     spring:
+       mvc:
+         static-path-pattern: /res/**
+     ```
+
+3. webjar
+
+   - 可用jar方式添加css，js等资源文件
+
+   - [官网](https://www.webjars.org/)
+
+   - 例如，添加jquery
+
+     ```java
+     <dependency>
+         <groupId>org.webjars</groupId>
+         <artifactId>jquery</artifactId>
+         <version>3.5.1</version>
+     </dependency>
+     ```
+
+   - 访问地址：[http://localhost:8080/webjars/**jquery/3.5.1/jquery.js**](http://localhost:8080/webjars/jquery/3.5.1/jquery.js)  后面地址要按照依赖里面的包路径
+
+## 三、welcome与favicon功能
+
+- [官方文档](https://docs.spring.io/spring-boot/docs/2.3.8.RELEASE/reference/htmlsingle/#boot-features-spring-mvc-welcome-page)
+
+1. 欢迎页支持
+
+   - 使用controller能处理/index，进行跳转页面
+
+   - 静态资源路径下index.html
+
+     - 可以配置静态资源路径
+     - 但是不可以配置静态资源的访问前缀，否则导致index.html不能被默认访问，最新版SpringBoot可能解决了这个bug
+
+     ```yaml
+     spring:
+     #  mvc:
+     #    static-path-pattern: /res/**   这个会导致welcome page功能失效
+       resources:
+         static-locations: [classpath:/anc/]
+     ```
+
+2. 自定义Favicon
+
+   - 指网页标签上的小图标
+   - favicon.ico放在静态资源目录下即可，必须是favicon.ico这个名字
+
+   ```properties
+   spring:
+   #  mvc:
+   #    static-path-pattern: /res/**   这个会导致 Favicon 功能失效
+   ```
+
+## 四、静态资源原理源码分析
