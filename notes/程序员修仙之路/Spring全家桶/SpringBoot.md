@@ -1149,7 +1149,7 @@ public @interface EnableAutoConfiguration {
          static-locations: [classpath:/anc/]
      ```
 
-2. 自定义Favicon
+2. 自定义favicon
 
    - 指网页标签上的小图标
    - favicon.ico放在静态资源目录下即可，必须是favicon.ico这个名字
