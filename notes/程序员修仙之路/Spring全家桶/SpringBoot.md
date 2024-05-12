@@ -11,7 +11,7 @@
 
 2. Spring的能力
 
-   ![Spring](C:/Users/MC/AppData/TyporaImage/springboot/20210205004146543.png)
+   ![Spring](../../../TyporaImage/20210205004146543.png)
 
 3. Spring的生态
 
@@ -27,7 +27,7 @@
 
    - 响应式编程
 
-     ![springboot](C:/Users/MC/AppData/TyporaImage/20210205004250581.png)
+     ![springboot](../../..//TyporaImage/20210205004250581.png)
 
 ## 三、SpringBoot的优缺点
 
@@ -90,7 +90,7 @@
 
 ### 六、上云的解决
 
-![在这里插入图片描述](C:/Users/MC/AppData/TyporaImage/springboot/20210205004621290.png)
+![在这里插入图片描述](../../../TyporaImage/20210205004621290.png)
 
 ## 五、微服务与分布式的联系
 
@@ -499,7 +499,7 @@
 
 2. 派生类
 
-   ![在这里插入图片描述](C:/Users/MC/AppData/TyporaImage/Springboot/20210205005453173.png)
+   ![在这里插入图片描述](../../../TyporaImage/20210205005453173.png)
 
 3. 个别派生类使用举例
 
@@ -1773,3 +1773,747 @@ public class RequestController {
    ```
 
 ## 十一、请求处理之各种类型参数解析原理
+
+1. 从`DispatcherServlet`进行剖析
+
+   ```java
+   public class DispatcherServlet extends FrameworkServlet {
+       
+       protected void doDispatch(HttpServletRequest request, HttpServletResponse response) throws Exception {
+           HttpServletRequest processedRequest = request;
+           HandlerExecutionChain mappedHandler = null;
+           boolean multipartRequestParsed = false;
+   
+           WebAsyncManager asyncManager = WebAsyncUtils.getAsyncManager(request);
+   
+           try {
+               ModelAndView mv = null;
+               Exception dispatchException = null;
+   
+               try {
+                   processedRequest = checkMultipart(request);
+                   multipartRequestParsed = (processedRequest != request);
+   
+                   // Determine handler for the current request.
+                   mappedHandler = getHandler(processedRequest);
+                   if (mappedHandler == null) {
+                       noHandlerFound(processedRequest, response);
+                       return;
+                   }
+   
+                   // Determine handler adapter for the current request.
+                   HandlerAdapter ha = getHandlerAdapter(mappedHandler.getHandler());
+                   ...
+   ```
+
+   - `HandlerMapping`中找到能处理请求的`Handler`（Controller.method()）
+   - 为当前Handler 找一个适配器 `HandlerAdapter`，用的最多的是**RequestMappingHandlerAdapter**
+   - 适配器执行目标方法并确定方法参数的每一个值
+
+2. `HandlerAdapter`：默认会加载所有`HandlerAdapter`
+
+   ```java
+   public class DispatcherServlet extends FrameworkServlet {
+   
+       /** Detect all HandlerAdapters or just expect "handlerAdapter" bean?. */
+       private boolean detectAllHandlerAdapters = true;
+   
+       ...
+       
+       private void initHandlerAdapters(ApplicationContext context) {
+           this.handlerAdapters = null;
+   
+           if (this.detectAllHandlerAdapters) {
+               // Find all HandlerAdapters in the ApplicationContext, including ancestor contexts.
+               Map<String, HandlerAdapter> matchingBeans =
+                   BeanFactoryUtils.beansOfTypeIncludingAncestors(context, HandlerAdapter.class, true, false);
+               if (!matchingBeans.isEmpty()) {
+                   this.handlerAdapters = new ArrayList<>(matchingBeans.values());
+                   // We keep HandlerAdapters in sorted order.
+                   AnnotationAwareOrderComparator.sort(this.handlerAdapters);
+               }
+           }
+        ...
+   ```
+
+3. `HandlerAdapter`的分类
+
+   ![在这里插入图片描述](../../../TyporaImage/SpringBoot/20210205010047654.png)
+
+   - 支持方法上标注`@RequestMapping` 
+   - 支持函数式编程的
+   - ......
+
+4. 执行目标方法
+
+   ```java
+   public class DispatcherServlet extends FrameworkServlet {
+       
+   	protected void doDispatch(HttpServletRequest request, HttpServletResponse response) throws Exception {
+           ModelAndView mv = null;
+           
+           ...
+   
+           // Determine handler for the current request.
+           mappedHandler = getHandler(processedRequest);
+           if (mappedHandler == null) {
+               noHandlerFound(processedRequest, response);
+               return;
+           }
+   
+           // Determine handler adapter for the current request.
+           HandlerAdapter ha = getHandlerAdapter(mappedHandler.getHandler());
+   
+           ...
+   		//本节重点
+           // Actually invoke the handler.
+           mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
+   ```
+
+   - `HandlerAdapter`接口实现类`RequestMappingHandlerAdapter`（主要用来处理`@RequestMapping`）
+
+   ```java
+   public class RequestMappingHandlerAdapter extends AbstractHandlerMethodAdapter
+   		implements BeanFactoryAware, InitializingBean {
+   
+       ...
+       
+       //AbstractHandlerMethodAdapter类的方法，RequestMappingHandlerAdapter继承AbstractHandlerMethodAdapter
+   	public final ModelAndView handle(HttpServletRequest request, HttpServletResponse response, Object handler)
+           throws Exception {
+   
+           return handleInternal(request, response, (HandlerMethod) handler);
+       }
+   
+   	@Override
+   	protected ModelAndView handleInternal(HttpServletRequest request,
+   			HttpServletResponse response, HandlerMethod handlerMethod) throws Exception {
+       	ModelAndView mav;
+           //handleInternal的核心
+           mav = invokeHandlerMethod(request, response, handlerMethod);//解释看下节
+   		//...
+   		return mav;
+       }
+   }
+   ```
+
+5. 参数解析器
+
+   - 确定将要执行的目标方法的每一个参数的值是什么
+
+   - SpringMVC目标方法能写多少种参数类型。取决于**参数解析器argumentResolvers**
+
+   - `this.argumentResolvers`在`afterPropertiesSet()`方法内初始化
+
+     ```java
+     public class RequestMappingHandlerAdapter extends AbstractHandlerMethodAdapter
+     		implements BeanFactoryAware, InitializingBean {
+     	
+         @Nullable
+         private HandlerMethodArgumentResolverComposite argumentResolvers;
+         
+         @Override
+         public void afterPropertiesSet() {
+             ...
+         	if (this.argumentResolvers == null) {//初始化argumentResolvers
+             	List<HandlerMethodArgumentResolver> resolvers = getDefaultArgumentResolvers();
+                 this.argumentResolvers = new HandlerMethodArgumentResolverComposite().addResolvers(resolvers);
+             }
+             ...
+         }
+     
+         //初始化了一堆的实现HandlerMethodArgumentResolver接口的
+     	private List<HandlerMethodArgumentResolver> getDefaultArgumentResolvers() {
+     		List<HandlerMethodArgumentResolver> resolvers = new ArrayList<>(30);
+     
+     		// Annotation-based argument resolution
+     		resolvers.add(new RequestParamMethodArgumentResolver(getBeanFactory(), false));
+     		resolvers.add(new RequestParamMapMethodArgumentResolver());
+     		resolvers.add(new PathVariableMethodArgumentResolver());
+     		resolvers.add(new PathVariableMapMethodArgumentResolver());
+     		resolvers.add(new MatrixVariableMethodArgumentResolver());
+     		resolvers.add(new MatrixVariableMapMethodArgumentResolver());
+     		resolvers.add(new ServletModelAttributeMethodProcessor(false));
+     		resolvers.add(new RequestResponseBodyMethodProcessor(getMessageConverters(), this.requestResponseBodyAdvice));
+     		resolvers.add(new RequestPartMethodArgumentResolver(getMessageConverters(), this.requestResponseBodyAdvice));
+     		resolvers.add(new RequestHeaderMethodArgumentResolver(getBeanFactory()));
+     		resolvers.add(new RequestHeaderMapMethodArgumentResolver());
+     		resolvers.add(new ServletCookieValueMethodArgumentResolver(getBeanFactory()));
+     		resolvers.add(new ExpressionValueMethodArgumentResolver(getBeanFactory()));
+     		resolvers.add(new SessionAttributeMethodArgumentResolver());
+     		resolvers.add(new RequestAttributeMethodArgumentResolver());
+     
+     		// Type-based argument resolution
+     		resolvers.add(new ServletRequestMethodArgumentResolver());
+     		resolvers.add(new ServletResponseMethodArgumentResolver());
+     		resolvers.add(new HttpEntityMethodProcessor(getMessageConverters(), this.requestResponseBodyAdvice));
+     		resolvers.add(new RedirectAttributesMethodArgumentResolver());
+     		resolvers.add(new ModelMethodProcessor());
+     		resolvers.add(new MapMethodProcessor());
+     		resolvers.add(new ErrorsMethodArgumentResolver());
+     		resolvers.add(new SessionStatusMethodArgumentResolver());
+     		resolvers.add(new UriComponentsBuilderMethodArgumentResolver());
+     		if (KotlinDetector.isKotlinPresent()) {
+     			resolvers.add(new ContinuationHandlerMethodArgumentResolver());
+     		}
+     
+     		// Custom arguments
+     		if (getCustomArgumentResolvers() != null) {
+     			resolvers.addAll(getCustomArgumentResolvers());
+     		}
+     
+     		// Catch-all
+     		resolvers.add(new PrincipalMethodArgumentResolver());
+     		resolvers.add(new RequestParamMethodArgumentResolver(getBeanFactory(), true));
+     		resolvers.add(new ServletModelAttributeMethodProcessor(true));
+     
+     		return resolvers;
+     	}
+         
+     }
+     ```
+
+   - `HandlerMethodArgumentResolverComposite`类如下：（众多**参数解析器argumentResolvers**的包装类）
+
+   - `HandlerMethodArgumentResolver`的源码
+
+     ```java
+     public interface HandlerMethodArgumentResolver {
+     
+         //当前解析器是否支持解析这种参数
+     	boolean supportsParameter(MethodParameter parameter);
+     
+     	@Nullable//如果支持，就调用 resolveArgument
+     	Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewContainer mavContainer,
+     			NativeWebRequest webRequest, @Nullable WebDataBinderFactory binderFactory) throws Exception;
+     
+     }
+     ```
+
+6. 返回值处理器：`ValueHandler`
+
+   ```java
+   @Nullable
+   protected ModelAndView invokeHandlerMethod(HttpServletRequest request,
+                                              HttpServletResponse response, HandlerMethod handlerMethod) throws Exception {
+   
+       ServletWebRequest webRequest = new ServletWebRequest(request, response);
+       try {
+           WebDataBinderFactory binderFactory = getDataBinderFactory(handlerMethod);
+           ModelFactory modelFactory = getModelFactory(handlerMethod, binderFactory);
+   
+           ServletInvocableHandlerMethod invocableMethod = createInvocableHandlerMethod(handlerMethod);
+           if (this.argumentResolvers != null) {
+               invocableMethod.setHandlerMethodArgumentResolvers(this.argumentResolvers);
+           }
+           if (this.returnValueHandlers != null) {//<---关注点
+               invocableMethod.setHandlerMethodReturnValueHandlers(this.returnValueHandlers);
+           }
+        ...
+   
+   ```
+
+   - `this.returnValueHandlers`在`afterPropertiesSet()`方法内初始化
+
+   ```java
+   public class RequestMappingHandlerAdapter extends AbstractHandlerMethodAdapter
+   		implements BeanFactoryAware, InitializingBean {
+   	
+   	@Nullable
+   	private HandlerMethodReturnValueHandlerComposite returnValueHandlers;
+       
+   	@Override
+   	public void afterPropertiesSet() {
+   
+           ...
+           
+   		if (this.returnValueHandlers == null) {
+   			List<HandlerMethodReturnValueHandler> handlers = getDefaultReturnValueHandlers();
+   			this.returnValueHandlers = new HandlerMethodReturnValueHandlerComposite().addHandlers(handlers);
+   		}
+   	}
+       
+       //初始化了一堆的实现HandlerMethodReturnValueHandler接口的
+       private List<HandlerMethodReturnValueHandler> getDefaultReturnValueHandlers() {
+   		List<HandlerMethodReturnValueHandler> handlers = new ArrayList<>(20);
+   
+   		// Single-purpose return value types
+   		handlers.add(new ModelAndViewMethodReturnValueHandler());
+   		handlers.add(new ModelMethodProcessor());
+   		handlers.add(new ViewMethodReturnValueHandler());
+   		handlers.add(new ResponseBodyEmitterReturnValueHandler(getMessageConverters(),
+   				this.reactiveAdapterRegistry, this.taskExecutor, this.contentNegotiationManager));
+   		handlers.add(new StreamingResponseBodyReturnValueHandler());
+   		handlers.add(new HttpEntityMethodProcessor(getMessageConverters(),
+   				this.contentNegotiationManager, this.requestResponseBodyAdvice));
+   		handlers.add(new HttpHeadersReturnValueHandler());
+   		handlers.add(new CallableMethodReturnValueHandler());
+   		handlers.add(new DeferredResultMethodReturnValueHandler());
+   		handlers.add(new AsyncTaskMethodReturnValueHandler(this.beanFactory));
+   
+   		// Annotation-based return value types
+   		handlers.add(new ServletModelAttributeMethodProcessor(false));
+   		handlers.add(new RequestResponseBodyMethodProcessor(getMessageConverters(),
+   				this.contentNegotiationManager, this.requestResponseBodyAdvice));
+   
+   		// Multi-purpose return value types
+   		handlers.add(new ViewNameMethodReturnValueHandler());
+   		handlers.add(new MapMethodProcessor());
+   
+   		// Custom return value types
+   		if (getCustomReturnValueHandlers() != null) {
+   			handlers.addAll(getCustomReturnValueHandlers());
+   		}
+   
+   		// Catch-all
+   		if (!CollectionUtils.isEmpty(getModelAndViewResolvers())) {
+   			handlers.add(new ModelAndViewResolverMethodReturnValueHandler(getModelAndViewResolvers()));
+   		}
+   		else {
+   			handlers.add(new ServletModelAttributeMethodProcessor(true));
+   		}
+   
+   		return handlers;
+   	}
+   }
+   ```
+
+   - `HandlerMethodReturnValueHandlerComposite`类如下：
+
+   ```java
+   public class HandlerMethodReturnValueHandlerComposite implements HandlerMethodReturnValueHandler {
+   
+   	private final List<HandlerMethodReturnValueHandler> returnValueHandlers = new ArrayList<>();
+   
+       ...
+       
+   	public HandlerMethodReturnValueHandlerComposite addHandlers(
+   			@Nullable List<? extends HandlerMethodReturnValueHandler> handlers) {
+   
+   		if (handlers != null) {
+   			this.returnValueHandlers.addAll(handlers);
+   		}
+   		return this;
+   	}
+   
+   }
+   ```
+
+   - `HandlerMethodReturnValueHandler`接口：
+
+   ```java
+   public interface HandlerMethodReturnValueHandler {
+   
+   	boolean supportsReturnType(MethodParameter returnType);
+   
+   	void handleReturnValue(@Nullable Object returnValue, MethodParameter returnType,
+   			ModelAndViewContainer mavContainer, NativeWebRequest webRequest) throws Exception;
+   
+   }
+   ```
+
+7. 回顾执行目标方法
+
+   ```java
+   public class DispatcherServlet extends FrameworkServlet {
+       ...
+   	protected void doDispatch(HttpServletRequest request, HttpServletResponse response) throws Exception {
+           ModelAndView mv = null;
+   		...
+           mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
+   ```
+
+   - `RequestMappingHandlerAdapter`的`handle()`方法：
+
+   ```java
+   public class RequestMappingHandlerAdapter extends AbstractHandlerMethodAdapter
+   		implements BeanFactoryAware, InitializingBean {
+   
+       ...
+       
+       //AbstractHandlerMethodAdapter类的方法，RequestMappingHandlerAdapter继承AbstractHandlerMethodAdapter
+   	public final ModelAndView handle(HttpServletRequest request, HttpServletResponse response, Object handler)
+           throws Exception {
+   
+           return handleInternal(request, response, (HandlerMethod) handler);
+       }
+   
+   	@Override
+   	protected ModelAndView handleInternal(HttpServletRequest request,
+   			HttpServletResponse response, HandlerMethod handlerMethod) throws Exception {
+       	ModelAndView mav;
+           //handleInternal的核心
+           mav = invokeHandlerMethod(request, response, handlerMethod);//解释看下节
+   		//...
+   		return mav;
+       }
+   }
+   ```
+
+   - `RequestMappingHandlerAdapter`的`invokeHandlerMethod()`方法：
+
+   ```java
+   public class RequestMappingHandlerAdapter extends AbstractHandlerMethodAdapter
+   		implements BeanFactoryAware, InitializingBean {
+       
+   	protected ModelAndView invokeHandlerMethod(HttpServletRequest request,
+   			HttpServletResponse response, HandlerMethod handlerMethod) throws Exception {
+   
+   		ServletWebRequest webRequest = new ServletWebRequest(request, response);
+   		try {
+   			...
+               
+               ServletInvocableHandlerMethod invocableMethod = createInvocableHandlerMethod(handlerMethod);
+   			if (this.argumentResolvers != null) {
+   				invocableMethod.setHandlerMethodArgumentResolvers(this.argumentResolvers);
+   			}
+   			if (this.returnValueHandlers != null) {
+   				invocableMethod.setHandlerMethodReturnValueHandlers(this.returnValueHandlers);
+   			}
+   			...
+   
+               //关注点：执行目标方法
+   			invocableMethod.invokeAndHandle(webRequest, mavContainer);
+   			if (asyncManager.isConcurrentHandlingStarted()) {
+   				return null;
+   			}
+   
+   			return getModelAndView(mavContainer, modelFactory, webRequest);
+   		}
+   		finally {
+   			webRequest.requestCompleted();
+   		}
+   	}
+   ```
+
+   - `invokeAndHandle()`方法如下：
+
+   ```java
+   public class ServletInvocableHandlerMethod extends InvocableHandlerMethod {
+   
+   	public void invokeAndHandle(ServletWebRequest webRequest, ModelAndViewContainer mavContainer,
+   			Object... providedArgs) throws Exception {
+   
+   		Object returnValue = invokeForRequest(webRequest, mavContainer, providedArgs);
+   
+           ...
+           
+   		try {
+               //returnValue存储起来
+   			this.returnValueHandlers.handleReturnValue(
+   					returnValue, getReturnValueType(returnValue), mavContainer, webRequest);
+   		}
+   		catch (Exception ex) {
+   			...
+   		}
+   	}
+       
+       @Nullable//InvocableHandlerMethod类的，ServletInvocableHandlerMethod类继承InvocableHandlerMethod类
+   	public Object invokeForRequest(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer,
+   			Object... providedArgs) throws Exception {
+   
+           ////获取方法的参数值
+   		Object[] args = getMethodArgumentValues(request, mavContainer, providedArgs);
+   
+           ...
+          
+   		return doInvoke(args);
+   	}
+   
+       @Nullable
+   	protected Object doInvoke(Object... args) throws Exception {
+   		Method method = getBridgedMethod();//@RequestMapping的方法
+   		ReflectionUtils.makeAccessible(method);
+   		try {
+   			if (KotlinDetector.isSuspendingFunction(method)) {
+   				return CoroutinesUtils.invokeSuspendingFunction(method, getBean(), args);
+   			}
+               //通过反射调用
+   			return method.invoke(getBean(), args);//getBean()指@RequestMapping的方法所在类的对象。
+   		}
+   		catch (IllegalArgumentException ex) {
+   			...
+   		}
+   		catch (InvocationTargetException ex) {
+   			...
+   		}
+   	}
+       
+   }   
+   ```
+
+8. 确定目标方法每一个参数的值，重点在于`ServletInvocableHandlerMethod`的`getMethodArgumentValues`方法
+
+   ```java
+   public class ServletInvocableHandlerMethod extends InvocableHandlerMethod {
+       ...
+   
+   	@Nullable//InvocableHandlerMethod类的，ServletInvocableHandlerMethod类继承InvocableHandlerMethod类
+   	public Object invokeForRequest(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer,
+   			Object... providedArgs) throws Exception {
+   
+           ////获取方法的参数值
+   		Object[] args = getMethodArgumentValues(request, mavContainer, providedArgs);
+   
+           ...
+          
+   		return doInvoke(args);
+   	}
+    
+       //本节重点，获取方法的参数值
+   	protected Object[] getMethodArgumentValues(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer,
+   			Object... providedArgs) throws Exception {
+   
+   		MethodParameter[] parameters = getMethodParameters();
+   		if (ObjectUtils.isEmpty(parameters)) {
+   			return EMPTY_ARGS;
+   		}
+   
+   		Object[] args = new Object[parameters.length];
+   		for (int i = 0; i < parameters.length; i++) {
+   			MethodParameter parameter = parameters[i];
+   			parameter.initParameterNameDiscovery(this.parameterNameDiscoverer);
+   			args[i] = findProvidedArgument(parameter, providedArgs);
+   			if (args[i] != null) {
+   				continue;
+   			}
+               //查看resolvers是否有支持
+   			if (!this.resolvers.supportsParameter(parameter)) {
+   				throw new IllegalStateException(formatArgumentError(parameter, "No suitable resolver"));
+   			}
+   			try {
+                   //支持的话就开始解析吧
+   				args[i] = this.resolvers.resolveArgument(parameter, mavContainer, request, this.dataBinderFactory);
+   			}
+   			catch (Exception ex) {
+   				....
+   			}
+   		}
+   		return args;
+   	}
+       
+   }
+   ```
+
+   - `this.resolvers`的类型为`HandlerMethodArgumentResolverComposite`
+
+   ```java
+   public class HandlerMethodArgumentResolverComposite implements HandlerMethodArgumentResolver {
+       
+   	@Override
+   	public boolean supportsParameter(MethodParameter parameter) {
+   		return getArgumentResolver(parameter) != null;
+   	}
+   
+   	@Override
+   	@Nullable
+   	public Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewContainer mavContainer,
+   			NativeWebRequest webRequest, @Nullable WebDataBinderFactory binderFactory) throws Exception {
+   
+   		HandlerMethodArgumentResolver resolver = getArgumentResolver(parameter);
+   		if (resolver == null) {
+   			throw new IllegalArgumentException("Unsupported parameter type [" +
+   					parameter.getParameterType().getName() + "]. supportsParameter should be called first.");
+   		}
+   		return resolver.resolveArgument(parameter, mavContainer, webRequest, binderFactory);
+   	}
+       
+       
+       @Nullable
+   	private HandlerMethodArgumentResolver getArgumentResolver(MethodParameter parameter) {
+   		HandlerMethodArgumentResolver result = this.argumentResolverCache.get(parameter);
+   		if (result == null) {
+               //挨个判断所有参数解析器那个支持解析这个参数
+   			for (HandlerMethodArgumentResolver resolver : this.argumentResolvers) {
+   				if (resolver.supportsParameter(parameter)) {
+   					result = resolver;
+   					this.argumentResolverCache.put(parameter, result);//找到了，resolver就缓存起来，方便稍后resolveArgument()方法使用
+   					break;
+   				}
+   			}
+   		}
+   		return result;
+   	}
+   }
+   ```
+
+## 十二、请求处理之Servlet API参数解析原理
+
+1. 常用Servlet API
+
+   - WebRequest
+   - ServletRequest
+   - MultipartRequest
+   - HttpSession
+   - javax.servlet.http.PushBuilder
+   - Principal
+   - InputStream
+   - Reader
+   - HttpMethod
+   - Locale
+   - TimeZone
+   - ZoneId
+
+2. ServletRequestMethodArgumentResolver用来处理以上的参数
+
+   ```java
+   public class ServletRequestMethodArgumentResolver implements HandlerMethodArgumentResolver {
+   
+   	@Nullable
+   	private static Class<?> pushBuilder;
+   
+   	static {
+   		try {
+   			pushBuilder = ClassUtils.forName("javax.servlet.http.PushBuilder",
+   					ServletRequestMethodArgumentResolver.class.getClassLoader());
+   		}
+   		catch (ClassNotFoundException ex) {
+   			// Servlet 4.0 PushBuilder not found - not supported for injection
+   			pushBuilder = null;
+   		}
+   	}
+   
+   
+   	@Override
+   	public boolean supportsParameter(MethodParameter parameter) {
+   		Class<?> paramType = parameter.getParameterType();
+   		return (WebRequest.class.isAssignableFrom(paramType) ||
+   				ServletRequest.class.isAssignableFrom(paramType) ||
+   				MultipartRequest.class.isAssignableFrom(paramType) ||
+   				HttpSession.class.isAssignableFrom(paramType) ||
+   				(pushBuilder != null && pushBuilder.isAssignableFrom(paramType)) ||
+   				(Principal.class.isAssignableFrom(paramType) && !parameter.hasParameterAnnotations()) ||
+   				InputStream.class.isAssignableFrom(paramType) ||
+   				Reader.class.isAssignableFrom(paramType) ||
+   				HttpMethod.class == paramType ||
+   				Locale.class == paramType ||
+   				TimeZone.class == paramType ||
+   				ZoneId.class == paramType);
+   	}
+   
+   	@Override
+   	public Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewContainer mavContainer,
+   			NativeWebRequest webRequest, @Nullable WebDataBinderFactory binderFactory) throws Exception {
+   
+   		Class<?> paramType = parameter.getParameterType();
+   
+   		// WebRequest / NativeWebRequest / ServletWebRequest
+   		if (WebRequest.class.isAssignableFrom(paramType)) {
+   			if (!paramType.isInstance(webRequest)) {
+   				throw new IllegalStateException(
+   						"Current request is not of type [" + paramType.getName() + "]: " + webRequest);
+   			}
+   			return webRequest;
+   		}
+   
+   		// ServletRequest / HttpServletRequest / MultipartRequest / MultipartHttpServletRequest
+   		if (ServletRequest.class.isAssignableFrom(paramType) || MultipartRequest.class.isAssignableFrom(paramType)) {
+   			return resolveNativeRequest(webRequest, paramType);
+   		}
+   
+   		// HttpServletRequest required for all further argument types
+   		return resolveArgument(paramType, resolveNativeRequest(webRequest, HttpServletRequest.class));
+   	}
+   
+   	private <T> T resolveNativeRequest(NativeWebRequest webRequest, Class<T> requiredType) {
+   		T nativeRequest = webRequest.getNativeRequest(requiredType);
+   		if (nativeRequest == null) {
+   			throw new IllegalStateException(
+   					"Current request is not of type [" + requiredType.getName() + "]: " + webRequest);
+   		}
+   		return nativeRequest;
+   	}
+   
+   	@Nullable
+   	private Object resolveArgument(Class<?> paramType, HttpServletRequest request) throws IOException {
+   		if (HttpSession.class.isAssignableFrom(paramType)) {
+   			HttpSession session = request.getSession();
+   			if (session != null && !paramType.isInstance(session)) {
+   				throw new IllegalStateException(
+   						"Current session is not of type [" + paramType.getName() + "]: " + session);
+   			}
+   			return session;
+   		}
+   		else if (pushBuilder != null && pushBuilder.isAssignableFrom(paramType)) {
+   			return PushBuilderDelegate.resolvePushBuilder(request, paramType);
+   		}
+   		else if (InputStream.class.isAssignableFrom(paramType)) {
+   			InputStream inputStream = request.getInputStream();
+   			if (inputStream != null && !paramType.isInstance(inputStream)) {
+   				throw new IllegalStateException(
+   						"Request input stream is not of type [" + paramType.getName() + "]: " + inputStream);
+   			}
+   			return inputStream;
+   		}
+   		else if (Reader.class.isAssignableFrom(paramType)) {
+   			Reader reader = request.getReader();
+   			if (reader != null && !paramType.isInstance(reader)) {
+   				throw new IllegalStateException(
+   						"Request body reader is not of type [" + paramType.getName() + "]: " + reader);
+   			}
+   			return reader;
+   		}
+   		else if (Principal.class.isAssignableFrom(paramType)) {
+   			Principal userPrincipal = request.getUserPrincipal();
+   			if (userPrincipal != null && !paramType.isInstance(userPrincipal)) {
+   				throw new IllegalStateException(
+   						"Current user principal is not of type [" + paramType.getName() + "]: " + userPrincipal);
+   			}
+   			return userPrincipal;
+   		}
+   		else if (HttpMethod.class == paramType) {
+   			return HttpMethod.resolve(request.getMethod());
+   		}
+   		else if (Locale.class == paramType) {
+   			return RequestContextUtils.getLocale(request);
+   		}
+   		else if (TimeZone.class == paramType) {
+   			TimeZone timeZone = RequestContextUtils.getTimeZone(request);
+   			return (timeZone != null ? timeZone : TimeZone.getDefault());
+   		}
+   		else if (ZoneId.class == paramType) {
+   			TimeZone timeZone = RequestContextUtils.getTimeZone(request);
+   			return (timeZone != null ? timeZone.toZoneId() : ZoneId.systemDefault());
+   		}
+   
+   		// Should never happen...
+   		throw new UnsupportedOperationException("Unknown parameter type: " + paramType.getName());
+   	}
+   
+   
+   	/**
+   	 * Inner class to avoid a hard dependency on Servlet API 4.0 at runtime.
+   	 */
+   	private static class PushBuilderDelegate {
+   
+   		@Nullable
+   		public static Object resolvePushBuilder(HttpServletRequest request, Class<?> paramType) {
+   			PushBuilder pushBuilder = request.newPushBuilder();
+   			if (pushBuilder != null && !paramType.isInstance(pushBuilder)) {
+   				throw new IllegalStateException(
+   						"Current push builder is not of type [" + paramType.getName() + "]: " + pushBuilder);
+   			}
+   			return pushBuilder;
+   
+   		}
+   	}
+   }
+   ```
+
+3. 用例：
+
+   ```java
+   @Controller
+   public class RequestController {
+   
+       @GetMapping("/goto")
+       public String goToPage(HttpServletRequest request){
+   
+           request.setAttribute("msg","成功了...");
+           request.setAttribute("code",200);
+           return "forward:/success";  //转发到  /success请求
+       }
+   }
+   ```
+
+## 十三、请求处理之Model、Map原理
