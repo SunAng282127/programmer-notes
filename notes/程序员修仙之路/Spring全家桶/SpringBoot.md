@@ -2952,7 +2952,7 @@ public class ServletModelAttributeMethodProcessor extends ModelAttributeMethodPr
 
 - 假设给前端自动返回json数据，需要引入相关的依赖
 
-	```java
+	```xml
 	<dependency>
 	    <groupId>org.springframework.boot</groupId>
 	    <artifactId>spring-boot-starter-web</artifactId>
@@ -3105,4 +3105,196 @@ public class ServletModelAttributeMethodProcessor extends ModelAttributeMethodPr
 	}
 	```
 
-	
+
+## 十七、响应处理之HTTPMessageConverter原理
+
+### 一、返回值处理器`ReturnValueHandler`原理
+
+1. 返回值处理器判断是否支持这种类型返回值，方法为`supportsReturnType`
+2. 返回值处理器调用`handleReturnValue`进行处理
+3. `RequestResponseBodyMethodProcessor` 可以处理返回值标了`@ResponseBody`注解的方法或类，其原理是利用 `MessageConverters`进行处理将数据写为json
+   - 内容协商（浏览器默认会以请求头的方式告诉服务器他能接受什么样的内容类型）
+   - 服务器最终根据自己自身的能力，决定服务器能生产出什么样内容类型的数据
+   - SpringMVC会挨个遍历所有容器底层的`HttpMessageConverter`，能到能处理此请求的`Converter`
+     - 得到`MappingJackson2HttpMessageConverter`可以将对象写为json
+     - 利用`MappingJackson2HttpMessageConverter`将对象转为json再写出去
+
+```java
+
+//RequestResponseBodyMethodProcessor继承这类
+public abstract class AbstractMessageConverterMethodProcessor extends AbstractMessageConverterMethodArgumentResolver
+		implements HandlerMethodReturnValueHandler {
+
+    ...
+    
+    //承接上一节内容
+    protected <T> void writeWithMessageConverters(@Nullable T value, MethodParameter returnType,
+                ServletServerHttpRequest inputMessage, ServletServerHttpResponse outputMessage)
+                throws IOException, HttpMediaTypeNotAcceptableException, HttpMessageNotWritableException {
+
+            Object body;
+            Class<?> valueType;
+            Type targetType;
+
+            if (value instanceof CharSequence) {
+                body = value.toString();
+                valueType = String.class;
+                targetType = String.class;
+            }
+            else {
+                body = value;
+                valueType = getReturnValueType(body, returnType);
+                targetType = GenericTypeResolver.resolveType(getGenericType(returnType), returnType.getContainingClass());
+            }
+
+			...
+
+            //内容协商（浏览器默认会以请求头(参数Accept)的方式告诉服务器他能接受什么样的内容类型）
+            MediaType selectedMediaType = null;
+            MediaType contentType = outputMessage.getHeaders().getContentType();
+            boolean isContentTypePreset = contentType != null && contentType.isConcrete();
+            if (isContentTypePreset) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Found 'Content-Type:" + contentType + "' in response");
+                }
+                selectedMediaType = contentType;
+            }
+            else {
+                HttpServletRequest request = inputMessage.getServletRequest();
+                List<MediaType> acceptableTypes = getAcceptableMediaTypes(request);
+                //服务器最终根据自己自身的能力，决定服务器能生产出什么样内容类型的数据
+                List<MediaType> producibleTypes = getProducibleMediaTypes(request, valueType, targetType);
+
+                if (body != null && producibleTypes.isEmpty()) {
+                    throw new HttpMessageNotWritableException(
+                            "No converter found for return value of type: " + valueType);
+                }
+                List<MediaType> mediaTypesToUse = new ArrayList<>();
+                for (MediaType requestedType : acceptableTypes) {
+                    for (MediaType producibleType : producibleTypes) {
+                        if (requestedType.isCompatibleWith(producibleType)) {
+                            mediaTypesToUse.add(getMostSpecificMediaType(requestedType, producibleType));
+                        }
+                    }
+                }
+                if (mediaTypesToUse.isEmpty()) {
+                    if (body != null) {
+                        throw new HttpMediaTypeNotAcceptableException(producibleTypes);
+                    }
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("No match for " + acceptableTypes + ", supported: " + producibleTypes);
+                    }
+                    return;
+                }
+
+                MediaType.sortBySpecificityAndQuality(mediaTypesToUse);
+
+                //选择一个MediaType
+                for (MediaType mediaType : mediaTypesToUse) {
+                    if (mediaType.isConcrete()) {
+                        selectedMediaType = mediaType;
+                        break;
+                    }
+                    else if (mediaType.isPresentIn(ALL_APPLICATION_MEDIA_TYPES)) {
+                        selectedMediaType = MediaType.APPLICATION_OCTET_STREAM;
+                        break;
+                    }
+                }
+
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Using '" + selectedMediaType + "', given " +
+                            acceptableTypes + " and supported " + producibleTypes);
+                }
+            }
+
+        	
+            if (selectedMediaType != null) {
+                selectedMediaType = selectedMediaType.removeQualityValue();
+                //本节主角：HttpMessageConverter
+                for (HttpMessageConverter<?> converter : this.messageConverters) {
+                    GenericHttpMessageConverter genericConverter = (converter instanceof GenericHttpMessageConverter ?
+                            (GenericHttpMessageConverter<?>) converter : null);
+                    
+                    //判断是否可写
+                    if (genericConverter != null ?
+                            ((GenericHttpMessageConverter) converter).canWrite(targetType, valueType, selectedMediaType) :
+                            converter.canWrite(valueType, selectedMediaType)) {
+                        body = getAdvice().beforeBodyWrite(body, returnType, selectedMediaType,
+                                (Class<? extends HttpMessageConverter<?>>) converter.getClass(),
+                                inputMessage, outputMessage);
+                        if (body != null) {
+                            Object theBody = body;
+                            LogFormatUtils.traceDebug(logger, traceOn ->
+                                    "Writing [" + LogFormatUtils.formatValue(theBody, !traceOn) + "]");
+                            addContentDispositionHeader(inputMessage, outputMessage);
+							//开始写入
+                            if (genericConverter != null) {
+                                genericConverter.write(body, targetType, selectedMediaType, outputMessage);
+                            }
+                            else {
+                                ((HttpMessageConverter) converter).write(body, selectedMediaType, outputMessage);
+                            }
+                        }
+                        else {
+                            if (logger.isDebugEnabled()) {
+                                logger.debug("Nothing to write: null body");
+                            }
+                        }
+                        return;
+                    }
+                }
+            }
+			...
+        }
+```
+
+4. `HTTPMessageConverter`接口
+
+```java
+/**
+ * Strategy interface for converting from and to HTTP requests and responses.
+ */
+public interface HttpMessageConverter<T> {
+
+	/**
+	 * Indicates whether the given class can be read by this converter.
+	 */
+	boolean canRead(Class<?> clazz, @Nullable MediaType mediaType);
+
+	/**
+	 * Indicates whether the given class can be written by this converter.
+	 */
+	boolean canWrite(Class<?> clazz, @Nullable MediaType mediaType);
+
+	/**
+	 * Return the list of {@link MediaType} objects supported by this converter.
+	 */
+	List<MediaType> getSupportedMediaTypes();
+
+	/**
+	 * Read an object of the given type from the given input message, and returns it.
+	 */
+	T read(Class<? extends T> clazz, HttpInputMessage inputMessage)
+			throws IOException, HttpMessageNotReadableException;
+
+	/**
+	 * Write an given object to the given output message.
+	 */
+	void write(T t, @Nullable MediaType contentType, HttpOutputMessage outputMessage)
+			throws IOException, HttpMessageNotWritableException;
+
+}
+
+```
+
+5. `HttpMessageConverter`: 看是否支持将此`Class`类型的对象，转为`MediaType`类型的数据。比如：`Person`对象转为`JSON`，或者`JSON`转为`Person`，这将用到`MappingJackson2HttpMessageConverter`
+
+   ![在这里插入图片描述](../../../TyporaImage/SpringBoot/20210205010509984.png)
+
+   ```java
+   public class MappingJackson2HttpMessageConverter extends AbstractJackson2HttpMessageConverter {
+   	...
+   }
+   ```
+
+### 二、关于HttpMessageConverters的初始化
