@@ -4531,7 +4531,708 @@ public interface HttpMessageConverter<T> {
 		</table>
 		```
 
-		
+
+## 二十四、视图解析之视图解析器与视图
+
+1. 视图解析原理流程
+
+   - 目标方法处理的过程中（阅读`DispatcherServlet`源码），所有数据都会被放在`ModelAndViewContainer`里面，其中包括数据和视图地址
+
+   - 方法的参数是一个自定义类型对象（从请求参数中确定的），把他重新放在`ModelAndViewContainer` 
+
+   - 任何目标方法执行完成以后都会返回`ModelAndView`（数据和视图地址）
+
+   - `processDispatchResult()`处理派发结果（页面该如何响应）
+
+     - `render(mv, request, response);` 进行页面渲染逻辑
+
+       - 根据方法的`String`返回值得到`View`对象（定义了页面的渲染逻辑）
+
+       1. 所有的视图解析器尝试是否能根据当前返回值得到`View`对象
+       2. 得到了  `redirect:/main.html --> Thymeleaf new RedirectView()`。
+       3. `ContentNegotiationViewResolver` 里面包含了下面所有的视图解析器，内部还是利用视图解析器得到视图对象
+       4. `view.render(mv.getModelInternal(), request, response);`视图对象调用自定义的render进行页面渲染工作
+
+       - `RedirectView` 如何渲染（重定向到一个页面）
+       - 获取目标url地址	
+       - `response.sendRedirect(encodedURL);`
+
+2. 视图解析
+
+   - 返回值以`forward:`开始：`new InternalResourceView(forwardUrl);` --> 转发`request.getRequestDispatcher(path).forward(request, response);` 
+   - 返回值以`redirect:`开始：`new RedirectView()` --> render就是重定向
+   - 返回值是普通字符串：`new ThymeleafView()` --> 
+
+## 二十五、拦截器之登录检查与静态资源放行
+
+- 编写一个拦截器实现`HandlerInterceptor`接口
+- 拦截器注册到容器中（实现`WebMvcConfigurer`的`addInterceptors()`）
+- 指定拦截规则（注意，如果是拦截所有，静态资源也会被拦截）
+
+1. 编写一个实现`HandlerInterceptor`接口的拦截器：
+
+   ```java
+   @Slf4j
+   public class LoginInterceptor implements HandlerInterceptor {
+   
+       /**
+        * 目标方法执行之前
+        */
+       @Override
+       public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+   
+           String requestURI = request.getRequestURI();
+           log.info("preHandle拦截的请求路径是{}",requestURI);
+   
+           //登录检查逻辑
+           HttpSession session = request.getSession();
+   
+           Object loginUser = session.getAttribute("loginUser");
+   
+           if(loginUser != null){
+               //放行
+               return true;
+           }
+   
+           //拦截住。未登录。跳转到登录页
+           request.setAttribute("msg","请先登录");
+   	   //re.sendRedirect("/");
+           request.getRequestDispatcher("/").forward(request,response);
+           return false;
+       }
+   
+       /**
+        * 目标方法执行完成以后
+        */
+       @Override
+       public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) throws Exception {
+           log.info("postHandle执行{}",modelAndView);
+       }
+   
+       /**
+        * 页面渲染以后
+        */
+       @Override
+       public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
+           log.info("afterCompletion执行异常{}",ex);
+       }
+   }
+   ```
+
+2. 拦截器注册到容器中与指定拦截规则：
+
+   ```java
+   @Configuration
+   public class AdminWebConfig implements WebMvcConfigurer{
+       @Override
+       public void addInterceptors(InterceptorRegistry registry) {
+           registry.addInterceptor(new LoginInterceptor())//拦截器注册到容器中
+                   .addPathPatterns("/**")  //所有请求都被拦截包括静态资源
+                   .excludePathPatterns("/","/login","/css/**","/fonts/**","/images/**",
+                           "/js/**","/aa/**"); //放行的请求
+   }
+   ```
+
+## 二十六、拦截器之拦截器的执行时机和原理
+
+1. 根据当前请求，找到`HandlerExecutionChain`（可以处理请求的handler以及handler的所有拦截器）
+2. 先来顺序执行所有拦截器的`preHandle()`方法
+   - 如果当前拦截器`preHandle()`返回为`true`，则执行下一个拦截器的`preHandle()`
+   - 如果当前拦截器返回为`false`，直接倒序执行所有已经执行了的拦截器的`afterCompletion()`
+3. 如果任何一个拦截器返回`false`，直接跳出不执行目标方法
+4. 所有拦截器都返回`true`，才执行目标方法
+5. 倒序执行所有拦截器的`postHandle()`方法
+6. 前面的步骤有任何异常都会直接倒序触发`afterCompletion()`
+7. 页面成功渲染完成以后，也会倒序触发`afterCompletion()`
+
+- 执行逻辑图
+
+  ![在这里插入图片描述](../../../TyporaImage/springboot/20210205011212637.png)
+
+- `DispatcherServle`中涉及到`HandlerInterceptor`的地方：
+
+  ```java
+  public class DispatcherServlet extends FrameworkServlet {
+      
+      ...
+      
+  	protected void doDispatch(HttpServletRequest request, HttpServletResponse response) throws Exception {
+  		HttpServletRequest processedRequest = request;
+  		HandlerExecutionChain mappedHandler = null;
+  		boolean multipartRequestParsed = false;
+  
+  		WebAsyncManager asyncManager = WebAsyncUtils.getAsyncManager(request);
+  
+  		try {
+  			ModelAndView mv = null;
+  			Exception dispatchException = null;
+  
+              	...
+              
+                    //该方法内调用HandlerInterceptor的preHandle()
+  				if (!mappedHandler.applyPreHandle(processedRequest, response)) {
+  					return;
+  				}
+  
+  				// Actually invoke the handler.
+  				mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
+  
+              	...
+                    //该方法内调用HandlerInterceptor的postHandle()
+  				mappedHandler.applyPostHandle(processedRequest, response, mv);
+  			}			
+          	processDispatchResult(processedRequest, response, mappedHandler, mv, dispatchException);
+  		}
+  		catch (Exception ex) {
+               //该方法内调用HandlerInterceptor接口的afterCompletion方法
+  			triggerAfterCompletion(processedRequest, response, mappedHandler, ex);
+  		}
+  		catch (Throwable err) {
+               //该方法内调用HandlerInterceptor接口的afterCompletion方法
+  			triggerAfterCompletion(processedRequest, response, mappedHandler,
+  					new NestedServletException("Handler processing failed", err));
+  		}
+  		finally {
+  			...
+  		}
+  	}
+  
+  	private void triggerAfterCompletion(HttpServletRequest request, HttpServletResponse response,
+  			@Nullable HandlerExecutionChain mappedHandler, Exception ex) throws Exception {
+  
+  		if (mappedHandler != null) {
+              //该方法内调用HandlerInterceptor接口的afterCompletion方法
+  			mappedHandler.triggerAfterCompletion(request, response, ex);
+  		}
+  		throw ex;
+  	}
+  
+  	private void processDispatchResult(HttpServletRequest request, HttpServletResponse response,
+  			@Nullable HandlerExecutionChain mappedHandler, @Nullable ModelAndView mv,
+  			@Nullable Exception exception) throws Exception {
+  
+          ...
+  
+  		if (mappedHandler != null) {
+               //该方法内调用HandlerInterceptor接口的afterCompletion方法
+  			// Exception (if any) is already handled..
+  			mappedHandler.triggerAfterCompletion(request, response, null);
+  		}
+  	}
+  
+  
+  }
+  ```
+
+  ```java
+  public class HandlerExecutionChain {
+      
+      ...
+      
+  	boolean applyPreHandle(HttpServletRequest request, HttpServletResponse response) throws Exception {
+  		for (int i = 0; i < this.interceptorList.size(); i++) {
+  			HandlerInterceptor interceptor = this.interceptorList.get(i);
+              //HandlerInterceptor的preHandle方法
+  			if (!interceptor.preHandle(request, response, this.handler)) {
+                  
+  				triggerAfterCompletion(request, response, null);
+  				return false;
+  			}
+  			this.interceptorIndex = i;
+  		}
+  		return true;
+  	}
+      
+     	void applyPostHandle(HttpServletRequest request, HttpServletResponse response, @Nullable ModelAndView mv)
+  			throws Exception {
+  
+  		for (int i = this.interceptorList.size() - 1; i >= 0; i--) {
+  			HandlerInterceptor interceptor = this.interceptorList.get(i);
+              
+              //HandlerInterceptor接口的postHandle方法
+  			interceptor.postHandle(request, response, this.handler, mv);
+  		}
+  	}
+      
+      void triggerAfterCompletion(HttpServletRequest request, HttpServletResponse response, @Nullable Exception ex) {
+  		for (int i = this.interceptorIndex; i >= 0; i--) {
+  			HandlerInterceptor interceptor = this.interceptorList.get(i);
+  			try {
+                  //HandlerInterceptor接口的afterCompletion方法
+  				interceptor.afterCompletion(request, response, this.handler, ex);
+  			}
+  			catch (Throwable ex2) {
+  				logger.error("HandlerInterceptor.afterCompletion threw exception", ex2);
+  			}
+  		}
+  	}  
+  } 
+  ```
+
+## 二十七、文件上传之单文件与多文件上传的使用
+
+1. 页面代码`/static/form/form_layouts.html`
+
+   ```html
+   <form role="form" th:action="@{/upload}" method="post" enctype="multipart/form-data">
+       <div class="form-group">
+           <label for="exampleInputEmail1">邮箱</label>
+           <input type="email" name="email" class="form-control" id="exampleInputEmail1" placeholder="Enter email">
+       </div>
+       
+       <div class="form-group">
+           <label for="exampleInputPassword1">名字</label>
+           <input type="text" name="username" class="form-control" id="exampleInputPassword1" placeholder="Password">
+       </div>
+       
+       <div class="form-group">
+           <label for="exampleInputFile">头像</label>
+           <input type="file" name="headerImg" id="exampleInputFile">
+       </div>
+       
+       <div class="form-group">
+           <label for="exampleInputFile">生活照</label>
+           <input type="file" name="photos" multiple>
+       </div>
+       
+       <div class="checkbox">
+           <label>
+               <input type="checkbox"> Check me out
+           </label>
+       </div>
+       <button type="submit" class="btn btn-primary">提交</button>
+   </form>
+   ```
+
+2. 控制层代码
+
+   ```java
+   @Slf4j
+   @Controller
+   public class FormTestController {
+   
+       @GetMapping("/form_layouts")
+       public String form_layouts(){
+           return "form/form_layouts";
+       }
+   
+       @PostMapping("/upload")
+       public String upload(@RequestParam("email") String email,
+                            @RequestParam("username") String username,
+                            @RequestPart("headerImg") MultipartFile headerImg,
+                            @RequestPart("photos") MultipartFile[] photos) throws IOException {
+   
+           log.info("上传的信息：email={}，username={}，headerImg={}，photos={}",
+                    email,username,headerImg.getSize(),photos.length);
+   
+           if(!headerImg.isEmpty()){
+               //保存到文件服务器，OSS服务器
+               String originalFilename = headerImg.getOriginalFilename();
+               headerImg.transferTo(new File("H:\\cache\\"+originalFilename));
+           }
+   
+           if(photos.length > 0){
+               for (MultipartFile photo : photos) {
+                   if(!photo.isEmpty()){
+                       String originalFilename = photo.getOriginalFilename();
+                       photo.transferTo(new File("H:\\cache\\"+originalFilename));
+                   }
+               }
+           }
+           return "main";
+       }
+   }
+   ```
+
+3. 文件上传相关的配置类：
+
+   ```java
+   org.springframework.boot.autoconfigure.web.servlet.MultipartAutoConfiguration
+   org.springframework.boot.autoconfigure.web.servlet.MultipartProperties
+   ```
+
+4. 文件大小相关配置项：
+
+   ```properties
+   spring.servlet.multipart.max-file-size=10MB 
+   # 设置上传文件的最大大小，默认为 1MB
+   spring.servlet.multipart.max-request-size=100MB
+   # 设置请求中最大允许的文件大小，默认为 10MB 
+   ```
+
+## 二十八、文件上传之文件上传参数解析器
+
+- 文件上传相关的自动配置类`MultipartAutoConfiguration`有创建文件上传参数解析器`StandardServletMultipartResolver`
+
+  ```java
+  @Configuration(proxyBeanMethods = false)
+  @ConditionalOnClass({ Servlet.class, StandardServletMultipartResolver.class, MultipartConfigElement.class })
+  @ConditionalOnProperty(prefix = "spring.servlet.multipart", name = "enabled", matchIfMissing = true)
+  @ConditionalOnWebApplication(type = Type.SERVLET)
+  @EnableConfigurationProperties(MultipartProperties.class)
+  public class MultipartAutoConfiguration {
+  
+  	private final MultipartProperties multipartProperties;
+  
+  	public MultipartAutoConfiguration(MultipartProperties multipartProperties) {
+  		this.multipartProperties = multipartProperties;
+  	}
+  
+  	@Bean
+  	@ConditionalOnMissingBean({ MultipartConfigElement.class, CommonsMultipartResolver.class })
+  	public MultipartConfigElement multipartConfigElement() {
+  		return this.multipartProperties.createMultipartConfig();
+  	}
+  
+  	@Bean(name = DispatcherServlet.MULTIPART_RESOLVER_BEAN_NAME)
+  	@ConditionalOnMissingBean(MultipartResolver.class)
+  	public StandardServletMultipartResolver multipartResolver() {
+          //配置好文件上传解析器
+  		StandardServletMultipartResolver multipartResolver = new StandardServletMultipartResolver();
+  		multipartResolver.setResolveLazily(this.multipartProperties.isResolveLazily());
+  		return multipartResolver;
+  	}
+  
+  }
+  ```
+
+  ```java
+  //文件上传解析器
+  public class StandardServletMultipartResolver implements MultipartResolver {
+  
+  	private boolean resolveLazily = false;
+  
+  	public void setResolveLazily(boolean resolveLazily) {
+  		this.resolveLazily = resolveLazily;
+  	}
+  
+  
+  	@Override
+  	public boolean isMultipart(HttpServletRequest request) {
+  		return StringUtils.startsWithIgnoreCase(request.getContentType(), "multipart/");
+  	}
+  
+  	@Override
+  	public MultipartHttpServletRequest resolveMultipart(HttpServletRequest request) throws MultipartException {
+  		return new StandardMultipartHttpServletRequest(request, this.resolveLazily);
+  	}
+  
+  	@Override
+  	public void cleanupMultipart(MultipartHttpServletRequest request) {
+  		if (!(request instanceof AbstractMultipartHttpServletRequest) ||
+  				((AbstractMultipartHttpServletRequest) request).isResolved()) {
+  			// To be on the safe side: explicitly delete the parts,
+  			// but only actual file parts (for Resin compatibility)
+  			try {
+  				for (Part part : request.getParts()) {
+  					if (request.getFile(part.getName()) != null) {
+  						part.delete();
+  					}
+  				}
+  			}
+  			catch (Throwable ex) {
+  				LogFactory.getLog(getClass()).warn("Failed to perform cleanup of multipart items", ex);
+  			}
+  		}
+  	}
+  
+  }
+  ```
+
+  ```java
+  public class DispatcherServlet extends FrameworkServlet {
+      
+      @Nullable
+  	private MultipartResolver multipartResolver;
+      
+  	private void initMultipartResolver(ApplicationContext context) {
+  		...
+          
+          //这个就是配置类配置的StandardServletMultipartResolver文件上传解析器
+  		this.multipartResolver = context.getBean(MULTIPART_RESOLVER_BEAN_NAME, MultipartResolver.class);
+  		...
+  	}
+      
+  	protected void doDispatch(HttpServletRequest request, HttpServletResponse response) throws Exception {
+  		HttpServletRequest processedRequest = request;
+  		HandlerExecutionChain mappedHandler = null;
+  		boolean multipartRequestParsed = false;//最后finally的回收flag
+  		...
+  		try {
+  			ModelAndView mv = null;
+  			Exception dispatchException = null;
+  
+  			try {
+                  //做预处理,如果有上传文件 就new StandardMultipartHttpServletRequest包装类
+  				processedRequest = checkMultipart(request);
+  				multipartRequestParsed = (processedRequest != request);
+  				// Determine handler for the current request.
+  				mappedHandler = getHandler(processedRequest);
+  				
+                  ...
+  
+  				// Determine handler adapter for the current request.
+  				HandlerAdapter ha = getHandlerAdapter(mappedHandler.getHandler());
+  
+  				...
+  
+  				// Actually invoke the handler.
+  				mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
+                  
+              }
+              ....
+              
+  		finally {
+  
+              ...
+              
+              if (multipartRequestParsed) {
+                  cleanupMultipart(processedRequest);
+              }
+  		}
+  	}
+  
+  	protected HttpServletRequest checkMultipart(HttpServletRequest request) throws MultipartException {
+  		if (this.multipartResolver != null && this.multipartResolver.isMultipart(request)) {
+              ...
+  			return this.multipartResolver.resolveMultipart(request);
+              ...
+  		}
+      }
+  
+  	protected void cleanupMultipart(HttpServletRequest request) {
+  		if (this.multipartResolver != null) {
+  			MultipartHttpServletRequest multipartRequest =
+  					WebUtils.getNativeRequest(request, MultipartHttpServletRequest.class);
+  			if (multipartRequest != null) {
+  				this.multipartResolver.cleanupMultipart(multipartRequest);
+  			}
+  		}
+  	}
+  }
+  ```
+
+- `mv = ha.handle(processedRequest, response, mappedHandler.getHandler());`跳到以下的类
+
+  ```java
+  public class RequestMappingHandlerAdapter extends AbstractHandlerMethodAdapter
+  		implements BeanFactoryAware, InitializingBean {
+  	@Override
+  	protected ModelAndView handleInternal(HttpServletRequest request,
+  			HttpServletResponse response, HandlerMethod handlerMethod) throws Exception {
+  		ModelAndView mav;
+  		...
+  		mav = invokeHandlerMethod(request, response, handlerMethod);
+          ...
+  		return mav;
+  	}
+      
+      @Nullable
+  	protected ModelAndView invokeHandlerMethod(HttpServletRequest request,
+  			HttpServletResponse response, HandlerMethod handlerMethod) throws Exception {
+  
+  		ServletWebRequest webRequest = new ServletWebRequest(request, response);
+  		try {
+  			WebDataBinderFactory binderFactory = getDataBinderFactory(handlerMethod);
+  			ModelFactory modelFactory = getModelFactory(handlerMethod, binderFactory);
+  
+  			ServletInvocableHandlerMethod invocableMethod = createInvocableHandlerMethod(handlerMethod);
+  			if (this.argumentResolvers != null) {//关注点
+  				invocableMethod.setHandlerMethodArgumentResolvers(this.argumentResolvers);
+  			}
+  			...
+  			invocableMethod.invokeAndHandle(webRequest, mavContainer);
+  			...
+  
+  			return getModelAndView(mavContainer, modelFactory, webRequest);
+  		}
+  		finally {
+  			webRequest.requestCompleted();
+  		}
+  	}
+  }
+  ```
+
+- `this.argumentResolvers`其中主角类`RequestPartMethodArgumentResolver`用来生成
+
+  ```java
+  public class ServletInvocableHandlerMethod extends InvocableHandlerMethod {
+      
+      ...
+  	public void invokeAndHandle(ServletWebRequest webRequest, ModelAndViewContainer mavContainer,
+  			Object... providedArgs) throws Exception {
+  		Object returnValue = invokeForRequest(webRequest, mavContainer, providedArgs);
+  		...
+  	}
+      
+  	@Nullable
+  	public Object invokeForRequest(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer,
+  			Object... providedArgs) throws Exception {
+  
+  		Object[] args = getMethodArgumentValues(request, mavContainer, providedArgs);
+  		...
+  		return doInvoke(args);//反射调用
+  	}
+      
+  	@Nullable
+  	protected Object doInvoke(Object... args) throws Exception {
+  		Method method = getBridgedMethod();
+  		ReflectionUtils.makeAccessible(method);
+  		return method.invoke(getBean(), args);
+  		...
+  	}
+      
+      //处理得出multipart参数，准备稍后的反射调用（@PostMapping标记的上传方法）
+      protected Object[] getMethodArgumentValues(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer,
+  			Object... providedArgs) throws Exception {
+  
+  		MethodParameter[] parameters = getMethodParameters();
+  		...
+  		Object[] args = new Object[parameters.length];
+  		for (int i = 0; i < parameters.length; i++) {
+  			MethodParameter parameter = parameters[i];
+  			parameter.initParameterNameDiscovery(this.parameterNameDiscoverer);
+  			args[i] = findProvidedArgument(parameter, providedArgs);
+  			if (args[i] != null) {
+  				continue;
+  			}
+              //关注点1
+  			if (!this.resolvers.supportsParameter(parameter)) {
+  				throw new IllegalStateException(formatArgumentError(parameter, "No suitable resolver"));
+  			}
+  			try {
+                  //关注点2
+  				args[i] = this.resolvers.resolveArgument(parameter, mavContainer, request, this.dataBinderFactory);
+  			}
+  			catch (Exception ex) {
+  				...
+  			}
+  		}
+  		return args;
+  	}
+      
+  }
+  ```
+
+  ```java
+  public class RequestPartMethodArgumentResolver extends AbstractMessageConverterMethodArgumentResolver {
+  
+      //对应上面代码关注点1
+      @Override
+  	public boolean supportsParameter(MethodParameter parameter) {
+          //标注@RequestPart的参数
+  		if (parameter.hasParameterAnnotation(RequestPart.class)) {
+  			return true;
+  		}
+  		else {
+  			if (parameter.hasParameterAnnotation(RequestParam.class)) {
+  				return false;
+  			}
+  			return MultipartResolutionDelegate.isMultipartArgument(parameter.nestedIfOptional());
+  		}
+  	}
+  
+      //对应上面代码关注点2
+  	@Override
+  	@Nullable
+  	public Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewContainer mavContainer,
+  			NativeWebRequest request, @Nullable WebDataBinderFactory binderFactory) throws Exception {
+  
+  		HttpServletRequest servletRequest = request.getNativeRequest(HttpServletRequest.class);
+  		Assert.state(servletRequest != null, "No HttpServletRequest");
+  
+  		RequestPart requestPart = parameter.getParameterAnnotation(RequestPart.class);
+  		boolean isRequired = ((requestPart == null || requestPart.required()) && !parameter.isOptional());
+  
+  		String name = getPartName(parameter, requestPart);
+  		parameter = parameter.nestedIfOptional();
+  		Object arg = null;
+  
+          //封装成MultipartFile类型的对象作参数
+  		Object mpArg = MultipartResolutionDelegate.resolveMultipartArgument(name, parameter, servletRequest);
+  		if (mpArg != MultipartResolutionDelegate.UNRESOLVABLE) {
+  			arg = mpArg;
+  		}
+          
+          ...
+  
+  		return adaptArgumentIfNecessary(arg, parameter);
+  	}
+  }
+  ```
+
+  ```java
+  public final class MultipartResolutionDelegate {
+      ...
+      
+  	@Nullable
+  	public static Object resolveMultipartArgument(String name, MethodParameter parameter, HttpServletRequest request)
+  			throws Exception {
+  
+  		MultipartHttpServletRequest multipartRequest =
+  				WebUtils.getNativeRequest(request, MultipartHttpServletRequest.class);
+  		boolean isMultipart = (multipartRequest != null || isMultipartContent(request));
+  
+  		if (MultipartFile.class == parameter.getNestedParameterType()) {
+  			if (!isMultipart) {
+  				return null;
+  			}
+  			if (multipartRequest == null) {
+  				multipartRequest = new StandardMultipartHttpServletRequest(request);
+  			}
+  			return multipartRequest.getFile(name);
+  		}
+  		else if (isMultipartFileCollection(parameter)) {
+  			if (!isMultipart) {
+  				return null;
+  			}
+  			if (multipartRequest == null) {
+  				multipartRequest = new StandardMultipartHttpServletRequest(request);
+  			}
+  			List<MultipartFile> files = multipartRequest.getFiles(name);
+  			return (!files.isEmpty() ? files : null);
+  		}
+  		else if (isMultipartFileArray(parameter)) {
+  			if (!isMultipart) {
+  				return null;
+  			}
+  			if (multipartRequest == null) {
+  				multipartRequest = new StandardMultipartHttpServletRequest(request);
+  			}
+  			List<MultipartFile> files = multipartRequest.getFiles(name);
+  			return (!files.isEmpty() ? files.toArray(new MultipartFile[0]) : null);
+  		}
+  		else if (Part.class == parameter.getNestedParameterType()) {
+  			if (!isMultipart) {
+  				return null;
+  			}
+  			return request.getPart(name);
+  		}
+  		else if (isPartCollection(parameter)) {
+  			if (!isMultipart) {
+  				return null;
+  			}
+  			List<Part> parts = resolvePartList(request, name);
+  			return (!parts.isEmpty() ? parts : null);
+  		}
+  		else if (isPartArray(parameter)) {
+  			if (!isMultipart) {
+  				return null;
+  			}
+  			List<Part> parts = resolvePartList(request, name);
+  			return (!parts.isEmpty() ? parts.toArray(new Part[0]) : null);
+  		}
+  		else {
+  			return UNRESOLVABLE;
+  		}
+  	}
+      
+      ...
+      
+  }
+  ```
+
+## 二十九、错误处理之SpringBoot默认错误处理机制
 
 
 
