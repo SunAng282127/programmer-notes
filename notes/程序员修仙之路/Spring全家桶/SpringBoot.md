@@ -3287,7 +3287,7 @@ public interface HttpMessageConverter<T> {
 
 ```
 
-5. `HttpMessageConverter`: 看是否支持将此`Class`类型的对象，转为`MediaType`类型的数据。比如：`Person`对象转为`JSON`，或者`JSON`转为`Person`，这将用到`MappingJackson2HttpMessageConverter`
+5. `HttpMessageConverter`：看是否支持将此`Class`类型的对象，转为`MediaType`类型的数据。比如：`Person`对象转为`JSON`，或者`JSON`转为`Person`，这将用到`MappingJackson2HttpMessageConverter`
 
    ![在这里插入图片描述](../../../TyporaImage/SpringBoot/20210205010509984.png)
 
@@ -3298,3 +3298,1240 @@ public interface HttpMessageConverter<T> {
    ```
 
 ### 二、关于HttpMessageConverters的初始化
+
+1. `DispatcherServlet`的初始化时会调用`initHandlerAdapters(ApplicationContext context)`
+
+	```java
+	public class DispatcherServlet extends FrameworkServlet {
+	    
+	    ...
+	    
+		private void initHandlerAdapters(ApplicationContext context) {
+			this.handlerAdapters = null;
+	
+			if (this.detectAllHandlerAdapters) {
+				// Find all HandlerAdapters in the ApplicationContext, including ancestor contexts.
+				Map<String, HandlerAdapter> matchingBeans =
+						BeanFactoryUtils.beansOfTypeIncludingAncestors(context, HandlerAdapter.class, true, false);
+				if (!matchingBeans.isEmpty()) {
+					this.handlerAdapters = new ArrayList<>(matchingBeans.values());
+					// We keep HandlerAdapters in sorted order.
+					AnnotationAwareOrderComparator.sort(this.handlerAdapters);
+				}
+			}
+	      ...
+	```
+
+2. 上述代码会加载`ApplicationContext`的所有`HandlerAdapter`，用来处理`@RequestMapping`的`RequestMappingHandlerAdapter`实现`HandlerAdapter`接口，`RequestMappingHandlerAdapter`也被实例化
+
+	```java
+	public class RequestMappingHandlerAdapter extends AbstractHandlerMethodAdapter
+			implements BeanFactoryAware, InitializingBean {
+	    
+	    ...
+	
+	    private List<HttpMessageConverter<?>> messageConverters;
+	    
+	    ...
+	    
+		public RequestMappingHandlerAdapter() {
+			this.messageConverters = new ArrayList<>(4);
+			this.messageConverters.add(new ByteArrayHttpMessageConverter());
+			this.messageConverters.add(new StringHttpMessageConverter());
+			if (!shouldIgnoreXml) {
+				try {
+					this.messageConverters.add(new SourceHttpMessageConverter<>());
+				}
+				catch (Error err) {
+					// Ignore when no TransformerFactory implementation is available
+				}
+			}
+			this.messageConverters.add(new AllEncompassingFormHttpMessageConverter());
+		}
+	```
+
+3. 在构造器中看到一堆`HttpMessageConverter`。接着，重点查看`AllEncompassingFormHttpMessageConverter`类
+
+	```java
+	public class AllEncompassingFormHttpMessageConverter extends FormHttpMessageConverter {
+	
+		/**
+		 * Boolean flag controlled by a {@code spring.xml.ignore} system property that instructs Spring to
+		 * ignore XML, i.e. to not initialize the XML-related infrastructure.
+		 * <p>The default is "false".
+		 */
+		private static final boolean shouldIgnoreXml = SpringProperties.getFlag("spring.xml.ignore");
+	
+		private static final boolean jaxb2Present;
+	
+		private static final boolean jackson2Present;
+	
+		private static final boolean jackson2XmlPresent;
+	
+		private static final boolean jackson2SmilePresent;
+	
+		private static final boolean gsonPresent;
+	
+		private static final boolean jsonbPresent;
+	
+		private static final boolean kotlinSerializationJsonPresent;
+	
+		static {
+			ClassLoader classLoader = AllEncompassingFormHttpMessageConverter.class.getClassLoader();
+			jaxb2Present = ClassUtils.isPresent("javax.xml.bind.Binder", classLoader);
+			jackson2Present = ClassUtils.isPresent("com.fasterxml.jackson.databind.ObjectMapper", classLoader) &&
+							ClassUtils.isPresent("com.fasterxml.jackson.core.JsonGenerator", classLoader);
+			jackson2XmlPresent = ClassUtils.isPresent("com.fasterxml.jackson.dataformat.xml.XmlMapper", classLoader);
+			jackson2SmilePresent = ClassUtils.isPresent("com.fasterxml.jackson.dataformat.smile.SmileFactory", classLoader);
+			gsonPresent = ClassUtils.isPresent("com.google.gson.Gson", classLoader);
+			jsonbPresent = ClassUtils.isPresent("javax.json.bind.Jsonb", classLoader);
+			kotlinSerializationJsonPresent = ClassUtils.isPresent("kotlinx.serialization.json.Json", classLoader);
+		}
+	
+	
+		public AllEncompassingFormHttpMessageConverter() {
+			if (!shouldIgnoreXml) {
+				try {
+					addPartConverter(new SourceHttpMessageConverter<>());
+				}
+				catch (Error err) {
+					// Ignore when no TransformerFactory implementation is available
+				}
+	
+				if (jaxb2Present && !jackson2XmlPresent) {
+					addPartConverter(new Jaxb2RootElementHttpMessageConverter());
+				}
+			}
+	
+			if (jackson2Present) {
+				addPartConverter(new MappingJackson2HttpMessageConverter());//<----重点看这里
+			}
+			else if (gsonPresent) {
+				addPartConverter(new GsonHttpMessageConverter());
+			}
+			else if (jsonbPresent) {
+				addPartConverter(new JsonbHttpMessageConverter());
+			}
+			else if (kotlinSerializationJsonPresent) {
+				addPartConverter(new KotlinSerializationJsonHttpMessageConverter());
+			}
+	
+			if (jackson2XmlPresent && !shouldIgnoreXml) {
+				addPartConverter(new MappingJackson2XmlHttpMessageConverter());
+			}
+	
+			if (jackson2SmilePresent) {
+				addPartConverter(new MappingJackson2SmileHttpMessageConverter());
+			}
+		}
+	
+	}
+	
+	public class FormHttpMessageConverter implements HttpMessageConverter<MultiValueMap<String, ?>> {
+	    
+	    ...
+	        
+	    private List<HttpMessageConverter<?>> partConverters = new ArrayList<>();
+	    
+	    ...
+	        
+	    public void addPartConverter(HttpMessageConverter<?> partConverter) {
+			Assert.notNull(partConverter, "'partConverter' must not be null");
+			this.partConverters.add(partConverter);
+		}
+	    
+	    ...
+	}
+	
+	```
+
+4. 在`AllEncompassingFormHttpMessageConverter`类构造器看到`MappingJackson2HttpMessageConverter`类的实例化，`AllEncompassingFormHttpMessageConverter`包含`MappingJackson2HttpMessageConverter`
+
+### 三、ReturnValueHandler与MappingJackson2HttpMessageConverter关联
+
+1. `RequestMappingHandlerAdapter`的回顾
+
+	```java
+	public class RequestMappingHandlerAdapter extends AbstractHandlerMethodAdapter
+			implements BeanFactoryAware, InitializingBean {
+	    
+	    ...
+	    @Nullable
+		private HandlerMethodReturnValueHandlerComposite returnValueHandlers;//我们关注的returnValueHandlers
+	    
+	   	
+	    @Override
+		@Nullable//本方法在AbstractHandlerMethodAdapter
+		public final ModelAndView handle(HttpServletRequest request, HttpServletResponse response, Object handler)
+				throws Exception {
+	
+			return handleInternal(request, response, (HandlerMethod) handler);
+		}
+	        
+	    @Override
+		protected ModelAndView handleInternal(HttpServletRequest request,
+				HttpServletResponse response, HandlerMethod handlerMethod) throws Exception {
+			ModelAndView mav;
+	        ...
+	        mav = invokeHandlerMethod(request, response, handlerMethod);
+	        ...
+			return mav;
+		}
+	    
+	    @Nullable
+		protected ModelAndView invokeHandlerMethod(HttpServletRequest request,
+				HttpServletResponse response, HandlerMethod handlerMethod) throws Exception {
+	
+			ServletWebRequest webRequest = new ServletWebRequest(request, response);
+			try {
+				WebDataBinderFactory binderFactory = getDataBinderFactory(handlerMethod);
+				ModelFactory modelFactory = getModelFactory(handlerMethod, binderFactory);
+	
+				ServletInvocableHandlerMethod invocableMethod = createInvocableHandlerMethod(handlerMethod);
+				if (this.argumentResolvers != null) {
+					invocableMethod.setHandlerMethodArgumentResolvers(this.argumentResolvers);
+				}
+				if (this.returnValueHandlers != null) {//<---我们关注的returnValueHandlers
+					invocableMethod.setHandlerMethodReturnValueHandlers(this.returnValueHandlers);
+				}
+	            
+	            ...
+	            
+				invocableMethod.invokeAndHandle(webRequest, mavContainer);
+				if (asyncManager.isConcurrentHandlingStarted()) {
+					return null;
+				}
+	
+				return getModelAndView(mavContainer, modelFactory, webRequest);
+			}
+			finally {
+				webRequest.requestCompleted();
+			}
+		}
+	    
+	   @Override
+		public void afterPropertiesSet() {
+			// Do this first, it may add ResponseBody advice beans
+			
+	        ...
+	        
+			if (this.returnValueHandlers == null) {//赋值returnValueHandlers
+				List<HandlerMethodReturnValueHandler> handlers = getDefaultReturnValueHandlers();
+				this.returnValueHandlers = new HandlerMethodReturnValueHandlerComposite().addHandlers(handlers);
+			}
+		}
+	    
+	    private List<HandlerMethodReturnValueHandler> getDefaultReturnValueHandlers() {
+			List<HandlerMethodReturnValueHandler> handlers = new ArrayList<>(20);
+	
+			...
+			// Annotation-based return value types
+	        //这里就是 ReturnValueHandler与 MappingJackson2HttpMessageConverter关联 的关键点
+			handlers.add(new RequestResponseBodyMethodProcessor(getMessageConverters(),//<---MessageConverters也就传参传进来的
+					this.contentNegotiationManager, this.requestResponseBodyAdvice));//
+	        ...
+	
+			return handlers;
+		}
+	    
+	    //------
+	    
+	    public List<HttpMessageConverter<?>> getMessageConverters() {
+			return this.messageConverters;
+		}
+	    
+	    //RequestMappingHandlerAdapter构造器已初始化部分messageConverters
+	   	public RequestMappingHandlerAdapter() {
+			this.messageConverters = new ArrayList<>(4);
+			this.messageConverters.add(new ByteArrayHttpMessageConverter());
+			this.messageConverters.add(new StringHttpMessageConverter());
+			if (!shouldIgnoreXml) {
+				try {
+					this.messageConverters.add(new SourceHttpMessageConverter<>());
+				}
+				catch (Error err) {
+					// Ignore when no TransformerFactory implementation is available
+				}
+			}
+			this.messageConverters.add(new AllEncompassingFormHttpMessageConverter());
+		}
+	
+	    ...
+	              
+	}
+	```
+
+2. 应用中`WebMvcAutoConfiguration`（底层是`WebMvcConfigurationSupport`实现）传入更多`messageConverters`，其中就包含`MappingJackson2HttpMessageConverter`
+
+## 十八、响应处理之内容协商原理
+
+1. 根据客户端接收能力不同，返回不同媒体类型的数据
+
+2. 引入XML依赖
+
+	```xml
+	 <dependency>
+	     <groupId>com.fasterxml.jackson.dataformat</groupId>
+	     <artifactId>jackson-dataformat-xml</artifactId>
+	</dependency>
+	```
+
+3. 可用Postman软件分别测试返回json和xml：只需要改变请求头中Accept字段（`application/json`、`application/xml`）
+
+4. Http协议中规定的，Accept字段告诉服务器本客户端可以接收的数据类型
+
+5. 内容协商原理：
+
+	- 判断当前响应头中是否已经有确定的媒体类型`MediaType`
+	- 获取客户端（PostMan、浏览器）支持接收的内容类型（获取客户端Accept请求头字段`application/json`、`application/xml`等）。`contentNegotiationManager`：内容协商管理器 默认使用基于请求头的策略；`HeaderContentNegotiationStrategy`：确定客户端可以接收的内容类型 
+	- 遍历循环所有当前系统的 `MessageConverter`，看谁支持操作这个对象（例如，Person）
+	- 找到支持操作Person的`converter`，把`converter`支持的媒体类型统计出来
+	- 如果客户端需要`application/xml`，而服务端有10种`MediaType`，则进行内容协商的最佳匹配媒体类型，用支持将对象转为最佳匹配媒体类型的`converter`，调用它进行转化 
+
+	```java
+	
+	//RequestResponseBodyMethodProcessor继承这类
+	public abstract class AbstractMessageConverterMethodProcessor extends AbstractMessageConverterMethodArgumentResolver
+			implements HandlerMethodReturnValueHandler {
+	
+	    ...
+	    
+	    //跟上一节的代码一致
+	    protected <T> void writeWithMessageConverters(@Nullable T value, MethodParameter returnType,
+	                ServletServerHttpRequest inputMessage, ServletServerHttpResponse outputMessage)
+	                throws IOException, HttpMediaTypeNotAcceptableException, HttpMessageNotWritableException {
+	
+	            Object body;
+	            Class<?> valueType;
+	            Type targetType;
+	
+	            if (value instanceof CharSequence) {
+	                body = value.toString();
+	                valueType = String.class;
+	                targetType = String.class;
+	            }
+	            else {
+	                body = value;
+	                valueType = getReturnValueType(body, returnType);
+	                targetType = GenericTypeResolver.resolveType(getGenericType(returnType), returnType.getContainingClass());
+	            }
+	
+				...
+	
+	            //本节重点
+	            //内容协商（浏览器默认会以请求头(参数Accept)的方式告诉服务器他能接受什么样的内容类型）
+	            MediaType selectedMediaType = null;
+	            MediaType contentType = outputMessage.getHeaders().getContentType();
+	            boolean isContentTypePreset = contentType != null && contentType.isConcrete();
+	            if (isContentTypePreset) {
+	                if (logger.isDebugEnabled()) {
+	                    logger.debug("Found 'Content-Type:" + contentType + "' in response");
+	                }
+	                selectedMediaType = contentType;
+	            }
+	            else {
+	                HttpServletRequest request = inputMessage.getServletRequest();
+	                List<MediaType> acceptableTypes = getAcceptableMediaTypes(request);
+	                //服务器最终根据自己自身的能力，决定服务器能生产出什么样内容类型的数据
+	                List<MediaType> producibleTypes = getProducibleMediaTypes(request, valueType, targetType);
+	
+	                if (body != null && producibleTypes.isEmpty()) {
+	                    throw new HttpMessageNotWritableException(
+	                            "No converter found for return value of type: " + valueType);
+	                }
+	                List<MediaType> mediaTypesToUse = new ArrayList<>();
+	                for (MediaType requestedType : acceptableTypes) {
+	                    for (MediaType producibleType : producibleTypes) {
+	                        if (requestedType.isCompatibleWith(producibleType)) {
+	                            mediaTypesToUse.add(getMostSpecificMediaType(requestedType, producibleType));
+	                        }
+	                    }
+	                }
+	                if (mediaTypesToUse.isEmpty()) {
+	                    if (body != null) {
+	                        throw new HttpMediaTypeNotAcceptableException(producibleTypes);
+	                    }
+	                    if (logger.isDebugEnabled()) {
+	                        logger.debug("No match for " + acceptableTypes + ", supported: " + producibleTypes);
+	                    }
+	                    return;
+	                }
+	
+	                MediaType.sortBySpecificityAndQuality(mediaTypesToUse);
+	
+	                //选择一个MediaType
+	                for (MediaType mediaType : mediaTypesToUse) {
+	                    if (mediaType.isConcrete()) {
+	                        selectedMediaType = mediaType;
+	                        break;
+	                    }
+	                    else if (mediaType.isPresentIn(ALL_APPLICATION_MEDIA_TYPES)) {
+	                        selectedMediaType = MediaType.APPLICATION_OCTET_STREAM;
+	                        break;
+	                    }
+	                }
+	
+	                if (logger.isDebugEnabled()) {
+	                    logger.debug("Using '" + selectedMediaType + "', given " +
+	                            acceptableTypes + " and supported " + producibleTypes);
+	                }
+	            }
+	
+	        	
+	            if (selectedMediaType != null) {
+	                selectedMediaType = selectedMediaType.removeQualityValue();
+	                //本节主角：HttpMessageConverter
+	                for (HttpMessageConverter<?> converter : this.messageConverters) {
+	                    GenericHttpMessageConverter genericConverter = (converter instanceof GenericHttpMessageConverter ?
+	                            (GenericHttpMessageConverter<?>) converter : null);
+	                    
+	                    //判断是否可写
+	                    if (genericConverter != null ?
+	                            ((GenericHttpMessageConverter) converter).canWrite(targetType, valueType, selectedMediaType) :
+	                            converter.canWrite(valueType, selectedMediaType)) {
+	                        body = getAdvice().beforeBodyWrite(body, returnType, selectedMediaType,
+	                                (Class<? extends HttpMessageConverter<?>>) converter.getClass(),
+	                                inputMessage, outputMessage);
+	                        if (body != null) {
+	                            Object theBody = body;
+	                            LogFormatUtils.traceDebug(logger, traceOn ->
+	                                    "Writing [" + LogFormatUtils.formatValue(theBody, !traceOn) + "]");
+	                            addContentDispositionHeader(inputMessage, outputMessage);
+								//开始写入
+	                            if (genericConverter != null) {
+	                                genericConverter.write(body, targetType, selectedMediaType, outputMessage);
+	                            }
+	                            else {
+	                                ((HttpMessageConverter) converter).write(body, selectedMediaType, outputMessage);
+	                            }
+	                        }
+	                        else {
+	                            if (logger.isDebugEnabled()) {
+	                                logger.debug("Nothing to write: null body");
+	                            }
+	                        }
+	                        return;
+	                    }
+	                }
+	            }
+				...
+	        }
+	```
+
+## 十九、响应处理之基于请求参数的内容协商原理
+
+1. 书接上回：获取客户端（PostMan、浏览器）支持接收的内容类型（获取客户端Accept请求头字段`application/xml`）
+
+	- `contentNegotiationManager`：内容协商管理器 默认使用基于请求头的策略
+	- `HeaderContentNegotiationStrategy`：确定客户端可以接收的内容类型
+
+	```java
+	//RequestResponseBodyMethodProcessor继承这类
+	public abstract class AbstractMessageConverterMethodProcessor extends AbstractMessageConverterMethodArgumentResolver
+			implements HandlerMethodReturnValueHandler {
+	
+	    ...
+	    
+	    //跟上一节的代码一致
+	    protected <T> void writeWithMessageConverters(@Nullable T value, MethodParameter returnType,
+	                ServletServerHttpRequest inputMessage, ServletServerHttpResponse outputMessage)
+	                throws IOException, HttpMediaTypeNotAcceptableException, HttpMessageNotWritableException {
+	
+	            Object body;
+	            Class<?> valueType;
+	            Type targetType;
+	        
+	        	...
+	        
+	                    //本节重点
+	            //内容协商（浏览器默认会以请求头(参数Accept)的方式告诉服务器他能接受什么样的内容类型）
+	            MediaType selectedMediaType = null;
+	            MediaType contentType = outputMessage.getHeaders().getContentType();
+	            boolean isContentTypePreset = contentType != null && contentType.isConcrete();
+	            if (isContentTypePreset) {
+	                if (logger.isDebugEnabled()) {
+	                    logger.debug("Found 'Content-Type:" + contentType + "' in response");
+	                }
+	                selectedMediaType = contentType;
+	            }
+	            else {
+	                HttpServletRequest request = inputMessage.getServletRequest();
+	                List<MediaType> acceptableTypes = getAcceptableMediaTypes(request);
+	                //服务器最终根据自己自身的能力，决定服务器能生产出什么样内容类型的数据
+	                List<MediaType> producibleTypes = getProducibleMediaTypes(request, valueType, targetType);
+	            ...
+	            
+		}
+	    
+	    //在AbstractMessageConverterMethodArgumentResolver类内
+	   	private List<MediaType> getAcceptableMediaTypes(HttpServletRequest request)
+				throws HttpMediaTypeNotAcceptableException {
+	
+	        //内容协商管理器 默认使用基于请求头的策略
+			return this.contentNegotiationManager.resolveMediaTypes(new ServletWebRequest(request));
+		}
+	}
+	```
+
+	```java
+	public class ContentNegotiationManager implements ContentNegotiationStrategy, MediaTypeFileExtensionResolver {
+		
+	    ...
+	    
+	    public ContentNegotiationManager() {
+			this(new HeaderContentNegotiationStrategy());//内容协商管理器 默认使用基于请求头的策略
+		}
+	    
+	    @Override
+		public List<MediaType> resolveMediaTypes(NativeWebRequest request) throws HttpMediaTypeNotAcceptableException {
+			for (ContentNegotiationStrategy strategy : this.strategies) {
+				List<MediaType> mediaTypes = strategy.resolveMediaTypes(request);
+				if (mediaTypes.equals(MEDIA_TYPE_ALL_LIST)) {
+					continue;
+				}
+				return mediaTypes;
+			}
+			return MEDIA_TYPE_ALL_LIST;
+		}
+	    ...
+	    
+	}
+	```
+
+	```java
+	//基于请求头的策略
+	public class HeaderContentNegotiationStrategy implements ContentNegotiationStrategy {
+	
+		/**
+		 * {@inheritDoc}
+		 * @throws HttpMediaTypeNotAcceptableException if the 'Accept' header cannot be parsed
+		 */
+		@Override
+		public List<MediaType> resolveMediaTypes(NativeWebRequest request)
+				throws HttpMediaTypeNotAcceptableException {
+	
+			String[] headerValueArray = request.getHeaderValues(HttpHeaders.ACCEPT);
+			if (headerValueArray == null) {
+				return MEDIA_TYPE_ALL_LIST;
+			}
+	
+			List<String> headerValues = Arrays.asList(headerValueArray);
+			try {
+				List<MediaType> mediaTypes = MediaType.parseMediaTypes(headerValues);
+				MediaType.sortBySpecificityAndQuality(mediaTypes);
+				return !CollectionUtils.isEmpty(mediaTypes) ? mediaTypes : MEDIA_TYPE_ALL_LIST;
+			}
+			catch (InvalidMediaTypeException ex) {
+				throw new HttpMediaTypeNotAcceptableException(
+						"Could not parse 'Accept' header " + headerValues + ": " + ex.getMessage());
+			}
+		}
+	
+	}
+	```
+
+2. 开启浏览器参数方式内容协商功能
+
+	- 为了方便内容协商，开启基于请求参数的内容协商功能
+
+	```yaml
+	spring:
+	  mvc:
+	    contentnegotiation:
+	      favor-parameter: true  #开启请求参数内容协商模式
+	```
+
+	- 内容协商管理器，就会多了一个`ParameterContentNegotiationStrategy`（由Spring容器注入）
+
+	```java
+	public class ParameterContentNegotiationStrategy extends AbstractMappingContentNegotiationStrategy {
+	
+		private String parameterName = "format";//
+	
+	
+		/**
+		 * Create an instance with the given map of file extensions and media types.
+		 */
+		public ParameterContentNegotiationStrategy(Map<String, MediaType> mediaTypes) {
+			super(mediaTypes);
+		}
+	
+	
+		/**
+		 * Set the name of the parameter to use to determine requested media types.
+		 * <p>By default this is set to {@code "format"}.
+		 */
+		public void setParameterName(String parameterName) {
+			Assert.notNull(parameterName, "'parameterName' is required");
+			this.parameterName = parameterName;
+		}
+	
+		public String getParameterName() {
+			return this.parameterName;
+		}
+	
+	
+		@Override
+		@Nullable
+		protected String getMediaTypeKey(NativeWebRequest request) {
+			return request.getParameter(getParameterName());
+		}
+	    
+	    //---以下方法在AbstractMappingContentNegotiationStrategy类
+	    
+	    @Override
+		public List<MediaType> resolveMediaTypes(NativeWebRequest webRequest)
+				throws HttpMediaTypeNotAcceptableException {
+	
+			return resolveMediaTypeKey(webRequest, getMediaTypeKey(webRequest));
+		}
+	
+		/**
+		 * An alternative to {@link #resolveMediaTypes(NativeWebRequest)} that accepts
+		 * an already extracted key.
+		 * @since 3.2.16
+		 */
+		public List<MediaType> resolveMediaTypeKey(NativeWebRequest webRequest, @Nullable String key)
+				throws HttpMediaTypeNotAcceptableException {
+	
+			if (StringUtils.hasText(key)) {
+				MediaType mediaType = lookupMediaType(key);
+				if (mediaType != null) {
+					handleMatch(key, mediaType);
+					return Collections.singletonList(mediaType);
+				}
+				mediaType = handleNoMatch(webRequest, key);
+				if (mediaType != null) {
+					addMapping(key, mediaType);
+					return Collections.singletonList(mediaType);
+				}
+			}
+			return MEDIA_TYPE_ALL_LIST;
+		}
+	    
+	
+	}
+	```
+
+	- 然后，浏览器地址输入带format参数的URL
+
+	```html
+	http://localhost:8080/test/person?format=json
+	或
+	http://localhost:8080/test/person?format=xml
+	```
+
+	- 这样，后端会根据参数format的值，返回对应json或xml格式的数据
+
+## 二十、响应处理之自定义MessageConverter
+
+1. 实现多协议数据兼容。json、xml、x-sunsh（自创类型）
+
+	- `@ResponseBody` 响应数据出去，调用`RequestResponseBodyMethodProcessor`处理
+	- `Processor`处理方法返回值，通过`MessageConverter`处理
+
+	- 所有`MessageConverter`合起来可以支持各种媒体类型数据的操作（读、写）
+
+	- 内容协商找到最终的`messageConverter`
+
+2. SpringMVC实现功能，一个入口给容器中添加一个`WebMvcConfigurer`
+
+	```java
+	@Configuration(proxyBeanMethods = false)
+	public class WebConfig {
+	    @Bean
+	    public WebMvcConfigurer webMvcConfigurer(){
+	        return new WebMvcConfigurer() {
+	
+	            @Override
+	            public void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
+	                converters.add(new SunshMessageConverter());
+	            }
+	        }
+	    }
+	}
+	```
+
+	```java
+	
+	/**
+	 * 自定义的Converter
+	 */
+	public class SunshMessageConverter implements HttpMessageConverter<Person> {
+	
+	    @Override
+	    public boolean canRead(Class<?> clazz, MediaType mediaType) {
+	        return false;
+	    }
+	
+	    @Override
+	    public boolean canWrite(Class<?> clazz, MediaType mediaType) {
+	        return clazz.isAssignableFrom(Person.class);
+	    }
+	
+	    /**
+	     * 服务器要统计所有MessageConverter都能写出哪些内容类型
+	     *
+	     * application/x-guigu
+	     * @return
+	     */
+	    @Override
+	    public List<MediaType> getSupportedMediaTypes() {
+	        return MediaType.parseMediaTypes("application/x-sunsh");
+	    }
+	
+	    @Override
+	    public Person read(Class<? extends Person> clazz, HttpInputMessage inputMessage) throws IOException, HttpMessageNotReadableException {
+	        return null;
+	    }
+	
+	    @Override
+	    public void write(Person person, MediaType contentType, HttpOutputMessage outputMessage) throws IOException, HttpMessageNotWritableException {
+	        //自定义协议数据的写出
+	        String data = person.getUserName()+";"+person.getAge()+";"+person.getBirth();
+	
+	
+	        //写出去
+	        OutputStream body = outputMessage.getBody();
+	        body.write(data.getBytes());
+	    }
+	}
+	```
+
+	```java
+	import java.util.Date;
+	
+	@Controller
+	public class ResponseTestController {
+	
+	    /**
+	     * 1、浏览器发请求直接返回  xml  [application/xml]  jacksonXmlConverter
+	     * 2、如果是ajax请求则返回  json  [application/json]  jacksonJsonConverter
+	     * 3、如果Sunshapp发请求转返回自定义协议数据 [appliaction/x-sunsh] xxxxConverter
+	     *    属性值1;属性值2;
+	     *
+	     * 步骤：
+	     * 1、添加自定义的MessageConverter进系统底层
+	     * 2、系统底层就会统计出所有MessageConverter能操作哪些类型
+	     * 3、客户端内容协商 [sunsh--->sunsh]
+	     *
+	     * @return
+	     */
+	    @ResponseBody  
+	    //利用返回值处理器里面的消息转换器进行处理
+	    @GetMapping(value = "/test/person")
+	    public Person getPerson(){
+	        Person person = new Person();
+	        person.setAge(28);
+	        person.setBirth(new Date());
+	        person.setUserName("zhangsan");
+	        return person;
+	    }
+	
+	}
+	```
+
+3. 用Postman发送`/test/person`（请求头`Accept:application/x-sunsh`)，将返回自定义协议数据的写出
+
+## 二十一、响应处理之浏览器与PostMan内容协商完全适配
+
+1. 假设想基于自定义请求参数的自定义内容协商功能，换句话说就是在地址栏输入`http://localhost:8080/test/person?format=gg`返回数据，跟`http://localhost:8080/test/person`且请求头参数`Accept:application/x-sunsh`的返回自定义协议数据的一致
+
+	```java
+	@Configuration(proxyBeanMethods = false)
+	public class WebConfig /*implements WebMvcConfigurer*/ {
+	
+	    //1、WebMvcConfigurer定制化SpringMVC的功能
+	    @Bean
+	    public WebMvcConfigurer webMvcConfigurer(){
+	        return new WebMvcConfigurer() {
+	
+	            /**
+	             * 自定义内容协商策略
+	             * @param configurer
+	             */
+	            @Override
+	            public void configureContentNegotiation(ContentNegotiationConfigurer configurer) {
+	                //Map<String, MediaType> mediaTypes
+	                Map<String, MediaType> mediaTypes = new HashMap<>();
+	                mediaTypes.put("json",MediaType.APPLICATION_JSON);
+	                mediaTypes.put("xml",MediaType.APPLICATION_XML);
+	                //自定义媒体类型
+	                mediaTypes.put("gg",MediaType.parseMediaType("application/x-sunsh"));
+	                //指定支持解析哪些参数对应的哪些媒体类型
+	                ParameterContentNegotiationStrategy parameterStrategy = new ParameterContentNegotiationStrategy(mediaTypes);
+	//                parameterStrategy.setParameterName("ff");
+	
+	                //还需添加请求头处理策略，否则accept:application/json、application/xml则会失效
+	                HeaderContentNegotiationStrategy headeStrategy = new HeaderContentNegotiationStrategy();
+	
+	                configurer.strategies(Arrays.asList(parameterStrategy, headeStrategy));
+	            }
+	        }
+	    }
+	    
+	    ...
+	    
+	}
+	```
+
+2. 日后开发要注意，有可能我们添加的自定义的功能会覆盖默认很多功能，导致一些默认的功能失效
+
+## 二十二、视图解析之Thymeleaf初体验
+
+### 一、thymeleaf官方
+
+- [Thymeleaf官方文档](https://www.thymeleaf.org/documentation.html)
+
+### 二、thymeleaf使用
+
+1. 引入Starter
+
+	```xml
+	<dependency>
+	    <groupId>org.springframework.boot</groupId>
+	    <artifactId>spring-boot-starter-thymeleaf</artifactId>
+	</dependency>
+	```
+
+2. 自动配置好了thymeleaf
+
+	```java
+	@Configuration(proxyBeanMethods = false)
+	@EnableConfigurationProperties(ThymeleafProperties.class)
+	@ConditionalOnClass({ TemplateMode.class, SpringTemplateEngine.class })
+	@AutoConfigureAfter({ WebMvcAutoConfiguration.class, WebFluxAutoConfiguration.class })
+	public class ThymeleafAutoConfiguration {
+	    ...
+	}
+	```
+
+3. 自动配好的策略
+
+	- 所有`thymeleaf`的配置值都在`ThymeleafProperties`
+
+	- 配置好了`SpringTemplateEngine`
+
+	- 配好了`ThymeleafViewResolver`
+
+	- 我们只需要直接开发页面
+
+	- 配置页面所在的目录以及后缀名
+
+		```java
+		public static final String DEFAULT_PREFIX = "classpath:/templates/";//模板放置处
+		public static final String DEFAULT_SUFFIX = ".html";//文件的后缀名
+		```
+
+	- 自定义控制器
+
+		```java
+		@Controller
+		public class ViewTestController {
+		    @GetMapping("/hello")
+		    public String hello(Model model){
+		        //model中的数据会被放在请求域中 request.setAttribute("a",aa)
+		        model.addAttribute("msg","一定要大力发展工业文化");
+		        model.addAttribute("link","http://www.baidu.com");
+		        return "success";
+		    }
+		}
+		```
+
+	- `/templates/success.html`：
+
+		```html
+		<!DOCTYPE html>
+		<html lang="en" xmlns:th="http://www.thymeleaf.org">
+		<head>
+		    <meta charset="UTF-8">
+		    <title>Title</title>
+		</head>
+		<body>
+		<h1 th:text="${msg}">nice</h1>
+		<h2>
+		    <a href="www.baidu.com" th:href="${link}">去百度</a>  <br/>
+		    <a href="www.google.com" th:href="@{/link}">去百度</a>
+		</h2>
+		</body>
+		</html>
+		```
+
+	- 设置`context-path`，访问url时要写`/app`，如`http://localhost:8080/app/hello.html`
+
+### 三、thymeleaf基本语法
+
+1. 表达式
+
+	| 表达式名字 |                用途                |  语法  |
+	| :--------: | :--------------------------------: | :----: |
+	|  变量取值  |  获取请求域、session域、对象等值   | ${...} |
+	|  选择变量  |          获取上下文对象值          | *{...} |
+	|    消息    |           获取国际化等值           | #{...} |
+	|    链接    |              生成链接              | @{...} |
+	| 片段表达式 | jsp:include 作用，引入公共页面片段 | ~{...} |
+
+2. 字面量
+
+	- 文本值：'one text'、 'Another one!'、…
+	- 数字：0、4、3.0、12.3、…
+	- 布尔值：true、false
+	- 空值：null
+	- 变量：one、two、.... （变量不能有空格）
+
+3. 文本操作
+
+	- 字符串拼接：+
+	- 变量替换：The name is ${name} 
+
+4. 数学运算
+
+	- 运算符：+ , - , * , / , %
+
+5. 布尔运算
+
+	- 运算符：and、or
+	- 一元运算：!、not 
+
+6. 比较运算符
+
+	- 比较：>、<、>=、<=（gt、lt、ge、le）
+	- 等式：==、!=（eq、ne） 
+
+7. 条件运算
+
+	- If-then : (if) ? (then)
+	- If-then-else : (if) ? (then) : (else)
+	- Default : (value) ?: (defaultvalue) 
+
+8. 特殊操作
+
+	- 无操作：_
+
+9. 设置属性值 -> th:attr
+
+	- 设置单个值
+
+		```html
+		<form action="subscribe.html" th:attr="action=@{/subscribe}">
+		  <fieldset>
+		    <input type="text" name="email" />
+		    <input type="submit" value="Subscribe!" th:attr="value=#{subscribe.submit}"/>
+		  </fieldset>
+		</form>
+		```
+
+	- 设置多个值
+
+		```html
+		<img src="../../images/gtvglogo.png"  
+		     th:attr="src=@{/images/gtvglogo.png},title=#{logo},alt=#{logo}" />
+		```
+
+	- [官方文档 - 5 Setting Attribute Values](https://www.thymeleaf.org/doc/tutorials/3.0/usingthymeleaf.html#setting-attribute-values)
+
+10. 迭代
+
+	```html
+	<tr th:each="prod : ${prods}">
+	    <td th:text="${prod.name}">Onions</td>
+	    <td th:text="${prod.price}">2.41</td>
+	    <td th:text="${prod.inStock}? #{true} : #{false}">yes</td>
+	</tr>
+	
+	<tr th:each="prod,iterStat : ${prods}" th:class="${iterStat.odd}? 'odd'">
+	    <td th:text="${prod.name}">Onions</td>
+	    <td th:text="${prod.price}">2.41</td>
+	    <td th:text="${prod.inStock}? #{true} : #{false}">yes</td>
+	</tr>
+	```
+
+11. 条件运算
+
+	```html
+	<a href="comments.html"
+		th:href="@{/product/comments(prodId=${prod.id})}"
+		th:if="${not #lists.isEmpty(prod.comments)}">view</a>
+		
+	<div th:switch="${user.role}">
+	      <p th:case="'admin'">User is an administrator</p>
+	      <p th:case="#{roles.manager}">User is a manager</p>
+	      <p th:case="*">User is some other thing</p>
+	</div>
+	```
+
+12. 属性优先级
+
+	| Order | Feature                         | Attributes                                 |
+	| ----- | ------------------------------- | ------------------------------------------ |
+	| 1     | Fragment inclusion              | `th:insert` `th:replace`                   |
+	| 2     | Fragment iteration              | `th:each`                                  |
+	| 3     | Conditional evaluation          | `th:if` `th:unless` `th:switch` `th:case`  |
+	| 4     | Local variable definition       | `th:object` `th:with`                      |
+	| 5     | General attribute modification  | `th:attr` `th:attrprepend` `th:attrappend` |
+	| 6     | Specific attribute modification | `th:value` `th:href` `th:src` `...`        |
+	| 7     | Text (tag body modification)    | `th:text` `th:utext`                       |
+	| 8     | Fragment specification          | `th:fragment`                              |
+	| 9     | Fragment removal                | `th:remove`                                |
+
+	[官方文档 - 10 Attribute Precedence](https://www.thymeleaf.org/doc/tutorials/3.0/usingthymeleaf.html#attribute-precedence)
+
+## 二十三、web实验之后台管理系统基本功能
+
+1. 项目创建，使用IDEA的Spring Initializr
+
+	- thymeleaf、
+	- web-starter、
+	- devtools、
+	- lombok
+
+2. 登录页面
+
+	- `/static` 放置css、js等静态资源
+
+	- `/templates/login.html` 登录页
+
+		```html
+		<html lang="en" xmlns:th="http://www.thymeleaf.org"><!-- 要加这玩意thymeleaf才能用 -->
+		
+		<form class="form-signin" action="index.html" method="post" th:action="@{/login}">
+		
+		    ...
+		    
+		    <!-- 消息提醒 -->
+		    <label style="color: red" th:text="${msg}"></label>
+		    
+		    <input type="text" name="userName" class="form-control" placeholder="User ID" autofocus>
+		    <input type="password" name="password" class="form-control" placeholder="Password">
+		    
+		    <button class="btn btn-lg btn-login btn-block" type="submit">
+		        <i class="fa fa-check"></i>
+		    </button>
+		    
+		    ...
+		    
+		</form>
+		```
+
+3. `/templates/main.html` 主页
+
+	- thymeleaf内联写法：
+
+		```html
+		<p>Hello, [[${session.user.name}]]!</p>
+		```
+
+4. 登录控制层
+
+	```java
+	@Controller
+	public class IndexController {
+	    /**
+	     * 来登录页
+	     * @return
+	     */
+	    @GetMapping(value = {"/","/login"})
+	    public String loginPage(){
+	        return "login";
+	    }
+	
+	    @PostMapping("/login")
+	    public String main(User user, HttpSession session, Model model){ //RedirectAttributes
+	
+	        if(StringUtils.hasLength(user.getUserName()) && "123456".equals(user.getPassword())){
+	            //把登陆成功的用户保存起来
+	            session.setAttribute("loginUser",user);
+	            //登录成功重定向到main.html;  重定向防止表单重复提交
+	            return "redirect:/main.html";
+	        }else {
+	            model.addAttribute("msg","账号密码错误");
+	            //回到登录页面
+	            return "login";
+	        }
+	    }
+	    
+	     /**
+	     * 去main页面
+	     * @return
+	     */
+	    @GetMapping("/main.html")
+	    public String mainPage(HttpSession session, Model model){
+	        
+	        //最好用拦截器,过滤器
+	        Object loginUser = session.getAttribute("loginUser");
+	        if(loginUser != null){
+	        	return "main";
+	        }else {
+	            //session过期，没有登陆过
+	        	//回到登录页面
+		        model.addAttribute("msg","请重新登录");
+	    	    return "login";
+	        }
+	    }
+	    
+	}
+	```
+
+5. 模型
+
+	```java
+	@AllArgsConstructor
+	@NoArgsConstructor
+	@Data
+	public class User {
+	    private String userName;
+	    private String password;
+	}
+	```
+
+6. 抽取公共页面：[官方文档 - Template Layout](https://www.thymeleaf.org/doc/tutorials/3.0/usingthymeleaf.html#template-layout)
+
+	- 公共页面`/templates/common.html`
+
+		```html
+		<!DOCTYPE html>
+		<html lang="en" xmlns:th="http://www.thymeleaf.org"><!--注意要添加xmlns:th才能添加thymeleaf的标签-->
+		<head th:fragment="commonheader">
+		    <!--common-->
+		    <link href="css/style.css" th:href="@{/css/style.css}" rel="stylesheet">
+		    <link href="css/style-responsive.css" th:href="@{/css/style-responsive.css}" rel="stylesheet">
+		    ...
+		</head>
+		<body>
+		<!-- left side start-->
+		<div id="leftmenu" class="left-side sticky-left-side">
+			...
+		
+		    <div class="left-side-inner">
+				...
+		
+		        <!--sidebar nav start-->
+		        <ul class="nav nav-pills nav-stacked custom-nav">
+		            <li><a th:href="@{/main.html}"><i class="fa fa-home"></i> <span>Dashboard</span></a></li>
+		            ...
+		            <li class="menu-list nav-active"><a href="#"><i class="fa fa-th-list"></i> <span>Data Tables</span></a>
+		                <ul class="sub-menu-list">
+		                    <li><a th:href="@{/basic_table}"> Basic Table</a></li>
+		                    <li><a th:href="@{/dynamic_table}"> Advanced Table</a></li>
+		                    <li><a th:href="@{/responsive_table}"> Responsive Table</a></li>
+		                    <li><a th:href="@{/editable_table}"> Edit Table</a></li>
+		                </ul>
+		            </li>
+		            ...
+		        </ul>
+		        <!--sidebar nav end-->
+		    </div>
+		</div>
+		<!-- left side end-->
+		
+		
+		<!-- header section start-->
+		<div th:fragment="headermenu" class="header-section">
+		
+		    <!--toggle button start-->
+		    <a class="toggle-btn"><i class="fa fa-bars"></i></a>
+		    <!--toggle button end-->
+			...
+		
+		</div>
+		<!-- header section end-->
+		
+		<div id="commonscript">
+		    <!-- Placed js at the end of the document so the pages load faster -->
+		    <script th:src="@{/js/jquery-1.10.2.min.js}"></script>
+		    <script th:src="@{/js/jquery-ui-1.9.2.custom.min.js}"></script>
+		    <script th:src="@{/js/jquery-migrate-1.2.1.min.js}"></script>
+		    <script th:src="@{/js/bootstrap.min.js}"></script>
+		    <script th:src="@{/js/modernizr.min.js}"></script>
+		    <script th:src="@{/js/jquery.nicescroll.js}"></script>
+		    <!--common scripts for all pages-->
+		    <script th:src="@{/js/scripts.js}"></script>
+		</div>
+		</body>
+		</html>
+		```
+
+	- `/templates/table/basic_table.html`页面
+
+		```html
+		<!DOCTYPE html>
+		<html lang="en" xmlns:th="http://www.thymeleaf.org">
+		<head>
+		  <meta charset="utf-8">
+		  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+		  <meta name="description" content="">
+		  <meta name="author" content="ThemeBucket">
+		  <link rel="shortcut icon" href="#" type="image/png">
+		
+		  <title>Basic Table</title>
+		    <div th:include="common :: commonheader"> </div><!--将common.html的代码段 插进来-->
+		</head>
+		
+		<body class="sticky-header">
+		
+		<section>
+		<div th:replace="common :: #leftmenu"></div>
+		    
+		    <!-- main content start-->
+		    <div class="main-content" >
+		
+		        <div th:replace="common :: headermenu"></div>
+		        ...
+		    </div>
+		    <!-- main content end-->
+		</section>
+		
+		<!-- Placed js at the end of the document so the pages load faster -->
+		<div th:replace="common :: #commonscript"></div>
+		
+		
+		</body>
+		</html>
+		
+		```
+
+	- [Difference between `th:insert` and `th:replace` (and `th:include`)](https://www.thymeleaf.org/doc/tutorials/3.0/usingthymeleaf.html#difference-between-thinsert-and-threplace-and-thinclude)
+
+7. 遍历数据与页面bug修改
+
+	- 控制层代码
+
+		```java
+		@GetMapping("/dynamic_table")
+		public String dynamic_table(Model model){
+		    //表格内容的遍历
+		    List<User> users = Arrays.asList(new User("zhangsan", "123456"),
+		                                     new User("lisi", "123444"),
+		                                     new User("haha", "aaaaa"),
+		                                     new User("hehe ", "aaddd"));
+		    model.addAttribute("users",users);
+		
+		    return "table/dynamic_table";
+		}
+		```
+
+	- 页面代码
+
+		```html
+		<table class="display table table-bordered" id="hidden-table-info">
+		    <thead>
+		        <tr>
+		            <th>#</th>
+		            <th>用户名</th>
+		            <th>密码</th>
+		        </tr>
+		    </thead>
+		    <tbody>
+		        <tr class="gradeX" th:each="user,stats:${users}">
+		            <td th:text="${stats.count}">Trident</td>
+		            <td th:text="${user.userName}">Internet</td>
+		            <td >[[${user.password}]]</td>
+		        </tr>
+		    </tbody>
+		</table>
+		```
+
+		
+
+
+
