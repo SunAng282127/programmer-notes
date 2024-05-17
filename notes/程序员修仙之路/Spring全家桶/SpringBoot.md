@@ -7579,7 +7579,1014 @@ public class MyRegistConfig {
 
 # 十五、高级用法
 
+## 一、Profile环境切换
 
+1. 默认配置文件`application.yaml`任何时候都会加载
 
+2. 指定环境配置文件`application-{profile}.yaml`，`profile`通常替代为`test`、`prod`等
 
+3. 激活指定环境
 
+	- 配置文件激活：`spring.profiles.active=prod`
+	- 命令行激活：`java -jar xxx.jar --spring.profiles.active=prod --person.name=haha`（修改配置文件的任意值，命令行优先）
+
+4. 默认配置与环境配置同时生效
+
+5. 同名配置项，profile配置优先。比如`application.yaml`中有变量`person.name=haha`，并且`test`、`prod`中也有`person.name=haha`，那么优先使用`test`、`prod`中的
+
+6. `@Profile`条件装配功能
+
+	```java
+	@Data
+	@Component
+	@ConfigurationProperties("person")//在配置文件中配置
+	public class Person{
+	    private String name;
+	    private Integer age;
+	}
+	
+	public interface Person {
+	
+	   String getName();
+	   Integer getAge();
+	
+	}
+	
+	@Profile("test")//加载application-test.yaml里的
+	@Component
+	@ConfigurationProperties("person")
+	@Data
+	public class Worker implements Person {
+	
+	    private String name;
+	    private Integer age;
+	}
+	
+	@Profile(value = {"prod","default"})//加载application-prod.yaml里的
+	@Component
+	@ConfigurationProperties("person")
+	@Data
+	public class Boss implements Person {
+	
+	    private String name;
+	    private Integer age;
+	}
+	```
+
+	- application.properties
+
+	```yaml
+	person: 
+	  name: sunsh
+	  age: 8
+	```
+
+	- application-test.yaml
+
+	```yaml
+	person:
+	  name: test-张三
+	
+	server:
+	  port: 7000
+	```
+
+	- application-prod.yaml
+
+	```yaml
+	person:
+	  name: prod-张三
+	
+	server:
+	  port: 8000
+	```
+
+	- application.properties
+
+	```properties
+	# 激活prod配置文件
+	spring.profiles.active=prod
+	```
+
+	```java
+	@Autowired
+	private Person person;
+	
+	@GetMapping("/")
+	public String hello(){
+	    //激活了prod，则返回Boss；激活了test，则返回Worker
+	    return person.getClass().toString();
+	}
+	```
+
+	- @Profile还可以修饰在方法上：
+
+	```java
+	class Color {
+	}
+	
+	@Configuration
+	public class MyConfig {
+	
+	    @Profile("prod")
+	    @Bean
+	    public Color red(){
+	        return new Color();
+	    }
+	
+	    @Profile("test")
+	    @Bean
+	    public Color green(){
+	        return new Color();
+	    }
+	}
+	```
+
+	- 也可以同时激活一组：
+
+	```properties
+	spring.profiles.active=production
+	
+	spring.profiles.group.production[0]=proddb
+	spring.profiles.group.production[1]=prodmq
+	```
+
+## 二、配置加载优先级
+
+1. 外部化配置
+
+	- [官方文档 - Externalized Configuration](https://docs.spring.io/spring-boot/docs/2.4.2/reference/htmlsingle/#boot-features-external-config)
+
+	- 1优先级最低，14优先级最高
+
+	- 获得配置值的方式
+
+		```java
+		import org.springframework.stereotype.*;
+		import org.springframework.beans.factory.annotation.*;
+		
+		@Component
+		public class MyBean {
+		
+		    @Value("${name}")//以这种方式可以获得配置值
+		    private String name;
+		
+		    // ...
+		
+		}
+		```
+
+2. 配置加载优先级
+
+	- 外部配置源
+		- Java属性文件
+		- YAML文件
+		- 环境变量
+		- 命令行参数
+	- 配置文件查找位置
+		1. classpath根路径
+		2. classpath根路径下config目录
+		3. jar包当前目录
+		4. jar包当前目录的config目录
+		5. /config子目录的直接子目录
+	- 配置文件优先级
+		1. 命令行参数
+		2. `java:comp/env`的JNDI属性(当前J2EE应用的环境) 
+		3. JAVA系统的环境属性
+		4. 操作系统的环境变量
+		5. 引用的外部jar包的`application-{profile}.properties`和`application-{profile}.yml`
+		6. 当前jar包内部的`application-{profile}.properties`和`application-{profile}.yml`
+		7. 引用的外部jar包的`application.properties`和`application.yml`
+		8. 当前jar包内部的`application.properties`和`application.yml`
+		9. `@Configuration`注解类上的`@PropertySource`指定的配置文件 
+		10. 通过`SpringApplication.setDefaultProperties`指定的默认属性 
+	- 优先级低的配置会被先加载，所以优先级高的配置会覆盖优先级低的配置 
+	- 指定环境优先，外部优先，后面的可以覆盖前面的同名配置项
+	- 在同一级目录下，不同后缀配置文件的优先级：properties(最高) > yml > yaml(最低)
+	- 在同一级目录下，相同后缀配置文件的优先级：application-xxx.yml > application.yml 
+
+## 三、自定义starter细节
+
+1. starter启动原理
+
+	- starter的pom.xml引入autoconfigure依赖
+
+		```mermaid
+		graph LR
+		A[starter] -->B[autoconfigure]
+		B --> C[spring-boot-starter]
+		```
+
+	- autoconfigure包中配置使用`META-INF/spring.factories`中`EnableAutoConfiguration`的值，使得项目启动加载指定的自动配置类
+
+	- 编写自动配置类`xxxAutoConfiguration` -> `xxxxProperties`
+
+		- `@Configuration`
+		- `@Conditional`
+		- `@EnableConfigurationProperties`
+		- `@Bean`
+		- ......
+
+	- 引入starter -> `xxxAutoConfiguration` -> 容器中放入组件 -> `绑定xxxProperties` -> 配置项
+
+2. 自定义starter
+
+	- 目标：创建`HelloService`的自定义starter
+
+	- 创建两个工程，分别命名为`hello-spring-boot-starter`（普通Maven工程），`hello-spring-boot-starter-autoconfigure`（需用用到Spring Initializr创建的Maven工程）
+
+	- `hello-spring-boot-starter`无需编写什么代码，只需让该工程引入`hello-spring-boot-starter-autoconfigure`依赖：
+
+		```xml
+		<?xml version="1.0" encoding="UTF-8"?>
+		<project xmlns="http://maven.apache.org/POM/4.0.0"
+		         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+		    <modelVersion>4.0.0</modelVersion>
+		
+		    <groupId>com.lun</groupId>
+		    <artifactId>hello-spring-boot-starter</artifactId>
+		    <version>1.0.0-SNAPSHOT</version>
+		
+		    <dependencies>
+		        <dependency>
+		            <groupId>com.lun</groupId>
+		            <artifactId>hello-spring-boot-starter-autoconfigure</artifactId>
+		            <version>1.0.0-SNAPSHOT</version>
+		        </dependency>
+		    </dependencies>
+		
+		</project>
+		```
+
+	- `hello-spring-boot-starter-autoconfigure`的pom.xml如下：
+
+		```xml
+		<?xml version="1.0" encoding="UTF-8"?>
+		<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+			xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+			<modelVersion>4.0.0</modelVersion>
+			<parent>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-starter-parent</artifactId>
+				<version>2.4.2</version>
+				<relativePath/> <!-- lookup parent from repository -->
+			</parent>
+			<groupId>com.sunsh</groupId>
+			<artifactId>hello-spring-boot-starter-autoconfigure</artifactId>
+			<version>1.0.0-SNAPSHOT</version>
+			<name>hello-spring-boot-starter-autoconfigure</name>
+			<description>Demo project for Spring Boot</description>
+			<properties>
+				<java.version>1.8</java.version>
+			</properties>
+			<dependencies>
+				<dependency>
+					<groupId>org.springframework.boot</groupId>
+					<artifactId>spring-boot-starter</artifactId>
+				</dependency>
+			</dependencies>
+		</project>
+		```
+
+	- 创建4个文件：
+
+		- `com/sunsh/hello/auto/HelloServiceAutoConfiguration`
+		- `com/sunsh/hello/bean/HelloProperties`
+		- `com/sunsh/hello/service/HelloService`
+		- `src/main/resources/META-INF/spring.factories`
+
+		```java
+		import com.sunsh.hello.bean.HelloProperties;
+		import com.sunsh.hello.service.HelloService;
+		import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+		import org.springframework.boot.context.properties.EnableConfigurationProperties;
+		import org.springframework.context.annotation.Bean;
+		import org.springframework.context.annotation.Configuration;
+		
+		@Configuration
+		@ConditionalOnMissingBean(HelloService.class)
+		@EnableConfigurationProperties(HelloProperties.class)
+		//默认HelloProperties放在容器中
+		public class HelloServiceAutoConfiguration {
+		
+		    @Bean
+		    public HelloService helloService(){
+		        return new HelloService();
+		    }
+		
+		}
+		```
+
+		```java
+		import com.sunsh.hello.bean.HelloProperties;
+		import org.springframework.beans.factory.annotation.Autowired;
+		
+		
+		/**
+		 * 默认不要放在容器中
+		 */
+		public class HelloService {
+		
+		    @Autowired
+		    private HelloProperties helloProperties;
+		
+		    public String sayHello(String userName){
+		        return helloProperties.getPrefix() + ": " + userName + " > " + helloProperties.getSuffix();
+		    }
+		}
+		```
+
+		```properties
+		# Auto Configure
+		org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
+		com.sunsh.hello.auto.HelloServiceAutoConfiguration
+		```
+
+	- 用maven插件，将两工程install到本地
+
+	- 接下来，测试使用自定义starter，用Spring Initializr创建名为`hello-spring-boot-starter-test`工程，引入`hello-spring-boot-starter`依赖，其pom.xml如下：
+
+		```xml
+		<?xml version="1.0" encoding="UTF-8"?>
+		<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+		    <modelVersion>4.0.0</modelVersion>
+		    <parent>
+		        <groupId>org.springframework.boot</groupId>
+		        <artifactId>spring-boot-starter-parent</artifactId>
+		        <version>2.4.2</version>
+		        <relativePath/> <!-- lookup parent from repository -->
+		    </parent>
+		    <groupId>com.lun</groupId>
+		    <artifactId>hello-spring-boot-starter-test</artifactId>
+		    <version>1.0.0-SNAPSHOT</version>
+		    <name>hello-spring-boot-starter-test</name>
+		    <description>Demo project for Spring Boot</description>
+		    <properties>
+		        <java.version>1.8</java.version>
+		    </properties>
+		    <dependencies>
+		        <dependency>
+		            <groupId>org.springframework.boot</groupId>
+		            <artifactId>spring-boot-starter</artifactId>
+		        </dependency>
+		
+		        <dependency>
+		            <groupId>org.springframework.boot</groupId>
+		            <artifactId>spring-boot-starter-test</artifactId>
+		            <scope>test</scope>
+		        </dependency>
+		
+		        <!-- 引入`hello-spring-boot-starter`依赖 -->
+		        <dependency>
+		            <groupId>com.lun</groupId>
+		            <artifactId>hello-spring-boot-starter</artifactId>
+		            <version>1.0.0-SNAPSHOT</version>
+		        </dependency>
+		
+		    </dependencies>
+		
+		    <build>
+		        <plugins>
+		            <plugin>
+		                <groupId>org.springframework.boot</groupId>
+		                <artifactId>spring-boot-maven-plugin</artifactId>
+		            </plugin>
+		        </plugins>
+		    </build>
+		
+		</project>
+		
+		```
+
+	- 添加配置文件`application.properties`：
+
+		```properties
+		hello.prefix=hello
+		hello.suffix=666
+		```
+
+	- 添加单元测试类：
+
+		```java
+		import com.lun.hello.service.HelloService;//来自自定义starter
+		import org.junit.jupiter.api.Assertions;
+		import org.junit.jupiter.api.Test;
+		import org.springframework.beans.factory.annotation.Autowired;
+		import org.springframework.boot.test.context.SpringBootTest;
+		
+		@SpringBootTest
+		class HelloSpringBootStarterTestApplicationTests {
+		
+		    @Autowired
+		    private HelloService helloService;
+		
+		    @Test
+		    void contextLoads() {
+		        // System.out.println(helloService.sayHello("lun"));
+		        Assertions.assertEquals("hello: sunsh > 666", helloService.sayHello("lun"));
+		    }
+		
+		}
+		```
+
+# 十六、原理解析
+
+## 一、SpringApplication创建初始化流程
+
+- SpringBoot启动过程中应用启动类
+
+	```java
+	import org.springframework.boot.SpringApplication;
+	import org.springframework.boot.autoconfigure.SpringBootApplication;
+	
+	@SpringBootApplication
+	public class HelloSpringBootStarterTestApplication {
+	
+	    public static void main(String[] args) {
+	        SpringApplication.run(HelloSpringBootStarterTestApplication.class, args);
+	    }
+	
+	}
+	```
+
+	```java
+	public class SpringApplication {
+	    
+	    ...
+	    
+		public static ConfigurableApplicationContext run(Class<?> primarySource, String... args) {
+			return run(new Class<?>[] { primarySource }, args);
+		}
+	    
+	    public static ConfigurableApplicationContext run(Class<?>[] primarySources, String[] args) {
+			return new SpringApplication(primarySources).run(args);
+		}
+	    
+	    //先看看new SpringApplication(primarySources)，下一节再看看run()
+		public SpringApplication(Class<?>... primarySources) {
+			this(null, primarySources);
+		}
+	    
+	    public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySources) {
+			this.resourceLoader = resourceLoader;
+			Assert.notNull(primarySources, "PrimarySources must not be null");
+			this.primarySources = new LinkedHashSet<>(Arrays.asList(primarySources));
+	        //WebApplicationType是枚举类，有NONE,SERVLET,REACTIVE,
+	        //下行webApplicationType是SERVLET
+			this.webApplicationType = WebApplicationType.deduceFromClasspath();
+	        
+	        //初始启动引导器，去spring.factories文件中找org.springframework.boot.Bootstrapper，但目前找不到实现Bootstrapper接口的类
+			this.bootstrappers = new ArrayList<>(getSpringFactoriesInstances(Bootstrapper.class));
+			
+	        //去spring.factories找 ApplicationContextInitializer
+	        setInitializers((Collection) getSpringFactoriesInstances(ApplicationContextInitializer.class));
+			
+	        //去spring.factories找 ApplicationListener
+	        setListeners((Collection) getSpringFactoriesInstances(ApplicationListener.class));
+	
+	        this.mainApplicationClass = deduceMainApplicationClass();
+		}
+	 	
+	    private Class<?> deduceMainApplicationClass() {
+			try {
+				StackTraceElement[] stackTrace = new RuntimeException().getStackTrace();
+				for (StackTraceElement stackTraceElement : stackTrace) {
+					if ("main".equals(stackTraceElement.getMethodName())) {
+						return Class.forName(stackTraceElement.getClassName());
+					}
+				}
+			}
+			catch (ClassNotFoundException ex) {
+				// Swallow and continue
+			}
+			return null;
+		}
+	    
+	    ...
+	    
+	}
+	```
+
+- spring.factories：
+
+	```properties
+	...
+	
+	# Application Context Initializers
+	org.springframework.context.ApplicationContextInitializer=\
+	org.springframework.boot.context.ConfigurationWarningsApplicationContextInitializer,\
+	org.springframework.boot.context.ContextIdApplicationContextInitializer,\
+	org.springframework.boot.context.config.DelegatingApplicationContextInitializer,\
+	org.springframework.boot.rsocket.context.RSocketPortInfoApplicationContextInitializer,\
+	org.springframework.boot.web.context.ServerPortInfoApplicationContextInitializer
+	
+	# Application Listeners
+	org.springframework.context.ApplicationListener=\
+	org.springframework.boot.ClearCachesApplicationListener,\
+	org.springframework.boot.builder.ParentContextCloserApplicationListener,\
+	org.springframework.boot.context.FileEncodingApplicationListener,\
+	org.springframework.boot.context.config.AnsiOutputApplicationListener,\
+	org.springframework.boot.context.config.DelegatingApplicationListener,\
+	org.springframework.boot.context.logging.LoggingApplicationListener,\
+	org.springframework.boot.env.EnvironmentPostProcessorApplicationListener,\
+	org.springframework.boot.liquibase.LiquibaseServiceLocatorApplicationListener
+	
+	...
+	
+	```
+
+## 二、SpringBoot完整启动过程
+
+```java
+public class SpringApplication {
+    
+    ...
+    
+	public ConfigurableApplicationContext run(String... args) {
+		StopWatch stopWatch = new StopWatch();//开始计时器
+		stopWatch.start();//开始计时
+        
+        //1.
+        //创建引导上下文（Context环境）createBootstrapContext()
+        //获取到所有之前的 bootstrappers 挨个执行 intitialize() 来完成对引导启动器上下文环境设置
+		DefaultBootstrapContext bootstrapContext = createBootstrapContext();
+		
+        //2.到最后该方法会返回这context
+        ConfigurableApplicationContext context = null;
+		
+        //3.让当前应用进入headless模式
+        configureHeadlessProperty();
+        
+        //4.获取所有 RunListener（运行监听器）,为了方便所有Listener进行事件感知
+		SpringApplicationRunListeners listeners = getRunListeners(args);
+		
+        //5.遍历 SpringApplicationRunListener 调用 starting 方法；
+	   // 相当于通知所有感兴趣系统正在启动过程的人，项目正在 starting。
+        listeners.starting(bootstrapContext, this.mainApplicationClass);
+		try {
+            //6.保存命令行参数 ApplicationArguments
+			ApplicationArguments applicationArguments = new DefaultApplicationArguments(args);
+			
+            //7.准备环境
+            ConfigurableEnvironment environment = prepareEnvironment(listeners, bootstrapContext, applicationArguments);
+			configureIgnoreBeanInfo(environment);
+			
+            /*打印标志
+              .   ____          _            __ _ _
+             /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+            ( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+             \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+              '  |____| .__|_| |_|_| |_\__, | / / / /
+             =========|_|==============|___/=/_/_/_/
+             :: Spring Boot ::                (v2.4.2)
+            */
+            Banner printedBanner = printBanner(environment);
+            
+            // 创建IOC容器（createApplicationContext（））
+			// 根据项目类型webApplicationType（NONE,SERVLET,REACTIVE）创建容器，
+			// 当前会创建 AnnotationConfigServletWebServerApplicationContext
+			context = createApplicationContext();
+			context.setApplicationStartup(this.applicationStartup);
+            
+            //8.准备ApplicationContext IOC容器的基本信息
+			prepareContext(bootstrapContext, context, environment, listeners, applicationArguments, printedBanner);
+			//9.刷新IOC容器,创建容器中的所有组件,Spring框架的内容
+            refreshContext(context);
+			//该方法没内容，大概为将来填入
+			afterRefresh(context, applicationArguments);
+			stopWatch.stop();//停止计时
+			if (this.logStartupInfo) {//this.logStartupInfo默认是true
+				new StartupInfoLogger(this.mainApplicationClass).logStarted(getApplicationLog(), stopWatch);
+			}
+            //10.
+			listeners.started(context);
+            
+            //11.调用所有runners
+			callRunners(context, applicationArguments);
+		}
+		catch (Throwable ex) {
+            //13.
+			handleRunFailure(context, ex, listeners);
+			throw new IllegalStateException(ex);
+		}
+
+		try {
+            //12.
+			listeners.running(context);
+		}
+		catch (Throwable ex) {
+            //13.
+			handleRunFailure(context, ex, null);
+			throw new IllegalStateException(ex);
+		}
+		return context;
+	}
+ 
+    //1. 
+    private DefaultBootstrapContext createBootstrapContext() {
+		DefaultBootstrapContext bootstrapContext = new DefaultBootstrapContext();
+		this.bootstrappers.forEach((initializer) -> initializer.intitialize(bootstrapContext));
+		return bootstrapContext;
+	}
+    
+    //3.
+   	private void configureHeadlessProperty() {
+        //this.headless默认为true
+		System.setProperty(SYSTEM_PROPERTY_JAVA_AWT_HEADLESS,
+				System.getProperty(SYSTEM_PROPERTY_JAVA_AWT_HEADLESS, Boolean.toString(this.headless)));
+	}
+    
+    private static final String SYSTEM_PROPERTY_JAVA_AWT_HEADLESS = "java.awt.headless";
+    
+    //4.
+    private SpringApplicationRunListeners getRunListeners(String[] args) {
+		Class<?>[] types = new Class<?>[] { SpringApplication.class, String[].class };
+		//getSpringFactoriesInstances 去 spring.factories 找 SpringApplicationRunListener
+        return new SpringApplicationRunListeners(logger,
+				getSpringFactoriesInstances(SpringApplicationRunListener.class, types, this, args),
+				this.applicationStartup);
+	}
+    
+    //7.准备环境
+    private ConfigurableEnvironment prepareEnvironment(SpringApplicationRunListeners listeners,
+			DefaultBootstrapContext bootstrapContext, ApplicationArguments applicationArguments) {
+		// Create and configure the environment
+        //返回或者创建基础环境信息对象，如：StandardServletEnvironment, StandardReactiveWebEnvironment
+		ConfigurableEnvironment environment = getOrCreateEnvironment();
+        //配置环境信息对象,读取所有的配置源的配置属性值。
+		configureEnvironment(environment, applicationArguments.getSourceArgs());
+		//绑定环境信息
+        ConfigurationPropertySources.attach(environment);
+        //7.1 通知所有的监听器当前环境准备完成
+		listeners.environmentPrepared(bootstrapContext, environment);
+		DefaultPropertiesPropertySource.moveToEnd(environment);
+		configureAdditionalProfiles(environment);
+		bindToSpringApplication(environment);
+		if (!this.isCustomEnvironment) {
+			environment = new EnvironmentConverter(getClassLoader()).convertEnvironmentIfNecessary(environment,
+					deduceEnvironmentClass());
+		}
+		ConfigurationPropertySources.attach(environment);
+		return environment;
+	}
+    
+    //8.
+    private void prepareContext(DefaultBootstrapContext bootstrapContext, ConfigurableApplicationContext context,
+			ConfigurableEnvironment environment, SpringApplicationRunListeners listeners,
+			ApplicationArguments applicationArguments, Banner printedBanner) {
+		//保存环境信息
+        context.setEnvironment(environment);
+        //IOC容器的后置处理流程
+		postProcessApplicationContext(context);
+        //应用初始化器
+		applyInitializers(context);
+        //8.1 遍历所有的 listener 调用 contextPrepared。
+        //EventPublishRunListenr通知所有的监听器contextPrepared
+		listeners.contextPrepared(context);
+		bootstrapContext.close(context);
+		if (this.logStartupInfo) {
+			logStartupInfo(context.getParent() == null);
+			logStartupProfileInfo(context);
+		}
+		// Add boot specific singleton beans
+		ConfigurableListableBeanFactory beanFactory = context.getBeanFactory();
+		beanFactory.registerSingleton("springApplicationArguments", applicationArguments);
+		if (printedBanner != null) {
+			beanFactory.registerSingleton("springBootBanner", printedBanner);
+		}
+		if (beanFactory instanceof DefaultListableBeanFactory) {
+			((DefaultListableBeanFactory) beanFactory)
+					.setAllowBeanDefinitionOverriding(this.allowBeanDefinitionOverriding);
+		}
+		if (this.lazyInitialization) {
+			context.addBeanFactoryPostProcessor(new LazyInitializationBeanFactoryPostProcessor());
+		}
+		// Load the sources
+		Set<Object> sources = getAllSources();
+		Assert.notEmpty(sources, "Sources must not be empty");
+		load(context, sources.toArray(new Object[0]));
+        //8.2
+		listeners.contextLoaded(context);
+	}
+
+    //11.调用所有runners
+    private void callRunners(ApplicationContext context, ApplicationArguments args) {
+		List<Object> runners = new ArrayList<>();
+        
+        //获取容器中的 ApplicationRunner
+		runners.addAll(context.getBeansOfType(ApplicationRunner.class).values());
+		//获取容器中的  CommandLineRunner
+        runners.addAll(context.getBeansOfType(CommandLineRunner.class).values());
+        //合并所有runner并且按照@Order进行排序
+		AnnotationAwareOrderComparator.sort(runners);
+        //遍历所有的runner。调用 run 方法
+		for (Object runner : new LinkedHashSet<>(runners)) {
+			if (runner instanceof ApplicationRunner) {
+				callRunner((ApplicationRunner) runner, args);
+			}
+			if (runner instanceof CommandLineRunner) {
+				callRunner((CommandLineRunner) runner, args);
+			}
+		}
+	}
+    
+    //13.
+    private void handleRunFailure(ConfigurableApplicationContext context, Throwable exception,
+			SpringApplicationRunListeners listeners) {
+		try {
+			try {
+				handleExitCode(context, exception);
+				if (listeners != null) {
+                    //14.
+					listeners.failed(context, exception);
+				}
+			}
+			finally {
+				reportFailure(getExceptionReporters(context), exception);
+				if (context != null) {
+					context.close();
+				}
+			}
+		}
+		catch (Exception ex) {
+			logger.warn("Unable to close ApplicationContext", ex);
+		}
+		ReflectionUtils.rethrowRuntimeException(exception);
+	}
+    
+    ...
+}
+```
+
+```java
+//2. new SpringApplication(primarySources).run(args) 最后返回的接口类型
+public interface ConfigurableApplicationContext extends ApplicationContext, Lifecycle, Closeable {
+    String CONFIG_LOCATION_DELIMITERS = ",; \t\n";
+    String CONVERSION_SERVICE_BEAN_NAME = "conversionService";
+    String LOAD_TIME_WEAVER_BEAN_NAME = "loadTimeWeaver";
+    String ENVIRONMENT_BEAN_NAME = "environment";
+    String SYSTEM_PROPERTIES_BEAN_NAME = "systemProperties";
+    String SYSTEM_ENVIRONMENT_BEAN_NAME = "systemEnvironment";
+    String APPLICATION_STARTUP_BEAN_NAME = "applicationStartup";
+    String SHUTDOWN_HOOK_THREAD_NAME = "SpringContextShutdownHook";
+
+    void setId(String var1);
+
+    void setParent(@Nullable ApplicationContext var1);
+
+    void setEnvironment(ConfigurableEnvironment var1);
+
+    ConfigurableEnvironment getEnvironment();
+
+    void setApplicationStartup(ApplicationStartup var1);
+
+    ApplicationStartup getApplicationStartup();
+
+    void addBeanFactoryPostProcessor(BeanFactoryPostProcessor var1);
+
+    void addApplicationListener(ApplicationListener<?> var1);
+
+    void setClassLoader(ClassLoader var1);
+
+    void addProtocolResolver(ProtocolResolver var1);
+
+    void refresh() throws BeansException, IllegalStateException;
+
+    void registerShutdownHook();
+
+    void close();
+
+    boolean isActive();
+
+    ConfigurableListableBeanFactory getBeanFactory() throws IllegalStateException;
+}
+```
+
+```properties
+#4.
+#spring.factories
+# Run Listeners
+org.springframework.boot.SpringApplicationRunListener=\
+org.springframework.boot.context.event.EventPublishingRunListener
+```
+
+```java
+class SpringApplicationRunListeners {
+
+	private final Log log;
+
+	private final List<SpringApplicationRunListener> listeners;
+
+	private final ApplicationStartup applicationStartup;
+
+	SpringApplicationRunListeners(Log log, Collection<? extends SpringApplicationRunListener> listeners,
+			ApplicationStartup applicationStartup) {
+		this.log = log;
+		this.listeners = new ArrayList<>(listeners);
+		this.applicationStartup = applicationStartup;
+	}
+
+    //5.遍历 SpringApplicationRunListener 调用 starting 方法；
+	//相当于通知所有感兴趣系统正在启动过程的人，项目正在 starting。
+	void starting(ConfigurableBootstrapContext bootstrapContext, Class<?> mainApplicationClass) {
+		doWithListeners("spring.boot.application.starting", (listener) -> listener.starting(bootstrapContext),
+				(step) -> {
+					if (mainApplicationClass != null) {
+						step.tag("mainApplicationClass", mainApplicationClass.getName());
+					}
+				});
+	}
+    
+    //7.1
+    void environmentPrepared(ConfigurableBootstrapContext bootstrapContext, ConfigurableEnvironment environment) {
+		doWithListeners("spring.boot.application.environment-prepared",
+				(listener) -> listener.environmentPrepared(bootstrapContext, environment));
+	}
+    
+    //8.1
+    void contextPrepared(ConfigurableApplicationContext context) {
+		doWithListeners("spring.boot.application.context-prepared", (listener) -> listener.contextPrepared(context));
+	}
+    
+    //8.2
+    void contextLoaded(ConfigurableApplicationContext context) {
+		doWithListeners("spring.boot.application.context-loaded", (listener) -> listener.contextLoaded(context));
+	}
+    
+    //10.
+    void started(ConfigurableApplicationContext context) {
+		doWithListeners("spring.boot.application.started", (listener) -> listener.started(context));
+	}
+    
+    //12.
+    void running(ConfigurableApplicationContext context) {
+		doWithListeners("spring.boot.application.running", (listener) -> listener.running(context));
+	}
+    
+    //14.
+    void failed(ConfigurableApplicationContext context, Throwable exception) {
+		doWithListeners("spring.boot.application.failed",
+				(listener) -> callFailedListener(listener, context, exception), (step) -> {
+					step.tag("exception", exception.getClass().toString());
+					step.tag("message", exception.getMessage());
+				});
+	}
+    
+    private void doWithListeners(String stepName, Consumer<SpringApplicationRunListener> listenerAction,
+			Consumer<StartupStep> stepAction) {
+		StartupStep step = this.applicationStartup.start(stepName);
+		this.listeners.forEach(listenerAction);
+		if (stepAction != null) {
+			stepAction.accept(step);
+		}
+		step.end();
+	}
+    
+    ...
+    
+}
+```
+
+## 三、自定义事件监听组件
+
+1. `MyApplicationContextInitializer.java`
+
+	```java
+	import org.springframework.context.ApplicationContextInitializer;
+	import org.springframework.context.ConfigurableApplicationContext;
+	
+	public class MyApplicationContextInitializer implements ApplicationContextInitializer {
+	    @Override
+	    public void initialize(ConfigurableApplicationContext applicationContext) {
+	        System.out.println("MyApplicationContextInitializer ....initialize.... ");
+	    }
+	}
+	```
+
+2. `MyApplicationListener.java`
+
+	```java
+	import org.springframework.context.ApplicationEvent;
+	import org.springframework.context.ApplicationListener;
+	
+	public class MyApplicationListener implements ApplicationListener {
+	    @Override
+	    public void onApplicationEvent(ApplicationEvent event) {
+	        System.out.println("MyApplicationListener.....onApplicationEvent...");
+	    }
+	}
+	```
+
+3. `MyApplicationRunner.java`
+
+	```java
+	import org.springframework.boot.ApplicationArguments;
+	import org.springframework.boot.ApplicationRunner;
+	import org.springframework.core.annotation.Order;
+	import org.springframework.stereotype.Component;
+	
+	
+	@Order(1)
+	@Component//放入容器
+	public class MyApplicationRunner implements ApplicationRunner {
+	    @Override
+	    public void run(ApplicationArguments args) throws Exception {
+	        System.out.println("MyApplicationRunner...run...");
+	    }
+	}
+	```
+
+4. `MyCommandLineRunner.java`
+
+	```java
+	import org.springframework.boot.CommandLineRunner;
+	import org.springframework.core.annotation.Order;
+	import org.springframework.stereotype.Component;
+	/**
+	 * 应用启动做一个一次性事情
+	 */
+	@Order(2)
+	@Component//放入容器
+	public class MyCommandLineRunner implements CommandLineRunner {
+	    @Override
+	    public void run(String... args) throws Exception {
+	        System.out.println("MyCommandLineRunner....run....");
+	    }
+	}
+	```
+
+5. `MySpringApplicationRunListener.java`
+
+	```java
+	import org.springframework.boot.ConfigurableBootstrapContext;
+	import org.springframework.boot.SpringApplication;
+	import org.springframework.boot.SpringApplicationRunListener;
+	import org.springframework.context.ConfigurableApplicationContext;
+	import org.springframework.core.env.ConfigurableEnvironment;
+	
+	public class MySpringApplicationRunListener implements SpringApplicationRunListener {
+	
+	    private SpringApplication application;
+	    public MySpringApplicationRunListener(SpringApplication application, String[] args){
+	        this.application = application;
+	    }
+	
+	    @Override
+	    public void starting(ConfigurableBootstrapContext bootstrapContext) {
+	        System.out.println("MySpringApplicationRunListener....starting....");
+	
+	    }
+	
+	
+	    @Override
+	    public void environmentPrepared(ConfigurableBootstrapContext bootstrapContext, ConfigurableEnvironment environment) {
+	        System.out.println("MySpringApplicationRunListener....environmentPrepared....");
+	    }
+	
+	
+	    @Override
+	    public void contextPrepared(ConfigurableApplicationContext context) {
+	        System.out.println("MySpringApplicationRunListener....contextPrepared....");
+	
+	    }
+	
+	    @Override
+	    public void contextLoaded(ConfigurableApplicationContext context) {
+	        System.out.println("MySpringApplicationRunListener....contextLoaded....");
+	    }
+	
+	    @Override
+	    public void started(ConfigurableApplicationContext context) {
+	        System.out.println("MySpringApplicationRunListener....started....");
+	    }
+	
+	    @Override
+	    public void running(ConfigurableApplicationContext context) {
+	        System.out.println("MySpringApplicationRunListener....running....");
+	    }
+	
+	    @Override
+	    public void failed(ConfigurableApplicationContext context, Throwable exception) {
+	        System.out.println("MySpringApplicationRunListener....failed....");
+	    }
+	}
+	```
+
+6. 注册`MyApplicationContextInitializer`，`MyApplicationListener`，`MySpringApplicationRunListener`:
+
+7. `resources / META-INF / spring.factories`:
+
+	```properties
+	org.springframework.context.ApplicationContextInitializer=\
+	  com.sunsh.boot.listener.MyApplicationContextInitializer
+	
+	org.springframework.context.ApplicationListener=\
+	  com.sunsh.boot.listener.MyApplicationListener
+	
+	org.springframework.boot.SpringApplicationRunListener=\
+	  com.sunsh.boot.listener.MySpringApplicationRunListener
+	```
+
+	
