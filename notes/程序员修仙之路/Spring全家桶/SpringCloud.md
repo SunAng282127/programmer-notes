@@ -1854,6 +1854,10 @@
 
 2. 在主启动类中添加`@RefreshScope`实现动态刷新，如果不添加此注解，在修改完key/value的内容之后也会默认在55秒后进行刷新
 
+   - `@RefreshScope`将这个注解加在需要动态刷新的Bean上，当一个Bean被`@RefreshScope`注解后，Spring容器会在监测到配置变动时重新实例化该Bean，并且注入最新的配置信息，这样就实现了配置的热更新 
+   - 通常情况下，这个Bean还有个属性被`@Value`注解了，这样，当配置发生变化时，`@Value`注解会重新注入最新的配置值
+   - 对于使用了`@Value`注解的类，不需要显式添加`@RefreshScope`注解，因为被`@Value`注解的属性值会在配置发生变化时自动更新，而对于其它没有使用`@Value`注解的类，比如只使用了`@Autowired`或者`@Resource`，那么就需要添加`@RefreshScope`注解 
+
 3. 在`application.yaml`配置类中添加`wait-time`，最好不修改
 
    ```yaml
