@@ -1905,7 +1905,7 @@
    - Nginx是服务器负载均衡，客户端所有请求都会交给nginx，然后由nginx实现转发请求，即负载均衡是由服务端实现的。服务器充当指挥员，在请求过来的时候进行分配
    - loadbalancer本地负载均衡，在调用微服务接口时候，会在注册中心上获取注册信息服务列表之后缓存到JVM本地，从而在本地实现RPC远程服务调用技术。客户端自己有眼力价，自己看着哪个服务器不忙就去找哪个
 4. 负载均衡算法分类
-   - 轮询：将请求按顺序轮流地分配到每个节点上，不关心每个节点实际的连接数和当前的系统负载。优点是简单高效，易于水平扩展，每个节点满足字面意义上的均衡；缺点是没有考虑机器的性能问题，集群性能瓶颈更多的会受性能差的服务器影响 
+   - 轮询：将请求按顺序轮流地分配到每个节点上，不关心每个节点实际的连接数和当前的系统负载。优点是简单高效，易于水平扩展，每个节点满足字面意义上的均衡；缺点是没有考虑机器的性能问题，集群性能瓶颈更多的会受性能差的服务器影响。轮询的算法公式为rest接口第几次请求数%服务器集群总数量 = 实际调用服务器位置下标，每次服务重启后rest接口计数从1开始
    - 随机：将请求随机分配到各个节点。由概率统计理论得知，随着客户端调用服务端的次数增多，其实际效果越来越接近于平均分配，也就是轮询的结果 
    - 最小连接数法：根据每个节点当前的连接情况，动态地选取其中当前积压连接数最少的一个节点处理当前请求，尽可能地提高后端服务的利用效率，将请求合理地分流到每一台服务器。优点是动态，根据节点状况实时变化； 缺点是 提高了复杂度，每次连接断开需要进行计数
    - 最快响应速度法：根据请求的响应时间，来动态调整每个节点的权重，将响应速度快的服务节点分配更多的请求，响应速度慢的服务节点分配更少的请求，俗称能者多劳，扶贫救弱。优点是动态，实时变化，控制的粒度更细，更灵敏；缺点是复杂度更高，每次需要计算请求的响应速度  
@@ -1925,9 +1925,243 @@
    - RestClient
    - WebClient
    - WebFlux WebClient with ReactorLoadBalancerExchangeFilterFunction
+   
 2. 完全将cloud-provider-payment8001复制一遍，新搭建一个cloud-provider-payment8002工程
 
+3. 在消费者客户端工程中引入依赖
 
+   ```xml
+   <dependency>
+   	<groupId>org.springframework.cloud</groupId>
+   	<artifactId>spring-cloud-starter-loadbalancer</artifactId>
+   </dependency>
+   ```
+
+4. 在消费者客户端工程`RestTemplateConfig`配置类中添加`@LoadBalanced`注解
+
+   ```java
+   @Configuration
+   public class RestTemplateConfig {
+   
+       @Bean
+       @LoadBalanced
+       public RestTemplate restTemplate(){
+           return new RestTemplate();
+       }
+   }
+   ```
+
+5. 在消费者客户端工程的controller包中添加如下方法
+
+   ```java
+   @GetMapping(value = "/getInfoByConsul")
+   public String getInfoByConsul() {
+   	return restTemplate.getForObject(PAY_SERVICE_URL + "/getInfoByConsul", String.class);
+   }
+   ```
+
+6. 访问此地址的时间即可在采用轮询的方式进行服务的调用
+
+7. 修改LoadBalancer的负载均衡算法的实现方式
+
+   ```java
+   @Configuration
+   @LoadBalancerClient(value = "cloud-payment-service", configuration = RestTemplateConfig.class)
+   // value指出具体的微服务采用非默认的负载均衡算法
+   public class RestTemplateConfig {
+   
+       @Bean
+       @LoadBalanced
+       public RestTemplate restTemplate() {
+           return new RestTemplate();
+       }
+   
+       @Bean
+       public ReactorLoadBalancer<ServiceInstance> randomLoadBalancer(Environment environment,
+        LoadBalancerClientFactory loadBalancerClientFactory) {
+           String name = environment.getProperty(LoadBalancerClientFactory.PROPERTY_NAME);
+           return new RandomLoadBalancer(loadBalancerClientFactory.getLazyProvider(name, ServiceInstanceListSupplier.class), name);
+       }
+   }
+   ```
 
 # 五、OpenFeign服务接口调用
 
+## 一、OpenFeign简介
+
+1. Feign是一个声明性Web服务客户端，它使用编写Web服务客户端变得更容易。使用Feign创建一个接口并对其进行注释。在使用Feign时提供负载均衡的http客户端。简而言之，使用时只需要创建一个Rest接口并在该接口上添加`@FeignClient`即可。OpenFeign基本上就是当前微服务之间调用的事实标准
+2. OpenFeign的作用
+   - 可插拔的注解支持，包括Feign注解和JAX-RS注解
+   - 支持可插拔的HTTP编码器和解码器
+   - 支持Sentinel和它的Fallback
+   - 支持SpringCloud LoadBalancer的负载均衡
+   - 支持HTTP请求和相应的压缩
+   - OpenFeign是一种声明式、模板化的HTTP客户端，它使得调用RESTful网络服务变得简单。在Spring Cloud中使用OpenFeign，可以做到像调用本地方法一样使用HTTP请求访问远程服务，开发者无需关注远程HTTP请求的细节 
+   - OpenFeign的Spring应用架构一般分为三部分，分别是注册中心、服务提供者和服务消费者。服务提供者向服务注册中心注册自己，然后服务消费者通过OpenFeign发送请求时，OpenFeign会向服务注册中心获取关于服务提供者的信息，然后再向服务提供者发送网络请求 
+
+## 二、OpenFeign的使用
+
+![image-20240520064333407](../../../TyporaImage/image-20240520064333407.png)
+
+1. 搭建cloud-consumer-feign-order80工程
+
+2. 在cloud-consumer-feign-order80工程中引入依赖
+
+   ```xml
+   <dependencies>
+           <!--web + actuator-->
+           <dependency>
+               <groupId>org.springframework.boot</groupId>
+               <artifactId>spring-boot-starter-web</artifactId>
+           </dependency>
+           <dependency>
+               <groupId>org.springframework.boot</groupId>
+               <artifactId>spring-boot-starter-actuator</artifactId>
+           </dependency>
+           <!--lombok-->
+           <dependency>
+               <groupId>org.projectlombok</groupId>
+               <artifactId>lombok</artifactId>
+               <optional>true</optional>
+           </dependency>
+           <!--hutool-all-->
+           <dependency>
+               <groupId>cn.hutool</groupId>
+               <artifactId>hutool-all</artifactId>
+           </dependency>
+           <!--fastjson2-->
+           <dependency>
+               <groupId>com.alibaba.fastjson2</groupId>
+               <artifactId>fastjson2</artifactId>
+           </dependency>
+           <!-- swagger3 调用方式 http://你的主机IP地址:5555/swagger-ui/index.html -->
+           <dependency>
+               <groupId>org.springdoc</groupId>
+               <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+           </dependency>
+           <!-- 引入自己定义的api通用包 -->
+           <dependency>
+               <groupId>com.atguigu.cloud</groupId>
+               <artifactId>cloud-api-commons</artifactId>
+               <version>1.0-SNAPSHOT</version>
+           </dependency>
+           <!--SpringCloud consul discovery -->
+           <dependency>
+               <groupId>org.springframework.cloud</groupId>
+               <artifactId>spring-cloud-starter-consul-discovery</artifactId>
+               <exclusions>
+                   <exclusion>
+                       <groupId>commons-logging</groupId>
+                       <artifactId>commons-logging</artifactId>
+                   </exclusion>
+               </exclusions>
+           </dependency>
+           <!--SpringCloud consul config -->
+           <dependency>
+               <groupId>org.springframework.cloud</groupId>
+               <artifactId>spring-cloud-starter-consul-config</artifactId>
+           </dependency>
+           <dependency>
+               <groupId>org.springframework.cloud</groupId>
+               <artifactId>spring-cloud-starter-bootstrap</artifactId>
+           </dependency>
+           <dependency>
+               <groupId>org.springframework.cloud</groupId>
+               <artifactId>spring-cloud-starter-openfeign</artifactId>
+           </dependency>
+       </dependencies>
+   
+       <build>
+           <plugins>
+               <plugin>
+                   <groupId>org.springframework.boot</groupId>
+                   <artifactId>spring-boot-maven-plugin</artifactId>
+               </plugin>
+           </plugins>
+       </build>
+   ```
+
+3. cloud-consumer-feign-order80工程中`bootstrap.yml`文件中配置如下
+
+   ```yaml
+   spring:
+     application:
+       name: cloud-consumer-service
+     cloud:
+       consul:
+         host: localhost
+         port: 8500
+         discovery:
+           service-name: ${spring.application.name}
+           prefer-ip-address: true #优先使用服务ip进行注册
+         config:
+           profile-separator: '-'
+           format: yaml
+   ```
+
+4. cloud-consumer-feign-order80工程启动类中添加注解
+
+   ```java
+   @SpringBootApplication
+   @EnableFeignClients
+   // 启动feign客户端，定义服务+绑定接口，以声明式的方法优雅而简单的实现服务调用
+   @EnableDiscoveryClient
+   // 该注解用于向使用consul为注册中心时注册服务
+   public class OpenFeignMain80 {
+   
+       public static void main(String[] args) {
+           SpringApplication.run(OpenFeignMain80.class,args);
+       }
+   }
+   ```
+
+5. 修改cloud-api-commons工程，将Feign接口定义在此。引入OpenFeign依赖
+
+   ```xml
+   <dependency>
+   	<groupId>org.springframework.cloud</groupId>
+   	<artifactId>spring-cloud-starter-openfeign</artifactId>
+   </dependency>
+   ```
+
+6. cloud-api-commons工程启动类中添加注解
+
+   ```java
+   @SpringBootApplication
+   @EnableFeignClients
+   // 启动feign客户端，定义服务+绑定接口，以声明式的方法优雅而简单的实现服务调用
+   public class CommonMain {
+   
+       public static void main(String[] args) {
+           SpringApplication.run(CommonMain.class,args);
+       }
+   }
+   ```
+
+7. cloud-api-commons工程中新建apis文件夹存放各个微服务的api接口，以支付接口为例
+
+   ```java
+   @FeignClient(value = "cloud-payment-service")
+   public interface PayFeignApi {
+   
+       @PostMapping(value = "/pay/addPay")
+       public ResultData<String> addPay(@RequestBody PayDTO pay);
+   
+       @DeleteMapping(value = "/pay/deletePay/{id}")
+       public ResultData<String> delete(@PathVariable("id") Integer id);
+   
+       @PutMapping(value = "/pay/updatePay")
+       public ResultData<String> update(@RequestBody PayDTO payDTO);
+   
+       @GetMapping(value = "/pay/getInfoById/{id}")
+       public ResultData<PayDTO> getInfoById(@PathVariable("id") Integer id);
+   
+       @GetMapping(value = "/pay/getList")
+       public ResultData<List<PayDTO>> getList();
+   
+       @GetMapping(value = "/pay/getInfoByConsul")
+       public String getInfoByConsul();
+   }
+   ```
+
+   
