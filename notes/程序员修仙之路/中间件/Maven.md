@@ -78,7 +78,7 @@
 
 ## 一、Maven安装
 
-1. [Maven下载地址](https://maven.apache.org/docs/history.html>)
+1. [Maven下载地址](https://maven.apache.org/docs/history.html)
 
 2. 安装条件：Maven需要本机安装Java环境
 
@@ -454,7 +454,7 @@ maven会将该项目打成的jar包放本地路径：/com/sunny -->
 | **provided** | 已提供依赖范围。使用此依赖范围的Maven依赖，只对编译classpath和测试classpath有效。例如，servlet-api依赖对于编译、测试阶段而言是需要的，但是运行阶段，由于外部容器（如Tomcat）已经提供，故不需要Maven重复引入该依赖 |
 |   runtime    | 运行时依赖范围。使用此依赖范围的Maven依赖，只对测试classpath、运行classpath有效。例如，JDBC驱动实现依赖，其在编译时只需JDK提供的JDBC接口即可，只有执行测试、运行阶段才需要实现了JDBC接口的驱动 |
 |    system    | 系统依赖范围，其效果与provided的依赖范围一致。其用于添加非Maven仓库的本地依赖，通过依赖元素dependency中的systemPath元素指定本地依赖的路径。鉴于使用其会导致项目的可移植性降低，一般不推荐使用。需要引用第三方本地jar包的时候使用，即别人给的jar包 |
-|    import    | 导入依赖范围，该依赖范围只能与dependencyManagement元素配合使用，其功能是将目标 pom.xml文件中dependencyManagement的配置导入合并到当前pom.xml的 dependencyManagement中 |
+|    import    | 导入依赖范围，该依赖范围只能与dependencyManagement元素配合使用，其功能是将目标pom.xml文件中dependencyManagement的配置导入合并到当前pom.xml的dependencyManagement中 |
 
 ## 五、Maven工程依赖下载失败错误解决
 
@@ -784,6 +784,12 @@ maven会将该项目打成的jar包放本地路径：/com/sunny -->
   ```
 
 ###       四、父工程依赖统一管理
+
+- `dependencyManagement`的作用
+  - 对项目所依赖jar包进行版本管理的管理器
+  - 使用`pom.xml`中的`dependencyManagement`元索能让所有在子模块中引用一个依赖而不用显式的列出版本号。也就是子模块不需要列出版本，子模块中的`pom`依赖会找到`dependencyManagement`所在`jar`包的版本，并引用这个`jar`对应的版本号
+  - 让子模块不在受繁杂的版本影响，和父`pom`中的依赖一致即可  
+  - `dependencyManagement`只是声明依赖，并不实现引入，因此子项目需要显示的声明需要用的依赖，但是不需要指定版本号；如果子项目中没有显示声明依赖，是不会从父项目中继承下来的，只有在子项目中写了该依赖项并没有指明具体版本，才会从父项目中继承该项且`version`和`scope`都取自父`pom`；如果子项目中指明了版本号，则还是用子项目中的版本号
 
 - 父工程声明版本
 
