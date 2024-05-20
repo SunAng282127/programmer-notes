@@ -2097,6 +2097,9 @@
          config:
            profile-separator: '-'
            format: yaml
+     # 如果启动报错，则加上以下代码解决The bean ‘xxxx.FeignClientSpecification‘ could not be registered   # 的问题。allow-bean-definition-overriding用于允许覆盖已经定义的bean定义
+     main:
+       allow-bean-definition-overriding: true
    ```
 
 4. cloud-consumer-feign-order80工程启动类中添加注解并将cloud-consumer-order80的代码复制到cloud-consumer-feign-order80中并将RestTemplate配置类删除
@@ -2166,43 +2169,30 @@
    </dependency>
    ```
 
-7. cloud-api-commons工程启动类中添加注解
-
-   ```java
-   @SpringBootApplication
-   @EnableFeignClients
-   // 启动feign客户端，定义服务+绑定接口，以声明式的方法优雅而简单的实现服务调用
-   public class CommonMain {
-   
-       public static void main(String[] args) {
-           SpringApplication.run(CommonMain.class,args);
-       }
-   }
-   ```
-
-8. cloud-api-commons工程中新建apis文件夹存放各个微服务的api接口，以支付接口为例
+7. cloud-api-commons工程中新建apis文件夹存放各个微服务的api接口，以支付接口为例
 
    ```java
    @FeignClient(value = "cloud-payment-service")
-   @RequestMapping("/pay")
+   // @RequestMapping("/pay")
+   // 千万不要在interface上写@RequestMapping
    public interface PayFeignApi {
    
-       @PostMapping(value = "/addPay")
+       @PostMapping(value = "/pay/addPay")
        public ResultData<String> addPay(@RequestBody PayDTO pay);
    
-       @DeleteMapping(value = "/deletePay/{id}")
+       @DeleteMapping(value = "/pay/deletePay/{id}")
        public ResultData<String> deletePay(@PathVariable("id") Integer id);
    
-       @PutMapping(value = "/updatePay")
+       @PutMapping(value = "/pay/updatePay")
        public ResultData<String> updatePay(@RequestBody PayDTO payDTO);
    
-       @GetMapping(value = "/getInfoById/{id}")
+       @GetMapping(value = "/pay/getInfoById/{id}")
        public ResultData<PayDTO> getInfoById(@PathVariable("id") Integer id);
    
-       @GetMapping(value = "/getList")
+       @GetMapping(value = "/pay/getList")
        public ResultData<List<PayDTO>> getList();
    
-       @GetMapping(value = "/getInfoByConsul")
+       @GetMapping(value = "/pay/getInfoByConsul")
        public String getInfoByConsul();
    }
    ```
@@ -2210,3 +2200,5 @@
 9. 测试时不需要启动原来的cloud-consumer-order80工程
 
 ## 三、OpenFeign的高级特性
+
+### 一、OpenFeign之超时控制
