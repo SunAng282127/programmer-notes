@@ -2099,7 +2099,7 @@
            format: yaml
    ```
 
-4. cloud-consumer-feign-order80工程启动类中添加注解
+4. cloud-consumer-feign-order80工程启动类中添加注解并将cloud-consumer-order80的代码复制到cloud-consumer-feign-order80中并将RestTemplate配置类删除
 
    ```java
    @SpringBootApplication
@@ -2115,7 +2115,49 @@
    }
    ```
 
-5. 修改cloud-api-commons工程，将Feign接口定义在此。引入OpenFeign依赖
+5. cloud-consumer-feign-order80工程中修改OrderController
+
+   ```java
+   @RestController
+   @RequestMapping("/feign/pay")
+   public class OrderController {
+   
+       @Resource
+       private PayFeignApi payFeignApi;
+   
+       @PostMapping(value = "/addPay")
+       public Result<Integer> addPay(@RequestBody PayDTO payDTO) {
+           return payFeignApi.addPay(payDTO);
+       }
+   
+       @DeleteMapping(value = "/deletePay/{id}")
+       public Result<Integer> deletePay(@PathVariable("id") Integer id) {
+           return payFeignApi.deletePay(id);
+       }
+   
+       @PutMapping(value = "/updatePay")
+       public Result<Integer> updatePay(@RequestBody PayDTO payDTO) {
+           return payFeignApi.updatePay(payDTO);
+       }
+   
+       @GetMapping(value = "/getInfoById/{id}")
+       public Result<PayDTO> getInfoById(@PathVariable("id") Integer id) {
+           return payFeignApi.getById(id);
+       }
+   
+       @GetMapping(value = "/getList")
+       public Result<List<PayDTO>> getList() {
+           return payFeignApi.getAll();
+       }
+   
+       @GetMapping(value = "/getInfoByConsul")
+       public Result<String> getInfoByConsul() {
+           return payFeignApi.getInfoByConsul();
+       }
+   }
+   ```
+
+6. 修改cloud-api-commons工程，将Feign接口定义在此。引入OpenFeign依赖
 
    ```xml
    <dependency>
@@ -2124,7 +2166,7 @@
    </dependency>
    ```
 
-6. cloud-api-commons工程启动类中添加注解
+7. cloud-api-commons工程启动类中添加注解
 
    ```java
    @SpringBootApplication
@@ -2138,30 +2180,33 @@
    }
    ```
 
-7. cloud-api-commons工程中新建apis文件夹存放各个微服务的api接口，以支付接口为例
+8. cloud-api-commons工程中新建apis文件夹存放各个微服务的api接口，以支付接口为例
 
    ```java
    @FeignClient(value = "cloud-payment-service")
+   @RequestMapping("/pay")
    public interface PayFeignApi {
    
-       @PostMapping(value = "/pay/addPay")
+       @PostMapping(value = "/addPay")
        public ResultData<String> addPay(@RequestBody PayDTO pay);
    
-       @DeleteMapping(value = "/pay/deletePay/{id}")
-       public ResultData<String> delete(@PathVariable("id") Integer id);
+       @DeleteMapping(value = "/deletePay/{id}")
+       public ResultData<String> deletePay(@PathVariable("id") Integer id);
    
-       @PutMapping(value = "/pay/updatePay")
-       public ResultData<String> update(@RequestBody PayDTO payDTO);
+       @PutMapping(value = "/updatePay")
+       public ResultData<String> updatePay(@RequestBody PayDTO payDTO);
    
-       @GetMapping(value = "/pay/getInfoById/{id}")
+       @GetMapping(value = "/getInfoById/{id}")
        public ResultData<PayDTO> getInfoById(@PathVariable("id") Integer id);
    
-       @GetMapping(value = "/pay/getList")
+       @GetMapping(value = "/getList")
        public ResultData<List<PayDTO>> getList();
    
-       @GetMapping(value = "/pay/getInfoByConsul")
+       @GetMapping(value = "/getInfoByConsul")
        public String getInfoByConsul();
    }
    ```
 
-   
+9. 测试时不需要启动原来的cloud-consumer-order80工程
+
+## 三、OpenFeign的高级特性
