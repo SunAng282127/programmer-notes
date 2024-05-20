@@ -2197,8 +2197,170 @@
    }
    ```
 
-9. 测试时不需要启动原来的cloud-consumer-order80工程
+9. 测试时不需要启动原来的cloud-consumer-order80工程。即使不启动cloud-api-commons工程也会调用到接口，因为 类似于以前Dao接口上标注mapper注解，现在是一个微服务接口上面标注一个Feign注解即可对服务提供方的接口绑定， 如果对某个接口定义了`@FeignClient`注解，Feign就会针对这个接口创建一个动态代理， 要是调用那个接口，本质就是会调用Feign创建的动态代理，Feign的动态代理会根据你在接口上的`@RequestMapping`等注解，来动态构造出你要请求的服务的地址，然后构建请求，构造参数，发送请求，接受请求，解析返回值等
 
 ## 三、OpenFeign的高级特性
 
 ### 一、OpenFeign之超时控制
+
+1. OpenFeign默认等待时间是60秒钟，超过后会报错
+
+2. ymal文件中开启配置：`connectTimeout`即连接超时时间和`readTimeout`即请求处理超时时间
+
+   - 全局配置
+
+     ```yaml
+     spring:
+       application:
+         name: cloud-consumer-feign-service
+       cloud:
+         consul:
+           host: localhost
+           port: 8500
+           discovery:
+             service-name: ${spring.application.name}
+             prefer-ip-address: true #优先使用服务ip进行注册
+           config:
+             profile-separator: '-'
+             format: yaml
+         openfeign:
+           client:
+             config:
+               #设置的全局超时时间，指定服务名称可以设置单个服务的超时时间
+               #为cloud-payment-service设置全局变量，则把default改为cloud-payment-service即可
+               default:
+               	#连接超时时间
+                 connect-timeout: 20000
+                 #读取超时时间
+                 read-timeout: 20000
+       main:
+         allow-bean-definition-overriding: true
+     ```
+
+   - 指定配置
+
+     ```yaml
+     spring:
+       application:
+         name: cloud-consumer-feign-service
+       cloud:
+         consul:
+           host: localhost
+           port: 8500
+           discovery:
+             service-name: ${spring.application.name}
+             prefer-ip-address: true #优先使用服务ip进行注册
+           config:
+             profile-separator: '-'
+             format: yaml
+         openfeign:
+           client:
+             config:
+               #设置的全局超时时间，指定服务名称可以设置单个服务的超时时间
+               #为cloud-payment-service设置全局变量，则把default改为cloud-payment-service即可
+               cloud-payment-service:
+               	#连接超时时间
+                 connect-timeout: 20000
+                 #读取超时时间
+                 read-timeout: 20000
+       main:
+         allow-bean-definition-overriding: true
+     ```
+
+   - 当全局配置和指定配置都存在时，当调用指定配置的服务时，指定配置启作用
+
+### 二、OpenFeign之重试机制
+
+1. 默认情况下会创建Retryer.NEVER_RETRY类型为Retryer的Bean，这将金庸重试。注意点是这种重试行为与Feign默认行为不同，它会自动重试IOExceptions，将它们视为与网络相关的瞬态异常，以及从ErrorDecoder抛出的任何RetryableException
+
+2. cloud-consumer-feign-order80工程中新增FeignConfig配置类
+
+   ```java
+   @Configuration
+   public class FeignConfig {
+   
+       @Bean
+       public Retryer myRetryer(){
+           // return new Retryer.NEVER_RETRY则是默认配置不走重试机制的
+           // 最大请求次数为3(1+2) -> 初始一次，重试两次，初始间隔时间为100ms，重试间最大间隔时间为1s
+           return new Retryer.Default(100,1,3);
+       }
+   }
+   ```
+
+3. 重试机制和超时控制机制配置使用时，如超时控制设置的时间为4s，重试机制的最大请求次数为3次，那么如果报错会等12秒之后出现报错信息（因为初始间隔时间为100ms，可以忽略不算，如果初始间隔时间设置的大则也要计算进去）
+
+### 三、OpenFeign之HttpClient
+
+1. OpenFeign如果不做特殊配置，OpenFeign默认使用的是JDK自带的HttpURLConnection发送HTTP请求。由于默认HttpURLConnection没有连接池，性能和效率比较低，如果采用默认，性能上不是最好的
+
+2. 使用Apache HttpClient5替换OpenFeign默认的HttpURLConnection，**一定要替换，提供系统效率**
+
+3. 在cloud-consumer-feign-order80工程中引入依赖
+
+   ```xml
+   <!-- httpclient5 -->
+   <dependency>
+   	<groupId>org.apache.httpcomponents.client5</groupId>
+   	<artifactId>httpclient5</artifactId>
+   	<version>5.3</version>
+   </dependency>
+   <!-- httpclient5 -->
+   <dependency>
+   	<groupId>io.github.openfeign</groupId>
+   	<artifactId>feign-hc5</artifactId>
+   	<version>13.1</version>
+   </dependency>
+   ```
+
+4. ymal文件中开启配置：
+
+   ```yaml
+   spring:
+     application:
+       name: cloud-consumer-feign-service
+     cloud:
+       consul:
+         host: localhost
+         port: 8500
+         discovery:
+           service-name: ${spring.application.name}
+           prefer-ip-address: true #优先使用服务ip进行注册
+         config:
+           profile-separator: '-'
+           format: yaml
+       openfeign:
+         client:
+           config:
+             default:
+               connect-timeout: 20000
+               read-timeout: 20000
+         httpclient:
+           hc5:
+             enabled: true
+     main:
+       allow-bean-definition-overriding: true
+   ```
+
+### 四、OpenFeign之请求/相应压缩
+
+1. OpenFeign之请求/相应压缩介绍：Spring Cloud OpenFeign支持对请求和响应进行GZIP压缩，以减少通信过程中的性能损耗
+
+2. 配置文件中添如下配置，就能开启请求与相应的压缩功能
+
+   ```properties
+   spring.cloud.openfeign.compression.request.enabled = true
+   spring.cloud.openfeign.compression.response.enabled = true
+   ```
+
+3. 细粒化设置：对请求压缩做一些更细致的设置，比如指定压缩的请求参数类型并设置请求压缩的大小下线，只有超过这个大小的请求才会进行压缩
+
+   ```properties
+   spring.cloud.openfeign.compression.request.enabled = true
+   # 最小触发压缩的大小
+   spring.cloud.openfeign.compression.response.min-request-size = 2028
+   # 触发压缩数据类型
+   spring.cloud.openfeign.compression.response.mime-types = text/xml,application/xml,application/json
+   ```
+
+   
