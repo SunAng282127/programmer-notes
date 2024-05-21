@@ -1993,7 +1993,7 @@
 2. OpenFeign的作用
    - 可插拔的注解支持，包括Feign注解和JAX-RS注解
    - 支持可插拔的HTTP编码器和解码器
-   - 支持Sentinel和它的Fallback
+   - 支持Sentinel和它的Fallback，用于降级
    - 支持SpringCloud LoadBalancer的负载均衡
    - 支持HTTP请求和相应的压缩
    - OpenFeign是一种声明式、模板化的HTTP客户端，它使得调用RESTful网络服务变得简单。在Spring Cloud中使用OpenFeign，可以做到像调用本地方法一样使用HTTP请求访问远程服务，开发者无需关注远程HTTP请求的细节 
@@ -2335,7 +2335,8 @@
              default:
                connect-timeout: 20000
                read-timeout: 20000
-         httpclient:
+         httpclient: 
+         #httpclient的超时时间配置用client中的connect-timeout和read-timeout即可
            hc5:
              enabled: true
      main:
@@ -2363,4 +2364,53 @@
    spring.cloud.openfeign.compression.response.mime-types = text/xml,application/xml,application/json
    ```
 
-   
+
+### 五、OpenFeign之日志
+
+1. OpenFeign日志可以了解Feign中Http请求的细节，可以通过配置来调整日志等级，简而言之就是对Feign接口的调用情况进行监控和输出
+
+2. OpenFeign日志分类
+
+	- NONE：默认的，不显示任何日志
+	- BASIC：仅记录请求方法、URL、响应状态码以及执行时间
+	- HEADERS：记录请求方法、URL、响应状态码、执行时间以及请求和响应的头信息
+	- FULL：除了记录请求方法、URL、响应状态码、执行时间以及请求和响应的头信息，还记录请求和响应的正文及元数据
+
+3. cloud-consumer-feign-order80工程FeignConfig配置类中配置日志Bean
+
+	```java
+	@Configuration
+	public class FeignConfig {
+	
+	    // 重试机制
+	    @Bean
+	    public Retryer myRetryer() {
+	        return new Retryer.Default();
+	        // 初次间隔 最大间隔 最大请求次数(1+2) = 3
+	//        return new Retryer.Default(100, 1, 3);
+	    }
+	
+	    // 日志记录级别
+	    @Bean
+	    public Logger.Level feignLoggerLevel() {
+	        return Logger.Level.FULL;
+	    }
+	}
+	```
+
+4. cloud-consumer-feign-order80工程yaml文件中添加Feign等级日志
+
+	- 公式为：logging.level + 含有@FeignClient注解的完整带包名的接口名 + debug
+	- 如果没有在配置文件中配置日志，则只会打印简单的日志，例如调用接口开始时间和结束时间
+
+	```yaml
+	#和Spring是等级的
+	logging:
+	  level:
+	    com:
+	      atguigu:
+	      	cloud:
+	        	apis:
+	          		PayFeignApi: debug
+	```
+
