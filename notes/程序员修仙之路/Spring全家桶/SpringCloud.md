@@ -2638,8 +2638,277 @@
    }
    ```
 
-7. 以上是基于次数的窗口滑动计算方式，基于时间的窗口滑动计算方式配置如下
+7. 以上是基于次数的滑动窗口计算方式，基于时间的滑动窗口的计算方式为：是通过有N个桶的环形数组实现，如果滑动窗口的大小为10秒，这个环形数组总是有10个桶，每个桶统计了在这一秒钟发生的所有调用结果（部分统计结果），数组中的第一个桶存储了当前这一秒内的所有调用的结果，其他的桶存储了之前每秒调用的结果。滑动窗口不会单独存储所有的调用结果，而是对每个桶内的统计结果和总的统计值进行增量的更新，当新的调用结果被记录时，总的统计值会进行增量更新。每个桶在进行部分统计时存储了三个整形，分别为失败调用时间、慢调用数、总调用数，还有一个long类型变量，存储所有调用的响应时间
+
+8. 在cloud-consumer-feign-order80消费者工程添加基于时间窗口滑动的CircuitBreaker配置
+
+   ```yaml
+   spring:
+     application:
+       name: cloud-consumer-feign-service
+     cloud:
+       consul:
+         host: localhost
+         port: 8500
+         discovery:
+           service-name: ${spring.application.name}
+           prefer-ip-address: true #优先使用服务ip进行注册
+         config:
+           profile-separator: '-'
+           format: yaml
+       openfeign:
+         client:
+           config:
+             default:
+               connect-timeout: 20000
+               read-timeout: 20000
+         httpclient:
+           hc5:
+             enabled: true
+         compression:
+           request:
+             enabled: true
+             # 最小触发压缩的大小
+             min-request-size: 2028
+             # 触发压缩数据类型
+             mime-types: text/xml,application/xml,application/json
+           response:
+             enabled: true
+         # 开启circuitbreaker和分组激活spring.cloud.openfeign.circuitbreaker.enabled
+         circuitbreaker:
+           enabled: true
+           group:
+             # 没开分组永远不用分组的配置。
+             # 精确优先，分组次之（如果开了分组之后，分组也是在精确之后），默认行为最后
+             enabled: true
+     main:
+       allow-bean-definition-overriding: true
+   
+   logging:
+     level:
+       com:
+         atguigu:
+           cloud:
+             apis:
+               PayFeignApi: debug
+   
+   # 基于时间的降级
+   resilience4j:
+     timelimiter:
+       configs:
+         default:
+           timeout-duration: 10s 
+           # 默认1s 超过1s直接降级 (坑)
+     circuitbreaker:
+       configs:
+         default:
+           failure-rate-threshold: 50 
+           # 调用失败达到50%后打开断路器
+           slow-call-duration-threshold: 2s 
+           # 慢调用时间阈值，高于这个阈值的则视为慢调用并增加慢调用比例
+           slow-call-rate-threshold: 30 
+           # 慢调用百分比峰值，断路器把调用时间大于slow-call-duration-threshold视为慢调用，
+           # 当慢调用的比例高于阈值，断路器打开，并开启服务降级
+           sliding-window-type: time_based 
+           # 滑动窗口类型
+           sliding-window-size: 6 
+           # 滑动窗口大小 若count_based则表示6个请求 若time_base则表示6秒
+           minimum-number-of-calls: 2 
+           # 每个滑动窗口的周期
+           automatic-transition-from-open-to-half-open-enabled: true 
+           # 开始过度到半开状态
+           wait-duration-in-open-state: 5s 
+           # 从开启到半开启需要5s
+           permitted-number-of-calls-in-half-open-state: 2 
+           #半开状态允许通过的最大请求数
+           record-exceptions:
+             - java.lang.Exception
+       instances:
+         cloud-payment-service:
+           base-config: default
+   ```
 
 ### 二、隔离（BulkHead）
+
+1. BulkHead的概念：舱壁隔离，类似于鸳鸯锅，两者锅底互不影响。主要用于限并发
+
+2. BulkHead的作用：依赖隔离和负载保护，用来限制对于下游服务的最大并发数量的限制
+
+3. Resilience4J提供了两种隔离的实现方式，可以限制并发执行的数量
+
+   - SemaphoreBulkhead使用了信号量，可以在各种线程和I/O模型上正常工作，与Hystrix不同，它不提供基于shadow的thread选型，由客户端来确保正确的线程池大小与隔离配置
+   - FixedThreadPoolBulkhead：使用了有界队列和固定大小线程池
+
+4. 实现SemaphoreBulkhead（信号量舱壁）
+
+   - SemaphoreBulkhea原理是当信号量有空闲时，进入系统的请求会直接获取信号量并开始业务处理。当信号量有空闲时，进入系统的请求会直接获取信号量并开始业务处理。当信号量全被占用时，接下来的请求将会进入阻塞状态，SemaphoreBulkhead提供了一个阻塞计时器；如果阻塞状态的请求在阻塞计时内无法获取到信号量则系统会拒绝这些请求；如果请求在阻塞计时内获取到了信号量，那将直接获取信号量并执行相应的业务处理
+
+   - 在cloud-provider-payment8001提供者工程中的PayCircuitController新增接口
+
+     ```java
+     @RestController
+     @RequestMapping("/pay")
+     @Slf4j
+     public class PayCircuitController {
+     
+         @Resource
+         private IPayService payService;
+     
+         /**
+          * @return
+          * Resilience4J CircuitBreaker的案例
+          **/
+         @GetMapping(value = "/getBulkheadById/{id}")
+         public String getBulkheadById(@PathVariable("id") Integer id) {
+             if(id < 0){
+                 throw new RuntimeException("id不能为负数");
+             }
+     
+             if(id > 999){
+                 try {
+                     TimeUnit.SECONDS.sleep(5);
+                 }catch (InterruptedException e){
+                     e.printStackTrace();
+                 }
+             }
+             return "Hello, CircuitBreaker inputId："+ id +" \t" + IdUtil.simpleUUID();
+         }
+     
+     }
+     ```
+
+   - 在cloud-api-commons公共工程的PayFeignApi接口中添加新的接口
+
+     ```java
+     @GetMapping(value = "/pay/getBulkheadById/{id}")
+     public String getBulkheadById(@PathVariable("id") Integer id);
+     ```
+
+   - 在cloud-consumer-feign-order80消费者工程添加Bulkhead依赖
+
+     ```xml
+     <!-- resilience4J bulkhead -->
+     <dependency>
+       <groupId>io.github.resilience4j</groupId>
+       <artifactId>resilience4j-bulkhead</artifactId>
+     </dependency>
+     ```
+
+   - 在cloud-consumer-feign-order80消费者工程添加Bulkhead的yaml配置
+
+     ```yaml
+     spring:
+       application:
+         name: cloud-consumer-feign-service
+       cloud:
+         consul:
+           host: localhost
+           port: 8500
+           discovery:
+             service-name: ${spring.application.name}
+             prefer-ip-address: true #优先使用服务ip进行注册
+           config:
+             profile-separator: '-'
+             format: yaml
+         openfeign:
+           client:
+             config:
+               default:
+                 connect-timeout: 20000
+                 read-timeout: 20000
+           httpclient:
+             hc5:
+               enabled: true
+           compression:
+             request:
+               enabled: true
+               # 最小触发压缩的大小
+               min-request-size: 2028
+               # 触发压缩数据类型
+               mime-types: text/xml,application/xml,application/json
+             response:
+               enabled: true
+           # 开启circuitbreaker和分组激活spring.cloud.openfeign.circuitbreaker.enabled
+           circuitbreaker:
+             enabled: true
+             group:
+               # 没开分组永远不用分组的配置。
+               # 精确优先，分组次之（如果开了分组之后，分组也是在精确之后），默认行为最后
+               enabled: true
+       main:
+         allow-bean-definition-overriding: true
+     
+     logging:
+       level:
+         com:
+           atguigu:
+             cloud:
+               apis:
+                 PayFeignApi: debug
+     
+     # 基于次数的降级
+     resilience4j:
+       timelimiter:
+         configs:
+           default:
+             timeout-duration: 10s # 默认1s 超过1s直接降级 (坑)
+       circuitbreaker: # 降级熔断
+         configs:
+           default:
+             failure-rate-threshold: 50 
+             # 调用失败达到50%后打开断路器，就跳闸。当坏的调用达到50%时，那么整个服务都会被坏的请求拖垮，
+             # 之前好的请求也不能用了
+             sliding-window-type: count_based 
+             # 滑动窗口类型
+             sliding-window-size: 6 
+             # 滑动窗口大小 若count_based则表示6个请求 若time_base则表示6秒
+             minimum-number-of-calls: 6 
+             # 每个滑动窗口的周期，也就是在半开状态下探路先锋的最小数量，
+             # 如果未达到指定数量，即使探路先锋全成功或全失败也不会改变此时的状态
+             automatic-transition-from-open-to-half-open-enabled: true 
+             # 开启过渡到半开状态，默认为true
+             wait-duration-in-open-state: 5s 
+             # 从开启到半开启需要5s
+             permitted-number-of-calls-in-half-open-state: 2 
+             # 半开状态允许通过的最大请求数，在半开状态下circuitBreaker将允许最多
+             # permitted-number-of-calls-in-half-open-state个请求通过，
+             # 如果其中有任何一个请求失败，circuitBreaker将重新进入开启状态
+             record-exceptions:
+               - java.lang.Exception
+         instances:
+           cloud-payment-service:
+             base-config: default
+        
+       # 信号量舱壁
+       bulkhead:
+           configs:
+             default:
+               max-concurrent-calls: 2
+               # 舱壁允许的最大并发执行量，默认为25
+               max-wait-duration: 1s
+               # 尝试进入饱和舱壁时，应阻塞线程的最长时间，默认为0。
+               # 此处设置为1s，过时不候进舱壁兜底fallback
+           instances:
+             cloud-payment-service:
+               base-config: default     
+     ```
+
+   - 在cloud-consumer-feign-order80消费者工程中的OrderCircuitController新增接口
+
+     ```java
+     @GetMapping(value = "/getBulkheadById/{id}")
+     @Bulkhead(name = "cloud-payment-service",fallbackMethod = "myBulkheadFallback",type = Bulkhead.Type.SEMAPHORE)
+     public String getBulkheadById(@PathVariable("id") Integer id) {
+     	return payFeignApi.getBulkheadById(id);
+     }
+     
+     public String myBulkheadFallback(Integer id, Throwable t){
+     	return "系统繁忙，请稍后再试";
+     }
+     ```
+
+5. 实现FixedThreadPoolBulkhead（固定线程池舱壁）
+
+   - FixedThreadPoolBulkhead原理的功能与SemaphoreBulkhead一样也是用于限制并发执行次数的，但是二者的实现原理存在差异而且表现效果也存在细微的差别。FixedThreadPoolBulkhead使用一个固定线程池和一个等待队列来实现舱壁。当线程池中存在空闲时，则此时进入系统的请求将直接进入线程池开启新线程或使用空闲线程来处理请求；当线程池无空闲时，接下来的请求将进入等待队列，若等待队列仍然无剩余空间时接下来的请求将直接拒绝，若队列中的请求等待线程池出现空闲时将进入线程池进行业务处理。FixedThreadPoolBulkhead只对CompletableFuture方法有效，所以必须创建返回CompletableFuture类型的方法来实现FixedThreadPoolBulkhead
 
 ### 三、限流（RateLimiter）
