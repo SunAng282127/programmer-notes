@@ -2426,7 +2426,7 @@
 
    ![](../../../TyporaImage/15e640ad6dfc495eb9eb6d5a129c1120.png)
 
-3. CircuitBreaker的目的是保护分布式系统免受故障和异常，提高系统的可用性和健壮性。当一个组件或服务出现故障时，CircuitBreaker会迅速切换到开放OPEN状态（保险丝跳闸断电），阻止请求发送到该组件或服务从而避免更多的请求发送到该组件或请求。这可以减少对该组件或服务的负载，防止该组件或服务进一步崩溃，并使整个系统能够继续正常运行。同时，CircuitBreaker还可以提高系统的可用性和健壮性，因为它可以在分布式系统的各个组件之间自动切换，从而避免单点故障的问题
+3. CircuitBreaker的目的是保护分布式系统免受**故障和异常**，提高系统的可用性和健壮性。当一个组件或服务出现故障时，CircuitBreaker会迅速切换到开放OPEN状态（保险丝跳闸断电），阻止请求发送到该组件或服务从而避免更多的请求发送到该组件或请求。这可以减少对该组件或服务的负载，防止该组件或服务进一步崩溃，并使整个系统能够继续正常运行。同时，CircuitBreaker还可以提高系统的可用性和健壮性，因为它可以在分布式系统的各个组件之间自动切换，从而避免单点故障的问题。**服务熔断不是针对的某个接口出现故障时挂掉这个接口，而是挂掉整个服务，在半开状态下也不是某个挂掉的接口进行试探服务是否恢复，而是整个系统中某些接口去请求服务是否恢复，是否达到服务容错阈值也是根据某些接口请求服务去计算的，而不是针对某个已知挂掉的接口去多次请求而计算的**
 
 4. CircuitBreaker断路器的前辈Hystrix（豪猪）：Hystrix是一个用于处理分布式系统的延迟和容错的开源库，在分布式系统中，许多依赖不可避免的会调用失败，比如超时、异常等，Hystrix能够保证一个依赖出问题的情况下，不会导致整体服务失败，避免级联故障，以提高分布式系统的弹性。但是Hystrix已不再维护，不推荐使用了
 
@@ -2451,9 +2451,194 @@
 
 ![](../../../TyporaImage/27ef0d9078b47cd142758f40e6a8c3a0.png)
 
-## 三、Resilience4实现
+## 三、Resilience4J实现
 
 ### 一、服务熔断/降级（CircuitBreaker）
+
+1. [官方文档](https://github.com/lmhmhl/Resilience4j-Guides-Chinese/blob/main/core-modules/CircuitBreaker.md)
+
+2. 主要使用的的参数
+
+   | 配置属性                              | 默认值      | 描述                                                         |
+   | ------------------------------------- | ----------- | ------------------------------------------------------------ |
+   | failureRateThreshold                  | 50          | 以百分比配置失败率阈值。当失败率等于或大于阈值时，断路器状态并关闭变为开启，并进行服务降级。当坏的调用达到50%时，那么整个服务都会被坏的请求拖垮，之前好的请求也不能用了 |
+   | slidingWindowType                     | COUNT_BASED | 配置滑动窗口的类型，当断路器关闭时，将调用的结果记录在滑动窗口中。滑动窗口的类型可以是count-based（基于次数）或time-based（基于时间）。如果滑动窗口类型是COUNT_BASED，将会统计记录最近`slidingWindowSize`次调用的结果。如果是TIME_BASED，将会统计记录最近`slidingWindowSize`秒的调用结果 |
+   | slidingWindowSize                     | 100         | 配置滑动窗口的大小。如果滑动窗口类型是COUNT_BASED，则10次调用中有50%失败（即5次）打开熔断断路器。如果是TIME_BASED，此时还需要额外设置两个属性。含义为在N秒内（sliding-window-size）100%（slow-call-rate-threshold）的请求超过N秒（slow-call-duration-threshold）打开断路器 |
+   | slowCallRateThreshold                 | 100         | 以百分比的方式配置，断路器把调用时间大于`slowCallDurationThreshold`的调用视为满调用，当慢调用比例大于等于阈值时，断路器开启，并进行服务降级 |
+   | slowCallDurationThreshold             | 60000 [ms]  | 配置调用时间的阈值，高于该阈值的呼叫视为慢调用，并增加慢调用比例 |
+   | permittedNumberOfCallsInHalfOpenState | 10          | 断路器在半开状态下允许通过的调用次数                         |
+   | minimumNumberOfCalls                  | 100         | 断路器计算失败率或慢调用率之前所需的最小调用数（每个滑动窗口周期）。例如，如果minimumNumberOfCalls为10，则必须至少记录10个调用，然后才能计算失败率。如果只记录了9次调用，即使所有9次调用都失败，断路器也不会开启 |
+   | waitDurationInOpenState               | 60000 [ms]  | 断路器从开启过渡到半开应等待的时间                           |
+
+3. 实战案例需求说明：6次访问中当执行方法的失败率达到50%时CircuitBreaker将进入OPEN状态（保险丝跳闸断电）拒绝所有请求，等待5秒后，CircuitBreaker将自动从开启OPEN状态过渡到半开HALF_OPEN状态，允许一些请求通过以测试服务是否恢复正常。如果还是异常，CircuitBreaker则重新进入开启OPEN状态；如正常将进入关闭CLOSED开合状态，恢复正常处理请求
+
+4. 在cloud-provider-payment8001提供者工程中添加新的controller
+
+   ```java
+   @RestController
+   @RequestMapping("/pay")
+   @Slf4j
+   public class PayCircuitController {
+   
+       @Resource
+       private IPayService payService;
+   
+       /**
+        * @return
+        * Resilience4J CircuitBreaker的案例
+        **/
+       @GetMapping(value = "/getCircuitById/{id}")
+       public String getInfoById(@PathVariable("id") Integer id) {
+           if(id < 0){
+               throw new RuntimeException("id不能为负数");
+           }
+   
+           if(id > 999){
+               try {
+                   TimeUnit.SECONDS.sleep(5);
+               }catch (InterruptedException e){
+                   e.printStackTrace();
+               }
+           }
+           return "Hello, CircuitBreaker inputId："+ id +" \t" + IdUtil.simpleUUID();
+       }
+   
+   }
+   ```
+
+5. 在cloud-api-commons公共工程的PayFeignApi接口中添加新的接口
+
+   ```javascript
+   @GetMapping(value = "/pay/getCircuitById/{id}")
+   public String getCircuitById(@PathVariable("id") Integer id);
+   ```
+
+6. 在cloud-consumer-feign-order80消费者工程添加CircuitBreaker配置，也就是在接口请求方添加保险丝
+
+   - 添加依赖
+
+   ```xml
+   <!-- resilience4J circuitbreaker -->
+   <dependency>
+   	<groupId>org.springframework.cloud</groupId>
+   	<artifactId>spring-cloud-starter-circuitbreaker-resilience4j</artifactId>
+   </dependency>
+   <!-- 由于断路保护等需要AOP实现，所以必须导入AOP包 -->
+   <dependency>
+   	<groupId>org.springframework.boot</groupId>
+   	<artifactId>spring-boot-starter-aop</artifactId>
+   </dependency>
+   ```
+
+   - yaml文件中添加配置
+
+   ```yaml
+   spring:
+     application:
+       name: cloud-consumer-feign-service
+     cloud:
+       consul:
+         host: localhost
+         port: 8500
+         discovery:
+           service-name: ${spring.application.name}
+           prefer-ip-address: true #优先使用服务ip进行注册
+         config:
+           profile-separator: '-'
+           format: yaml
+       openfeign:
+         client:
+           config:
+             default:
+               connect-timeout: 20000
+               read-timeout: 20000
+         httpclient:
+           hc5:
+             enabled: true
+         compression:
+           request:
+             enabled: true
+             # 最小触发压缩的大小
+             min-request-size: 2028
+             # 触发压缩数据类型
+             mime-types: text/xml,application/xml,application/json
+           response:
+             enabled: true
+         # 开启circuitbreaker和分组激活spring.cloud.openfeign.circuitbreaker.enabled
+         circuitbreaker:
+           enabled: true
+           group:
+             # 没开分组永远不用分组的配置。
+             # 精确优先，分组次之（如果开了分组之后，分组也是在精确之后），默认行为最后
+             enabled: true
+     main:
+       allow-bean-definition-overriding: true
+   
+   logging:
+     level:
+       com:
+         atguigu:
+           cloud:
+             apis:
+               PayFeignApi: debug
+   
+   # 基于次数的降级
+   resilience4j:
+     timelimiter:
+       configs:
+         default:
+           timeout-duration: 10s # 默认1s 超过1s直接降级 (坑)
+     circuitbreaker: # 降级熔断
+       configs:
+         default:
+           failure-rate-threshold: 50 
+           # 调用失败达到50%后打开断路器，就跳闸。当坏的调用达到50%时，那么整个服务都会被坏的请求拖垮，
+           # 之前好的请求也不能用了
+           sliding-window-type: count_based 
+           # 滑动窗口类型
+           sliding-window-size: 6 
+           # 滑动窗口大小 若count_based则表示6个请求 若time_base则表示6秒
+           minimum-number-of-calls: 6 
+           # 每个滑动窗口的周期，也就是在半开状态下探路先锋的最小数量，
+           # 如果未达到指定数量，即使探路先锋全成功或全失败也不会改变此时的状态
+           automatic-transition-from-open-to-half-open-enabled: true 
+           # 开启过渡到半开状态，默认为true
+           wait-duration-in-open-state: 5s 
+           # 从开启到半开启需要5s
+           permitted-number-of-calls-in-half-open-state: 2 
+           # 半开状态允许通过的最大请求数，在半开状态下circuitBreaker将允许最多
+           # permitted-number-of-calls-in-half-open-state个请求通过，
+           # 如果其中有任何一个请求失败，circuitBreaker将重新进入开启状态
+           record-exceptions:
+             - java.lang.Exception
+       instances:
+         cloud-payment-service:
+           base-config: default
+   ```
+
+   - 新建Controller来完成CircuitBreaker调用测试，并提供服务降级提示友好
+
+   ```java
+   @RestController
+   @RequestMapping("/feign/pay")
+   public class OrderCircuitController {
+   
+       @Resource
+       private PayFeignApi payFeignApi;
+   
+       @GetMapping(value = "/getCircuitById/{id}")
+       @CircuitBreaker(name = "cloud-payment-service",fallbackMethod = "myCircuitFallback")
+       public String getCircuitById(@PathVariable("id") Integer id) {
+           return payFeignApi.getCircuitById(id);
+       }
+   
+       public String myCircuitFallback(Integer id, Throwable t){
+           return "系统繁忙，请稍后再试";
+       }
+   }
+   ```
+
+7. 以上是基于次数的窗口滑动计算方式，基于时间的窗口滑动计算方式配置如下
 
 ### 二、隔离（BulkHead）
 
