@@ -2910,5 +2910,389 @@
 5. 实现FixedThreadPoolBulkhead（固定线程池舱壁）
 
    - FixedThreadPoolBulkhead原理的功能与SemaphoreBulkhead一样也是用于限制并发执行次数的，但是二者的实现原理存在差异而且表现效果也存在细微的差别。FixedThreadPoolBulkhead使用一个固定线程池和一个等待队列来实现舱壁。当线程池中存在空闲时，则此时进入系统的请求将直接进入线程池开启新线程或使用空闲线程来处理请求；当线程池无空闲时，接下来的请求将进入等待队列，若等待队列仍然无剩余空间时接下来的请求将直接拒绝，若队列中的请求等待线程池出现空闲时将进入线程池进行业务处理。FixedThreadPoolBulkhead只对CompletableFuture方法有效，所以必须创建返回CompletableFuture类型的方法来实现FixedThreadPoolBulkhead
+   
+   - 在cloud-consumer-feign-order80消费者工程添加Bulkhead的yaml配置
+   
+     ```yaml
+     spring:
+       application:
+         name: cloud-consumer-feign-service
+       cloud:
+         consul:
+           host: localhost
+           port: 8500
+           discovery:
+             service-name: ${spring.application.name}
+             prefer-ip-address: true #优先使用服务ip进行注册
+           config:
+             profile-separator: '-'
+             format: yaml
+         openfeign:
+           client:
+             config:
+               default:
+                 connect-timeout: 20000
+                 read-timeout: 20000
+           httpclient:
+             hc5:
+               enabled: true
+           compression:
+             request:
+               enabled: true
+               # 最小触发压缩的大小
+               min-request-size: 2028
+               # 触发压缩数据类型
+               mime-types: text/xml,application/xml,application/json
+             response:
+               enabled: true
+           # 开启circuitbreaker和分组激活spring.cloud.openfeign.circuitbreaker.enabled
+           circuitbreaker:
+             enabled: true
+             group:
+               # 没开分组永远不用分组的配置。
+               # 精确优先，分组次之（如果开了分组之后，分组也是在精确之后），默认行为最后
+               enabled: true
+       main:
+         allow-bean-definition-overriding: true
+     
+     logging:
+       level:
+         com:
+           atguigu:
+             cloud:
+               apis:
+                 PayFeignApi: debug
+     
+     # 基于次数的降级
+     resilience4j:
+       timelimiter:
+         configs:
+           default:
+             timeout-duration: 10s # 默认1s 超过1s直接降级 (坑)
+       circuitbreaker: # 降级熔断
+         configs:
+           default:
+             failure-rate-threshold: 50 
+             # 调用失败达到50%后打开断路器，就跳闸。当坏的调用达到50%时，
+             # 那么整个服务都会被坏的请求拖垮，
+             # 之前好的请求也不能用了
+             sliding-window-type: count_based 
+             # 滑动窗口类型
+             sliding-window-size: 6 
+             # 滑动窗口大小 若count_based则表示6个请求 若time_base则表示6秒
+             minimum-number-of-calls: 6 
+             # 每个滑动窗口的周期，也就是在半开状态下探路先锋的最小数量，
+             # 如果未达到指定数量，即使探路先锋全成功或全失败也不会改变此时的状态
+             automatic-transition-from-open-to-half-open-enabled: true 
+             # 开启过渡到半开状态，默认为true
+             wait-duration-in-open-state: 5s 
+             # 从开启到半开启需要5s
+             permitted-number-of-calls-in-half-open-state: 2 
+             # 半开状态允许通过的最大请求数，在半开状态下circuitBreaker将允许最多
+             # permitted-number-of-calls-in-half-open-state个请求通过，
+             # 如果其中有任何一个请求失败，circuitBreaker将重新进入开启状态
+             record-exceptions:
+               - java.lang.Exception
+         instances:
+           cloud-payment-service:
+             base-config: default
+        
+       # 信号量舱壁（基于线程池方式实现）
+       bulkhead:
+           configs:
+             default:
+               max-thread-pool-sezi: 4
+               # 配置最大线程池大小，
+               # 默认为Runtime.getRuntime().availableProcessors()代表数量
+               core-thread-pool-size: 2
+               # 配置核心线程池大小
+               # 默认为Runtime.getRuntime().availableProcessors()-1
+               queue-capacity: 100
+               # 配置队列的容量，默认为100
+               keep-alive-duration: 20ms
+               # 当线程数大于核心数时，这是多余空闲线程在终止前等待新任务的最长时间
+               # 默认20ms
+           instances:
+             cloud-payment-service:
+               base-config: default    
+           # spring.cloud.openfeign.circuitbreaker.group.enabled
+           # 需要设置为false，新启线程需要和原来的主线程脱离
+     ```
+   
+   - 在cloud-consumer-feign-order80消费者工程中的OrderCircuitController修改接口
+   
+   	```java
+   	@GetMapping(value = "/getBulkheadById/{id}")
+   	@Bulkhead(name = "cloud-payment-service",fallbackMethod = "myBulkheadThreadPoolFallback",type = Bulkhead.Type.THREADPOOL)
+   	public CompletableFuture<String> getBulkheadThreadPoolById(@PathVariable("id") Integer id) {
+   		return CompletableFuture.supplyAsync(() -> payFeignApi.getBulkheadById(id) + "\t" + "Bulkhead.Type.THREADPOOL");
+   	}
+   	
+   	public CompletableFuture<String> myBulkheadThreadPoolFallback(Integer id, Throwable t){
+   	    return CompletableFuture.supplyAsync(() -> "系统繁忙，请稍后再试");
+   	}
+   	```
 
 ### 三、限流（RateLimiter）
+
+1. 限流的概念：限流就是限制最大访问流量，系统能提供的最大并发是有限的，同时来的请求又太多，就需要限流，限流是频率控制，比如商城秒杀业务，瞬时大量请求涌入，服务器忙不过来就只能排队限流。简而言之，限流就是通过对并发访问/请求进行**限速**，或者对一个时间窗口内的请求进行**限速**，以保护应用系统，一旦达到限制速率则可以拒绝服务、排队或等待、降级等处理
+
+2. 限流的常见算法
+
+  - 漏斗算法（Leaky Bucket）：使用一个固定容量的漏桶，按照设定常量固定速率流出水滴，也就是漏斗，类似于医院打吊针，不管源头流量多大，可以设定匀速流出。如果流入水滴超过了桶的容量，则流入的水滴将会溢出（被丢弃），而漏桶容量是不变的。但是漏桶算法对于存在突发特性的流量来说缺乏效率，因为漏斗的效率是匀速的，所以不会提高效率
+
+  - 令牌桶算法（Token Bucket）：Spring Cloud默认使用该算法
+
+  	![image-20240523111805164](../../../TyporaImage/image-20240523111805164.png)
+
+  - 滚动时间窗口（tumbling time window）：允许**固定数量**的请求进入（比如1秒取4个请求数据相加，4个请求数据加和次数超过25值就over）超过数量就拒绝或者排队，等下一个时间段进入。由于是在一个时间间隔内进行限制，如果用户在上个时间间隔结束前请求（但没有超过限制），同时在当前时间间隔刚开始请求（同样没抽过限制）。在各自的时间间隔内，这些请求都是正常的。但是间隔临界的一段时间内的请求就会超过系统限制，可能导致系统被压垮
+
+  - 滑动时间窗口（sliding time window）：顾名思义该窗口是滑动的。窗口即需要定义窗口的大小；滑动即需要定义在窗口中滑动的大小，但理论上讲滑动的大小不能超过窗口的大小。滑动窗口算法是把固定时间片进行划分并且随着时间移动，移动方式为开始时间点变为时间列表中的第2个时间点，结束时间点增加一个时间点，通过这种方式可以巧妙的避开计数器的临界点的问题。如下
+
+  	![image-20240523133322584](../../../TyporaImage/image-20240523133322584.png)
+
+3. 限流的实操
+
+	- 在cloud-provider-payment8001提供者工程中的PayCircuitController新增接口
+
+		```java
+		@GetMapping("/pay/getRateLimitById/{id}")
+		public Result<String> getRateLimitById(@PathVariable("id") Integer id) {
+			return Result.success("Hello" + id + IdUtil.simpleUUID());
+		}
+		```
+
+	- 在cloud-api-commons公共工程的PayFeignApi接口中添加新的接口
+
+		```java
+		@GetMapping("/pay/getRateLimitById/{id}")
+		Result<String> getRateLimitById(@PathVariable("id") Integer id);
+		```
+
+	- 在cloud-consumer-feign-order80消费者工程添加Ratelimiter依赖
+
+		```xml
+		<!-- resilience4J bulkhead -->
+		<dependency>
+		  <groupId>io.github.resilience4j</groupId>
+		  <artifactId>resilience4j-ratelimiter</artifactId>
+		</dependency>
+		```
+
+	- 在cloud-consumer-feign-order80消费者工程配置yaml
+
+		```yaml
+		resilience4j:
+		  ratelimiter:
+		    configs:
+		      default:
+		        limit-for-period: 2 
+		        # 一次刷新周期内允许最大的请求数，默认为50
+		        limit-refresh-period: 1s 
+		        # 限流器每隔limit-refresh-period刷新一次，
+		        # 将允许处理的最大请求数量重置为limit-refresh-period
+		        # 默认为500纳秒
+		        timeout-duration: 1 
+		        # 线程等待权限的默认等待时间，默认为5秒
+		    instances:
+		      cloud-payment-service:
+		        base-config: default
+		```
+
+	- 在cloud-consumer-feign-order80消费者工程中的OrderCircuitController新增接口
+
+		```java
+		@GetMapping(value = "/getBulkheadById/{id}")
+		@RateLimiter(name = "cloud-payment-service",fallbackMethod = "myRateLimiterFallback",type = Bulkhead.Type.SEMAPHORE)
+		public String getBulkheadById(@PathVariable("id") Integer id) {
+			return payFeignApi.getBulkheadById(id);
+		}
+		
+		public String myRateLimiterFallback(Integer id, Throwable t){
+			return "系统繁忙，请稍后再试";
+		}
+		```
+
+
+# 七、Sleuth（Micrometer）+ ZipKin分布式链路追踪
+
+## 一、分布式链路追踪概述
+
+- 分布式链路追踪（Distributed Tracing），就是将一次分布式请求还原成调用链路，进行日志记录，性能监控并将一次分布请求的调用情况集中展示。比如各个服务节点上的耗时、请求具体到达哪台机器上、每个服务节点的请求状态等等
+- Sleuth已经被Micrometer替代
+- Spring Cloud Sleuth（Micrometer）是将一次分布式请求还原成调用链路，进行日志记录和性能监控，并将一次分布式请求的调用情况集中发送给zipkin，zipkin负责在web展示
+- zipkin是一种分布式链路跟踪系统图形化工具，zipkin是Twitter开源的分布式跟踪系统，能够手机微服务运行过程中的实时调用链路信息，并能够将这些调用链路信息展示到Web图形化界面上供开发人员分析，开发人员能够从zipkin中分析除调用链路中的性能瓶颈，识别除存在问题的应用程序，进而定位问题和解决问题
+
+## 二、分布式链路追踪原理
+
+1. 假定微服务调用的链路为Service1调用Service2，Service2调用Service3和Service4
+
+2. 一条链路追踪会在每个服务调用的时候加上TraceID（全局ID，也就是整个请求链路的ID）和SpanID（每次请求发送的ID）。链路是通过TraceID唯一标识；Span标识发起的请求信息，各Span通过parentId（也就是当前请求的上一个服务请求id）关联起来（Span：表示调用链路来源，通俗的理解span就是一次请求信息）
+
+3. 相关概念
+
+	- CS：Client Sent即客户端发送这个请求的时间
+	- SR：Server Received即服务器接收到这个请求的时间
+	- CR：Client Received即客户端接收到数据的时间
+	- SS：Server Sent即服务端发送响应的时间
+	- SR - CS = 网络传输时间（请求过去）
+	- SS - SR = 业务处理时间
+	- CR - CS = 远程调用耗时
+	- CR - SS = 网络传输时间（响应过来）
+
+4. 链路调用示例图
+
+	- 通过parentId就可以找到父节点，整个链路即可以进行跟踪追溯了
+	- 这整个过程每个节点的TraceID是相同的
+
+	![image-20240523152623502](../../../TyporaImage/image-20240523152623502.png)
+
+## 三、zipkin下载及运行
+
+1. [zipkin官网下载](https://zipkin.io/pages/quickstart.html)
+
+2. zipkin运行命令
+
+	```shell
+	java -jar zipkin的jar名称.jar
+	```
+
+3. 打开网站地址`localhost:9411/zipkin`即可
+
+## 四、分布式链路追踪案例
+
+1. 在顶级pom文件中添加如下配置
+
+	```xml
+	<micrometer-tracing.version>1.2.0</micrometer-tracing.version>
+	<micrometer-observation.version>1.12.0</micrometer-observation.version>
+	<feign-micrometer.version>12.5</feign-micrometer.version>
+	<zipkin-reporter-brave.version>2.17.0</zipkin-reporter-brave.version>
+	
+	
+	<!--micrometer-tracing一系列包  -->
+	<dependency>
+	    <groupId>io.micrometer</groupId>
+	    <artifactId>micrometer-tracing-bom</artifactId>
+	    <version>${micrometer-tracing.version}</version>
+	    <type>pom</type>
+	    <scope>import</scope>
+	</dependency>
+	<dependency>
+	    <groupId>io.micrometer</groupId>
+	    <artifactId>micrometer-tracing</artifactId>
+	    <version>${micrometer-tracing.version}</version>
+	</dependency>
+	<dependency>
+	    <groupId>io.micrometer</groupId>
+	    <artifactId>micrometer-tracing-bridge-brave</artifactId>
+	    <version>${micrometer-tracing.version}</version>
+	</dependency>
+	<dependency>
+	    <groupId>io.micrometer</groupId>
+	    <artifactId>micrometer-observation</artifactId>
+	    <version>${micrometer-observation.version}</version>
+	</dependency>
+	<dependency>
+	    <groupId>io.github.openfeign</groupId>
+	    <artifactId>feign-micrometer</artifactId>
+	    <version>${feign-micrometer.version}</version>
+	</dependency>
+	<dependency>
+	    <groupId>io.zipkin.reporter2</groupId>
+	    <artifactId>zipkin-reporter-brave</artifactId>
+	    <version>${zipkin-reporter-brave.version}</version>
+	</dependency>
+	```
+
+2. 添加的依赖包的作用
+
+	| 依赖包                          | 说明                                                         |
+	| ------------------------------- | ------------------------------------------------------------ |
+	| micrometer-tracing-bom          | 导入链路追踪版本中心，体系化说明                             |
+	| micrometer-tracing              | 指标追踪                                                     |
+	| micrometer-tracing-bridge-brave | 一个micrometer模块，用于与分布式跟踪工具brave集成，以收集应用程序的分布式跟踪数据，brave是一个开源的分布式跟踪工具，它可以帮助用户在分布式系统中跟踪请求的流转，它使用一种称为跟踪上下文的机制，将请求的跟踪信息存储在请求的头部，然后将请求传递给下一个服务，在整个请求链中，brave会将每个服务处理请求的时间和其他信息存储到跟踪数据中，以使用户可以了解整个请求的路径和性能 |
+	| micrometer-observation          | 一个基于度量库micrometer的观测模块，用于收集应用程序的度量数据 |
+	| feign-micrometer                | 一个Feign HTTP客户端的micrometer模块，用于收集客户端请求的度量数据 |
+	| zipkin-reporter-brave           | 一个用于将brave跟踪数据报告到zipkin跟踪系统的库              |
+	| spring-boot-starter-actuator    | SpringBoot框架的一个模块用于监视和管理应用程序。只是个补充包 |
+
+3. 在cloud-provider-payment8001提供者工程和cloud-consumer-feign-order80消费者工程中配置依赖（最好牵扯到服务的pom都引入此依赖，公共工程不需要引入此依赖）
+
+	```xml
+	<!--micrometer-tracing一系列包  -->
+	<dependency>
+	    <groupId>io.micrometer</groupId>
+	    <artifactId>micrometer-tracing</artifactId>
+	</dependency>
+	<dependency>
+	    <groupId>io.micrometer</groupId>
+	    <artifactId>micrometer-tracing-bridge-brave</artifactId>
+	</dependency>
+	<dependency>
+	    <groupId>io.micrometer</groupId>
+	    <artifactId>micrometer-observation</artifactId>
+	</dependency>
+	<dependency>
+	    <groupId>io.github.openfeign</groupId>
+	    <artifactId>feign-micrometer</artifactId>
+	</dependency>
+	<dependency>
+	    <groupId>io.zipkin.reporter2</groupId>
+	    <artifactId>zipkin-reporter-brave</artifactId>
+	</dependency>
+	```
+
+4. 在cloud-provider-payment8001提供者工程和cloud-consumer-feign-order80消费者工程中配置yaml
+
+	```yaml
+	management:
+	  zipkin:
+	    tracing:
+	      endpoint: http://localhost:9411/api/v2/spans
+	  tracing:
+	    sampling:
+	      probability: 1.0 # 采样率百分比，默认值0.1(就是10%的链路会被记录下来)
+	```
+
+5. 在cloud-provider-payment8001提供者工程新建Controller
+
+	```java
+	@RestController
+	@RequestMapping("/pay")
+	public class PayMicrometerController {
+	
+	    @GetMapping("/getMicrometerById/{id}")
+	    public String getMicrometerById(@PathVariable("id") Integer id) {
+	        return "这是链路追踪, Id:" + IdUtil.simpleUUID();
+	    }
+	}
+	```
+
+6. 在cloud-api-commons公共工程的PayFeignApi接口中添加新的接口
+
+	```java
+	@GetMapping("/pay/getMicrometerById/{id}")
+	Result<String> getMicrometerById(@PathVariable("id") Integer id);
+	```
+
+7. cloud-consumer-feign-order80消费者工程中新建Controller
+
+	```java
+	@RestController
+	@RequestMapping("/feign/pay")
+	public class OrderMicrometerController {
+	
+	    @Resource
+	    private PayFeignApi payFeignApi;
+	
+	    @GetMapping("/getMicrometerById/{id}")
+	    public String getMicrometerById(@PathVariable("id") Integer id) {
+	        return payFeignApi.getMicrometerById(id);
+	    }
+	
+	}
+	```
+
+8. 访问`http://localhost:9411`进行筛选即可看到服务的链路情况
+
