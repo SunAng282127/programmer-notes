@@ -3326,3 +3326,108 @@
 4. 三者之间的配合方式为：web前端请求，通过一些匹配条件，定位到真正的服务节点，并在这个转发过程的前后，进行一些精细化控制。predicate就是我们的匹配条件。filter就可以理解为一个无所不能的拦截器。有了这两个元素，再加上URI，就可以实现一个具体的路由了
 
 ## 三、Gateway工作流程
+
+![image-20240524060131344](../../../TyporaImage/image-20240524060131344.png)
+
+1. 客户端向Spring Cloud Gateway发出请求。然后再Gateway Handler Mapping中找到与请求相匹配的路由，将其发送到Gateway Web Handler
+2. Gateway Web Handler再通过指定的过滤器链来将请求发送到我们实际的服务执行业务逻辑，然后返回
+3. 过滤器之间用虚线分开是因为过滤器可能在发送代理请求之前（Pre）或之后（Post）执行业务逻辑
+   - 在Pre类型的过滤器可以做参数校验、权限校验、流量监控、日志输出、协议转换等
+   - 在Post类型的过滤器中可以做响应内容、响应头的修改、日志的输出、流量监控等有些非常重要的作用
+4. 核心逻辑：路由转发 + 断言判断 + 执行过滤器链
+
+## 四、Gateway实操
+
+1. 创建新的Maven工程cloud-gateway9527
+
+2. 引入相关的pom文件依赖包
+
+   ```xml
+   <dependencies>
+       <!--gateway-->
+       <dependency>
+           <groupId>org.springframework.cloud</groupId>
+           <artifactId>spring-cloud-starter-gateway</artifactId>
+       </dependency>
+       <!--consul-->
+       <dependency>
+           <groupId>org.springframework.cloud</groupId>
+           <artifactId>spring-cloud-starter-consul-discovery</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-starter-actuator</artifactId>
+       </dependency>
+   </dependencies>
+   ```
+
+3. 修改启动类。将Gateway注册到consul中
+
+   ```java
+   @SpringBootApplication
+   @EnableDiscoveryClient
+   public class Main9527 {
+   
+       public static void main(String[] args) {
+           SpringApplication.run(Main9527.class,args);
+       }
+   }
+   ```
+
+4. 在cloud-provider-payment8001提供者工程新建Controller用来测试网关
+
+   ```java
+   @RestController
+   @RequestMapping("/pay/gateway")
+   public class PayGatewayController {
+   
+       @GetMapping("/getGatewayById/{id}")
+       public String getGatewayById(@PathVariable("id") Integer id) {
+           return "这是, Id:" + IdUtil.simpleUUID();
+       }
+   }
+   ```
+
+5. 在cloud-api-commons公共工程的PayFeignApi接口中添加新的接口
+
+   ```java
+   @GetMapping("/pay/gateway/getGatewayById/{id}")
+   public String getGatewayById(@PathVariable("id") Integer id);
+   ```
+
+6. 在cloud-gateway9527中修改yaml文件，使之能匹配到`http://localhost:8001/pay/gateway/getGatewayById/1`
+
+   ```yaml
+   server:
+     port: 9527
+   
+   spring:
+     application:
+       name: cloud-gateway
+     cloud:
+       consul:
+         port: 8500
+         host: localhost
+         discovery:
+           prefer-agent-address: true
+           service-name: ${spring.application.name}
+       gateway:
+         routes:
+           - id: pay_getById                 # 路由ID, 要求唯一
+             uri: http://localhost:8001 # 匹配后提供服务的地址
+             predicates:
+               - Path=/pay/gateway/getGatewayById/**    # 断言, 路径匹配后进行路由
+   
+           - id: pay_getInfo
+             uri: http://localhost:8001 # 匹配后提供服务的地址
+             predicates:
+               - Path=/pay/gateway/getInfo/**
+   
+           - id: pay_getFilter
+             uri: http://localhost:8001 # 匹配后提供服务的地址
+             predicates:
+               - Path=/pay/gateway/filter/**
+   
+   ```
+
+7. 此时在页面上使用`http://localhost:9527/pay/gateway/getGatewayById/1`和使用`http://localhost:8001/pay/gateway/getGatewayById/1`都能访问到即可
