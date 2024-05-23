@@ -2508,7 +2508,7 @@
 
 5. 在cloud-api-commons公共工程的PayFeignApi接口中添加新的接口
 
-   ```javascript
+   ```java
    @GetMapping(value = "/pay/getCircuitById/{id}")
    public String getCircuitById(@PathVariable("id") Integer id);
    ```
@@ -2620,7 +2620,7 @@
 
    ```java
    @RestController
-   @RequestMapping("/feign/pay")
+   @RequestMapping("/Circuit/pay")
    public class OrderCircuitController {
    
        @Resource
@@ -3280,7 +3280,7 @@
 
 	```java
 	@RestController
-	@RequestMapping("/feign/pay")
+	@RequestMapping("/micrometer/pay")
 	public class OrderMicrometerController {
 	
 	    @Resource
@@ -3296,3 +3296,33 @@
 
 8. 访问`http://localhost:9411`进行筛选即可看到服务的链路情况
 
+# 八、Gateway网关服务
+
+## 一、Gateway网关服务概述
+
+1. Gateway是在Spring生态系统之上构建的API网关服务，基于Spring6，SpringBoot3和Project Reactor等技术。它旨在为微服务架构提供一种简单有效的统一的API路由管理方式，并未它们提供跨领域的关注点，例如：安全性、监控/度量和恢复能力
+
+2. Gateway在微服务中的位置，在下图中负载均衡的典型代表则有nginx
+
+   ![image-20240523220351243](../../../TyporaImage/image-20240523220351243.png)
+
+3. Gateway的作用
+
+   - 反向代理
+   - 鉴权
+   - 流量控制
+   - 熔断
+   - 日志监控
+
+4. SpringCloud  Gateway组件核心是一系列的过滤器，通过这些过滤器将客户端的请求转发到对应的微服务中，是加在整个微服务最前沿的防火墙和代理器，隐藏微服务ip信息，从而加强安全保护。Gateway本身就是一个微服务，需要注册到服务注册中心中
+
+   ![](../../../TyporaImage/1275193-20201229151202451-1870539030.png)
+
+## 二、Gateway三大核心
+
+1. Route（路由）：路由是构建网关的基本模块，它由ID、目标URL，一系列的断言和过滤器组成，如果断言为true则匹配该路由
+2. Predicate（断言）：参考的是Java8的Predicate。开发人员可以匹配HTTP请求中的所有内容（如请求头或请求参数），如果请求与断言相匹配则进行路由
+3. Filter（过滤器）：指的是Spring框架中GatewayFilter的实例，使用过滤器可以在请求被路由前或者之后对请求进行修改
+4. 三者之间的配合方式为：web前端请求，通过一些匹配条件，定位到真正的服务节点，并在这个转发过程的前后，进行一些精细化控制。predicate就是我们的匹配条件。filter就可以理解为一个无所不能的拦截器。有了这两个元素，再加上URI，就可以实现一个具体的路由了
+
+## 三、Gateway工作流程
