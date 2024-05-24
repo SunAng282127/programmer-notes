@@ -3276,7 +3276,7 @@
 	Result<String> getMicrometerById(@PathVariable("id") Integer id);
 	```
 
-7. cloud-consumer-feign-order80消费者工程中新建Controller
+7. 在cloud-consumer-feign-order80消费者工程中新建Controller
 
 	```java
 	@RestController
@@ -3384,15 +3384,8 @@
        @GetMapping("/getGatewayById/{id}")
        public String getGatewayById(@PathVariable("id") Integer id) {
            return "这是, Id:" + IdUtil.simpleUUID();
-       }
+      }
    }
-   ```
-
-5. 在cloud-api-commons公共工程的PayFeignApi接口中添加新的接口
-
-   ```java
-   @GetMapping("/pay/gateway/getGatewayById/{id}")
-   public String getGatewayById(@PathVariable("id") Integer id);
    ```
 
 6. 在cloud-gateway9527中修改yaml文件，使之能匹配到`http://localhost:8001/pay/gateway/getGatewayById/1`
@@ -3430,4 +3423,103 @@
    
    ```
 
-7. 此时在页面上使用`http://localhost:9527/pay/gateway/getGatewayById/1`和使用`http://localhost:8001/pay/gateway/getGatewayById/1`都能访问到即可
+6. 此时在页面上使用`http://localhost:9527/pay/gateway/getGatewayById/1`和使用`http://localhost:8001/pay/gateway/getGatewayById/1`都能访问到即可
+
+7. 在cloud-api-commons公共工程的PayFeignApi接口中添加新的接口
+
+	```java
+	@GetMapping("/pay/gateway/getGatewayById/{id}")
+	public String getGatewayById(@PathVariable("id") Integer id);
+	```
+
+8. 在cloud-consumer-feign-order80消费者工程中新建Controller
+
+	```java
+	@RestController
+	@RequestMapping("/pay/gateway")
+	public class OrderGatewayController {
+	
+	    @Resource
+	    private PayFeignApi payFeignApi;
+	
+	    @GetMapping("/getGatewayById/{id}")
+	    public String getGatewayById(@PathVariable("id") Integer id) {
+	        return payFeignApi.getMicrometerById(id);
+	    }
+	
+	}
+	```
+
+9. 需要将cloud-api-commons公共工程的PayFeignApi中的`@FeignClient(value = "cloud-payment-service")`改为`@FeignClient(value = "cloud-gateway")`，不然调用接口时仍然会绕开网关
+
+	```java
+	@FeignClient(value = "cloud-payment-service")
+	// 千万不要在interface上写@RequestMapping
+	public interface PayFeignApi {
+	
+	    @GetMapping("/pay/gateway/getGatewayById/{id}")
+		public String getGatewayById(@PathVariable("id") Integer id);
+	}
+	```
+
+10. 需要将cloud-gateway9527中路由地址改成服务名称地址
+
+	```yaml
+	server:
+	  port: 9527
+	
+	spring:
+	  application:
+	    name: cloud-gateway
+	  cloud:
+	    consul:
+	      port: 8500
+	      host: localhost
+	      discovery:
+	        prefer-agent-address: true
+	        service-name: ${spring.application.name}
+	    gateway:
+	      routes:
+	        - id: pay_getById             # 路由ID, 要求唯一
+	          uri: lb://cloud-payment-service  # 匹配后提供服务的地址
+	          predicates:
+	            - Path=/pay/gateway/getGatewayById/**    # 断言, 路径匹配后进行路由
+	
+	        - id: pay_getInfo
+	          uri: lb://cloud-payment-service # 匹配后提供服务的地址
+	          predicates:
+	            - Path=/pay/gateway/getInfo/**
+	
+	        - id: pay_getFilter
+	          uri: lb://cloud-payment-service # 匹配后提供服务的地址
+	          predicates:
+	            - Path=/pay/gateway/filter/**
+	
+	```
+
+## 五、Gateway高级特性
+
+### 一、Route以微服务名-动态获取服务URI
+
+- 将`spring.cloud.gateway.routes.uri`中的固定http地址转为以服务名称的方式
+
+	```yaml
+	uri: lb://cloud-payment-service  # 匹配后提供服务的地址
+	```
+
+### 二、Predicate断言
+
+1. Predicate的配置方式
+
+	- Shortcut Configuration即简述型配置：使用过滤器的过滤名称做主键，主键和值之间是等号，值如果是多个，则使用逗号（,）分割。只有当
+
+		```yaml
+		predicates:
+			- 主键=值1,值2
+		```
+
+	- Fully Expanded Arguments即
+
+2. 
+
+### 三、Filter过滤
