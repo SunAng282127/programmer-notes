@@ -3531,6 +3531,7 @@
   	```yaml
   	predicates:
   		- Cookie=mycookie,mycookievalue
+
     	```
 
   - Fully Expanded Arguments即Shortcut Configuration的完全版
@@ -3879,6 +3880,290 @@
 4. 网页访问地址为`http://localhost:8848/nacos`，账号密码均为nacos
 5. 关闭Nacos的命令为`shutdown.cmd`
 
-### 三、Nacos的案例
+### 三、Nacos服务注册案例
 
-1. 新建Maven工程`cloudalibaba-provider-payment9001`
+1. 新建Maven工程`cloudalibaba-provider-payment9001`并引入依赖和配置yaml与主启动类
+
+   ```xml
+   <dependencies>
+       <dependency>
+           <groupId>com.alibaba.cloud</groupId>
+           <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+       </dependency>
+       <!-- 引入自定义api通用库-->
+       <dependency>
+           <groupId>com.sunsh.cloud</groupId>
+           <artifactId>cloud-api-commons</artifactId>
+           <version>1.0-SNAPSHOT</version>
+       </dependency>
+       <dependency>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-starter-web</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-starter-actuator</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>cn.hutool</groupId>
+           <artifactId>hutool-all</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>org.projectlombok</groupId>
+           <artifactId>lombok</artifactId>
+           <scope>provided</scope>
+       </dependency>
+       <dependency>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-starter-test</artifactId>
+           <scope>test</scope>
+       </dependency>
+   </dependencies>
+   ```
+
+   ```yaml
+   server:
+     port: 9001
+   spring:
+     application:
+       name: nacos-pay-provider
+     cloud:
+       nacos:
+         discovery:
+           server-addr: localhost:8848 # nacos地址
+   
+   ```
+
+   ```java
+   @SpringBootApplication
+   @EnableDiscoveryClient
+   public class Main9001 {
+       public static void main(String[] args) {
+           SpringApplication.run(Main9001.class);
+       }
+   }
+   ```
+
+2. 创建业务Controller
+
+   ```java
+   @RestController
+   public class PayAlibabaController {
+   
+       @Value("${server.port}")
+       private String serverPort;
+   
+       @GetMapping("/pay/nacos/{id}")
+       public String getPayInfo(@PathVariable("id") Integer id) {
+           return "nacos registry serverPost: " + serverPort + ", id: " + id;
+       }
+   
+   }
+   ```
+
+3. 启动Main9001在Nacos的服务列表上看到`nacos-pay-provider`即是成功。也就是实现了Nacos Discovery（服务注册发现功能）
+
+4. 新建Maven工程`cloudalibaba-consumer-nacos-order83`并引入依赖和配置yaml与主启动类。通过带有负载均衡的RestTemplate和Feign都是可以远程调用的，要与LoadBalanceClient相结合使用
+
+   ```xml
+   <dependencies>
+       <!-- 引入自定义api通用库-->
+       <dependency>
+           <groupId>com.sunsh.cloud</groupId>
+           <artifactId>cloud-api-commons</artifactId>
+           <version>1.0-SNAPSHOT</version>
+       </dependency>
+       <dependency>
+           <groupId>com.alibaba.cloud</groupId>
+           <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>org.springframework.cloud</groupId>
+           <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+       </dependency>
+   
+       <dependency>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-starter-web</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-starter-actuator</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>org.projectlombok</groupId>
+           <artifactId>lombok</artifactId>
+           <scope>provided</scope>
+       </dependency>
+   </dependencies>
+   ```
+
+   ```yaml
+   server:
+     port: 83
+   spring:
+     application:
+       name: nacos-order-consume
+     cloud:
+       nacos:
+         discovery:
+           server-addr: localhost:8848 # nacos地址
+   
+   service-url:
+     nacos-user-service: http://nacos-pay-provider
+   
+   ```
+
+   ```java
+   @SpringBootApplication
+   @EnableDiscoveryClient
+   public class Main83 {
+       public static void main(String[] args) {
+           SpringApplication.run(Main83.class,args);
+       }
+   }
+   ```
+
+5. 配置RestTemplate
+
+   ```java
+   @Configuration
+   public class RestTemplateConfig {
+   
+       @Bean
+       @LoadBalanced
+       public RestTemplate restTemplate() {
+           return new RestTemplate();
+       }
+   
+   }
+   ```
+
+6. 启动Main9001在Nacos的服务列表上看到`nacos-pay-provider`即是启动成功，网页上输入`http://localhost:83/order/pay/nacos/1`则表示流程配置没问题
+
+### 四、Nacos负载均衡案例
+
+1. 直接拷贝`cloudalibaba-provider-payment9001`，也就是如下图中点击右键点击`Main9001`选择`Copy Configuraton`，修改`Name`和`VM Options`即可，`Name`也就是相当于主启动类的名称；`VM Options`可以设置其端口号，`VM Options`参数为`-DServer.port=9002`。`Action profiles`参数可以不写
+
+   ![image-20240527060957823](../../../TyporaImage/image-20240527060957823.png)
+
+2. 由于在`cloudalibaba-consumer-nacos-order83`工程中引入了`loadbalancer`依赖包，所以Nacos会直接实现负载均衡
+
+### 五、Nacos实现中心化全局配置的动态变更
+
+1. 创建Maven工程`cloudalibaba-config-nacos-client3377`并引入依赖和配置yaml与主启动类。Nacos和Consul一样，在项目初始化时，要保证先从配置中心进行配置拉取，拉取配置之后才能保证项目的正常启动，为了满足动态刷新和全局广播通知，springboot中配置文件的加载是存在优先级的，bootstrap优先级高于application
+
+   - pom文件
+
+   ```xml
+   <dependencies>
+       <dependency>
+           <groupId>org.springframework.cloud</groupId>
+           <artifactId>spring-cloud-starter-bootstrap</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>com.alibaba.cloud</groupId>
+           <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>com.alibaba.cloud</groupId>
+           <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+       </dependency>
+   
+       <dependency>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-starter-web</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-starter-actuator</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>org.projectlombok</groupId>
+           <artifactId>lombok</artifactId>
+           <scope>provided</scope>
+       </dependency>
+   </dependencies>
+   
+   <build>
+       <plugins>
+           <plugin>
+               <groupId>org.springframework.boot</groupId>
+               <artifactId>spring-boot-maven-plugin</artifactId>
+           </plugin>
+       </plugins>
+   </build>
+   ```
+
+   - bootstrap
+
+   ```yaml
+   spring:
+     application:
+       name: nacos-config-client
+     cloud:
+       nacos:
+         discovery:
+           server-addr: localhost:8848
+           # Nacos服务注册中心地址
+         config:
+           server-addr: localhost:8848
+           # Nacos作为配置中心的地址
+           file-extension: yaml
+   
+   ```
+
+   - application
+
+   ```yaml
+   server:
+     port: 3377
+   spring:
+     profiles:
+       active: prod
+   #    active: test
+   #    active: dev
+   
+   ```
+
+   - Main3377
+
+   ```java
+   @SpringBootApplication
+   @EnableDiscoveryClient
+   public class Main3377 {
+       public static void main(String[] args) {
+           SpringApplication.run(Main3377.class,args);
+       }
+   }
+   ```
+
+2. 实现Nacos的动态刷新，新建Controller
+
+   ```java
+   @RestController
+   @RefreshScope // 支持Nacos动态刷新功能
+   public class NacosConfigClientController {
+   
+       @Value("${config.info}")
+       private String configInfo;
+   
+       @GetMapping("/config/info")
+       public String getConfigInfo() {
+           return configInfo;
+       }
+   }
+   
+   ```
+
+3. 在Nacos中添加配置信息
+
+   - Nacos配置文件DataId的命名规则是：`${prefix}-${spring.profile.active}.${spring.cloud.nacos.config.file-extension}`。`${Spring.application.name}`是`${prefix}`默认名，也可以通过`spring.cloud.nacos.config.prefix`来配置`${prefix}`，通常使用如下规则`${Spring.application.name}-${spring.profile.active}.${spring.cloud.nacos.config.file-extension}`命名DataId，DataId如`nacos-config-client-dev.yaml`
+
+   - Nacos配置如图所示
+
+     ![image-20240527071312280](../../../TyporaImage/image-20240527071312280.png)
+
+4. bootstrap配置文件、application配置文件以及Nacos的配置文件三者合一才是我们整个Maven工程的配置
+
+### 六、Nacos数据模型
