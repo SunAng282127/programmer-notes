@@ -3406,7 +3406,7 @@
            service-name: ${spring.application.name}
        gateway:
          routes:
-           - id: pay_getById                 # 路由ID, 要求唯一
+           - id: pay_getById            # 路由ID, 要求唯一
              uri: http://localhost:8001 # 匹配后提供服务的地址
              predicates:
                - Path=/pay/gateway/getGatewayById/**    # 断言, 路径匹配后进行路由
@@ -3444,7 +3444,7 @@
 	
 	    @GetMapping("/getGatewayById/{id}")
 	    public String getGatewayById(@PathVariable("id") Integer id) {
-	        return payFeignApi.getMicrometerById(id);
+	        return payFeignApi.getGatewayById(id);
 	    }
 	
 	}
@@ -3453,7 +3453,7 @@
 9. 需要将cloud-api-commons公共工程的PayFeignApi中的`@FeignClient(value = "cloud-payment-service")`改为`@FeignClient(value = "cloud-gateway")`，不然调用接口时仍然会绕开网关
 
 	```java
-	@FeignClient(value = "cloud-payment-service")
+	@FeignClient(value = "cloud-gateway")
 	// 千万不要在interface上写@RequestMapping
 	public interface PayFeignApi {
 	
@@ -3496,6 +3496,19 @@
 	            - Path=/pay/gateway/filter/**
 	
 	```
+	
+11. 如果在URI中使用微服务名称，访问时服务器报500，则使用以下网关服务器中使用
+
+    ```java
+    @Configuration
+    public class HttpClientResolverFixConfig {
+        @Bean
+        public HttpClient webClient() {
+            return HttpClient.create().resolver(DefaultAddressResolverGroup.INSTANCE);
+        }
+    }
+    
+    ```
 
 ## 五、Gateway高级特性
 
@@ -3509,17 +3522,363 @@
 
 ### 二、Predicate断言
 
-1. Predicate的配置方式
+1. SpringCloud Gateway将路由匹配作为Spring WebFlux HandlerMapping基础框架的一部分。SpringCloud Gateway包括许多内置的Route Predicate工厂，所有这些Predicate都与HTTP请求的不同属性匹配，多个Route Predicate工厂可以进行组合。SpringCloud Gateway创建对象时，使用RoutePredicateFactory创建Predicate对象，Predicate对象可以赋值给Route。SpringCloud Gateway包含许多内置的Route Predicate Factories，所有这些谓词都匹配HTTP请求的不同的属性。多种谓词工厂可以组合，并通过逻辑and。谓词即Predicate
 
-	- Shortcut Configuration即简述型配置：使用过滤器的过滤名称做主键，主键和值之间是等号，值如果是多个，则使用逗号（,）分割。只有当
+2. Predicate的配置方式
 
-		```yaml
-		predicates:
-			- 主键=值1,值2
-		```
+  - Shortcut Configuration即简述型配置：使用过滤器的过滤名称做主键，主键和值之间是等号，值如果是多个，则使用逗号（,）分割。目前主键的种类，也就是Route Predicate工厂，SpringCloud默认有12种，包括After、Before、Between、Cookie、header、Host、Method等等
 
-	- Fully Expanded Arguments即
+  	```yaml
+  	predicates:
+  		- Cookie=mycookie,mycookievalue
+    	```
 
-2. 
+  - Fully Expanded Arguments即Shortcut Configuration的完全版
+
+    ```yaml
+    predicates:
+    	- name: Cookie
+    	  args: 
+    	  	name: mycookie
+    	  	regexp: mycookievalue
+    ```
+
+3. Predicate配置案例
+
+   ```yaml
+   predicates:
+   	- After=2024-05-25T10:07:52.714696600+08:00[Asia/Shanghai] 
+   	#表示只能在指定的时间之后访问，Before、Between同理
+   	
+   	- Cookie=username,sunsh
+   	#Cookie需要两个表达式值，一个是Cookie name，一个是正则表达式的值。
+   	#路由规则会通过获取对应的Cookie name值和正则表达式去匹配，如果匹配上就会执行路由，否则不执行
+   	#如 http://localhost:80/pay/gateway/getGatewayById/1 --cookie "username=sunsh"
+   	
+   	- Header=X-Request-Id,\d+
+   	#请求头，有两个参数，一个是属性名称，一个是正则表达式，这个属性值和正则表达式匹配则执行
+   	#如 http://localhost:80/pay/gateway/getGatewayById/1 -H "X-Request-Id:1234565"
+   	
+   	- Host=**.atguigu.com
+   	#Host接收一组参数，一组匹配的域名列表，这个模板是一个ant分割的模板，用（.）作为分隔符
+   	#它通过参=参数中的主机地址作为匹配规则
+   	#如 http://localhost:80/pay/gateway/getGatewayById/1 -H "Host:java.atguigu.com"
+   	
+   	- Path=/pay/gateway/getGatewayById/**
+   	#表示url地址匹配
+   	
+   	- Query=username,\d+
+   	#Query支持两个参数，一个是属性名，一个是属性值。属性值可以是正则表达式
+   	
+   	- RemoteAddr=192.168.124.1/24
+   	#控制访问地址，如上配置必须是192.168.127.*的ip访问地址的请求才能进行，并不是访问者的ip地址
+   	#如 http://192.168.124.1:80/pay/gateway/getGatewayById/1
+   	
+   	- Method=GET,POST
+   	#允许访问的请求方式
+   ```
+
+4. CMD命令访问地址
+
+   ```shell
+   curl http://localhost:80/pay/gateway/getGatewayById/1;
+   # 不携带cookie
+   curl http://localhost:80/pay/gateway/getGatewayById/1 --cookie "username=sunsh"
+   ```
+
+5. 自定义断言
+
+   ```java
+   @Component
+   public class SunRoutePredicateFactory extends AbstractRoutePredicateFactory<xxxRoutePredicateFactory.Config> {
+       
+       public SunRoutePredicateFactory() {
+           super(SunRoutePredicateFactory.Config.class);
+       }
+       
+       @Override
+       public Predicate<ServerWebExchange> apply(SunRoutePredicateFactory.Config config) {
+           return new Predicate<ServerWebExchange>() {
+               @Override
+               public boolean test(ServerWebExchange serverWebExchange) {
+                   String userType = serverWebExchange.getRequest().getQueryParams().getFirst("userType");
+                   if(userType == null){
+                       return false;
+                   }
+                   if(userType.equalsIgnoreCase(config.getUserType())){
+                       return true;
+                   }
+                   return true;
+               }
+           };
+       }
+       
+       @Override
+       public List<String> shortcutFieldOrder() {
+           return Collections.singletonList("userType");
+       }
+       
+       @Validated
+       public static class Config{
+   
+           @Setter
+           @Getter
+           @NotEmpty
+           // 用户等级
+           private String userType;
+       }
+   }
+   ```
+
+   - 自定义类必须要以`RoutePredicateFactory`结尾，并继承`AbstractRoutePredicateFactory`类，`AbstractRoutePredicateFactory`中的泛型必须为`xxxRoutePredicateFactory`中的静态内部类，静态内部类`Config`所定义的就是自定义的断言规则
+   - `xxxRoutePredicateFactory`必须要有构造方法
+   - `xxxRoutePredicateFactory`实现的方法中必须要实现的方法是`apply`执行入口以及`shortcutFieldOrder`排序规则
+
+6. 在yaml配置新增自定义断言，先使用Fully Expanded Arguments方式
+
+   ```yaml
+   predicates:
+   	- Sun=diamond
+   ```
+
+7. 访问地址`http://localhost:80/pay/gateway/getGatewayById/1?userType=diamond`
 
 ### 三、Filter过滤
+
+1. Filter相当于SpringMVC里面的拦截器Interceptor、Servlet的过滤器。pre和post分别会在请求被执行前调用和被执行后调用，用来修改请求和响应信息
+
+2. Filter的作用：请求鉴权、异常处理、记录接口调用时长统计等等
+
+3. Filter的类型
+
+   - 全局默认过滤器Global Filters：Gateway出厂默认已有的，直接用即可，主要用于所有的路由。不需要在配置文件中配置，作用在所有的路由上，实现GlobalFilter接口即可
+   - 单一内置过滤器GatewayFilter：也称为网关过滤器，这种过滤器主要作用于单一路由或某个路由分组。目前SpringCloud有38个单一内置过滤器，一种过滤器一种功能
+   - 自定义过滤器
+
+4. 常用的内置过滤器
+
+   - AddRequestHeader：在请求头中添加kv，在访问的时候不用手动添加请求头，但是添加如下配置后，代码会自动拿到配置后的请求头 
+
+     ```yaml
+     filters:
+     	#请求头kv，若一头含有多参则重写一行设置
+     	- AddRequestHeader=X-Request-atguigu1,atguiguValue1
+     	- AddRequestHeader=X-Request-atguigu2,atguiguValue2
+     ```
+
+   - RemoveRequestHeader：通过请求头名称删除对应的请求头
+
+     ```yaml
+     filters:
+     	#删除对应的请求头
+     	- RemoveRequestHeader=X-Request-atguigu1
+     ```
+
+   - SetRequestHeader：通过请求头名称修改对应请求头的值
+
+     ```yaml
+     filters:
+     	#删除对应的请求头
+     	- SetRequestHeader=X-Request-atguigu2,setAtguiguValue2
+     ```
+
+   - AddRequestParameter：新增请求参数Paramter，k，v，但是请求路径中携带相同名字的请求参数，那么配置文件中此参数的值就会失效，使用的是请求路径中的值
+
+     ```yaml
+     filters:
+     	- AddRequestParameter=userId,9527
+     ```
+
+   - RemoveRequestParameter：通过请求参数名称删除对应的请求参数，即使传递过来该请求参数也是null
+
+     ```yaml
+     filters:
+     	- RemoveRequestParameter=userId
+     ```
+
+   - AddResponseHeader：在响应头中添加kv，在访问的时候不用手动添加请求头，代码会自动配置该响应头 
+
+     ```yaml
+     filters:
+     	- AddResponseHeader=X-Request-atguigu1,atguiguValue1
+     	- AddResponseHeader=X-Request-atguigu2,atguiguValue2
+     ```
+
+   - RemoveResponseHeader：通过响应头名称删除对应的响应头
+
+     ```yaml
+     filters:
+     	- RemoveResponseHeader=X-Request-atguigu1
+     ```
+
+   - SetResponseHeader：通过响应头名称修改对应响应头的值
+
+     ```yaml
+     filters:
+     	- SetResponseHeader=X-Request-atguigu2,setAtguiguValue2
+     ```
+
+   - PrefixPath：路径前缀匹配，可以和predicates中的Path补充使用，使用下述配置之后，URL地址可以使用`http://localhost:80/gateway/getGatewayById/1`来进行访问，GateWay会自动调用前缀
+
+     ```yaml
+     predicates:
+     	- Path=/gateway/getGatewayById/**
+     filter:
+     	- PrefixPath=/pay
+     ```
+
+   - SetPath：相当于带占位符的地址替换，如下`{segment}`就是个占位符，等价于SetPath后面指定的`{segment}`内容，URL地址可以使用`http://localhost:80/XYZ/abc/getGatewayById/1`就相当于使用`http://localhost:80/pay/gateway/getGatewayById/1`进行访问了
+
+     ```yaml
+     predicates:
+     	- Path=/XYZ/abc/{segment}
+     filter:
+     	- SetPath=/pay/gateway/{segment}
+     ```
+
+   - RedirectTo：重定向到某个页面或URL。如下配置相当于访问Path中的地址时出现302响应码则会跳转到i百度页面
+
+     ```yaml
+     predicates:
+     	- Path=/gateway/getGatewayById/**
+     filter:
+     	- RedirectTo=302,http://www.baidu.com
+     ```
+
+5. 自定义过滤器
+
+   - 自定义全局过滤器：在网关模块中添加配置类MyGlobalFilter，使之实现GlobalFilter和Ordered接口，实现的功能是在访问每一个接口的时候都会自动加上接口开始调用时间，以及请求的各种参数等等。自定义全局过滤器之后也不会再去配置yaml文件之类的，因为此全局过滤器会自动生效
+
+     ```java
+     @Component
+     @Slf4j
+     public class MyGlobalFilter implements GlobalFilter, Ordered {
+     
+         public static final String BEGIN_VISIT_TIME = "begin_visit_time";
+         
+         @Override
+         public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+             // 1.先记录下访问接口的开始时间
+             exchange.getAttributes().put(BEGIN_VISIT_TIME,System.currentTimeMillis());
+             // 返回统计的各个结果
+             return chain.filter(exchange).then(Mono.fromRunnable(() ->{
+                 Long beginVisitTime = exchange.getAttribute(BEGIN_VISIT_TIME);
+                 if(beginVisitTime != null){
+                     log.info("访问接口主机："+exchange.getRequest().getURI().getHost());
+                     log.info("访问接口端口号："+exchange.getRequest().getURI().getPort());
+                     log.info("访问接口URL："+exchange.getRequest().getURI().getPath());
+                     log.info("访问接口时长："+(System.currentTimeMillis() - beginVisitTime) + "毫秒");
+                     System.out.println();
+                 }
+             }));
+         }
+     
+         /**
+          * 数字越小，优先级越高
+          **/
+         @Override
+         public int getOrder() {
+             return 0;
+         }
+     }
+     ```
+
+   - 自定义条件过滤器：自定义条件过滤器类的命名规则为后缀一定是`GatewayFilterFactory`并继承，`AbstractGatewayFilterFactory`类实现`apply`方法和`shortcutFieldOrder`方法，还要添加无参构造器以及实现内部类`Config`，如`SunshGatewayFilterFactory`
+   
+     ```java
+     @Component
+     @Slf4j
+     public class SunshGatewayFilterFactory extends AbstractGatewayFilterFactory<SunshGatewayFilterFactory.Config> {
+     
+         public SunshGatewayFilterFactory() {
+             super(SunshGatewayFilterFactory.Config.class);
+         }
+     
+         @Override
+         public GatewayFilter apply(Config config) {
+             return new GatewayFilter() {
+                 @Override
+                 public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+                     ServerHttpRequest request = exchange.getRequest();
+                     log.info("已进入自定义网关过滤器，status为："+config.status);
+                     if(request.getQueryParams().containsKey("sunsh")){
+                         return chain.filter(exchange);
+                     }else {
+                         exchange.getResponse().setStatusCode(HttpStatus.BAD_REQUEST);
+                         return exchange.getResponse().setComplete();
+                     }
+                 }
+             };
+         }
+     
+         @Override
+         public List<String> shortcutFieldOrder() {
+             return Arrays.asList("status");
+         }
+     
+         public static class Config{
+     
+             // 设定一个状态值/标志位，它等于多少，匹配才能可以访问
+             @Setter
+             @Getter
+             private String status;
+         }
+     }
+     
+     ```
+   
+     ```yaml
+     filter:
+     	- Sunsh=sunsh
+     ```
+   
+     现访问方式必须为`http://localhost:80/pay/gateway/getGatewayById/1?sunsh=java`
+
+# 九、SpringCloud Alibaba
+
+## 一、SpringCloud Alibaba概述
+
+- SpringCloud Alibaba提供微服务开发的一站式解决方法，此项目包含开发分布式应用服务的必需组件，方便开发者通过SpringCloud编程模型轻松使用这些组件来开发分布式应用服务
+- [SpringCloud Alibaba Github地址](https://github.com/alibaba/spring-cloud-alibaba)
+- [SpringCloud Alibaba参考文档](https://spring-cloud-alibaba-group.github.io/github-pages/2022/zh-cn/2022.0.0.0-RC2.html)
+
+## 二、SpringCloud Alibaba常用组件
+
+1. Sentinel：把流量作为切入点，从流量控制、熔断降级、系统负载保护等多个维度保护服务的稳定性
+2. Nacos：一个更易于构建云原生应用的动态服务发现、配置管理和服务管理平台
+3. RocketMQ：一款分布式消息系统，基于高可用分布式集群技术，提供低延时、高可用的消息发布和订阅服务
+4. Seata：一个易于使用的高性能微服务分布式事务解决方案
+5. Alibaba Cloud OSS：阿里云对象存储服务，是阿里云提供的海量、安全、低成本、高可用的云存储服务，可以在任何应用、任何时间、任何地点存储和访问任意类型的数据
+6. Alibaba Cloud SchedulerX：一款分布式任务调度产品，提供秒级、精确、高可用的定时（基于Cron表达式）任务调度服务
+7. Alibaba Cloud SMS：覆盖全球的短信服务，友好、高效、智能的互联化通讯能力，帮助企业迅速搭建客户触达通道
+
+## 三、SpringCloud Alibaba主要功能
+
+1. 服务限流降级：默认支持WebServlet、WebFlux、OpenFeign、RestTemplate、Spring Cloud Gateway、Dubbo和RocketMQ限流降级功能的接入，可以在运行时通过控制台实时修改限流降级规则，还支持查看限流降级Metrics监控
+2. 服务注册与发现：适配Spring Cloud服务注册与发现标准，默认集成对应的SpringCloud版本所支持的负载均衡组件的适配
+3. 分布式配置管理：支持分布式系统中的外部化配置，配置更改时自动刷新
+4. 消息驱动能力：基于SpringCloud Stream为微服务应用构建消息驱动能力
+5. 分布式事务：使用`@GlobalTransactional`注解，高效并且对业务零侵入地解决分布式事务问题
+6. 阿里云对象存储：阿里云提供的海量、安全、低成本、高可用的云存储服务。支持在任何应用、任何时间存储和访问任意类型的数据
+7. 分布式任务调度：提供秒级、精准、高可用、高可靠的定时（基于Cron表达式）任务调度服务。同时提供分布式的任务执行模型，如网格任务。网络任务支持海量子任务均匀分配到所有Worker（schedulerx-client）上执行
+8. 阿里云短信服务：覆盖全球的短息服务，友好、高效、智能的互联化通讯能力，帮助企业迅速搭建客户触达通道
+
+## 四、Nacos服务注册与配置中心
+
+### 一、Nacos概述
+
+-  Nacos是一个更易于构建云原生应用的动态服务发现、配置管理和服务管理平台。简而言之Nacos就是注册中心和配置中心的组合
+- Nacos可以替代Eureka/Consul做微服务注册中；也可以替代（Config+Bus）/Consul做服务配置中心和满足动态刷新广播通知
+- [Nacos参考文档](https://nacos.io/docs/latest/what-is-nacos/)
+
+### 二、Nacos下载安装
+
+1. [Nacos版本选择下载地址](https://nacos.io/download/release-history/)
+2. 解压安装包，直接运行bin目录下的startup.cmd即可
+3. 在bin目录中输入`startup.cmd -m standalone`，如果启动报错`Please set the JAVA_HOME variable in your environment, We need java(x64)! jdk8 or later is better!`，则将Java21的配置环境直接写进startup.cmd文件中，代换`%JAVA_HOME%`
+4. 网页访问地址为`http://localhost:8848/nacos`，账号密码均为nacos
+5. 关闭Nacos的命令为`shutdown.cmd`
+
+### 三、Nacos的案例
+
+1. 新建Maven工程`cloudalibaba-provider-payment9001`
