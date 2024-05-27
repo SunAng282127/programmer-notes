@@ -4120,9 +4120,9 @@
      port: 3377
    spring:
      profiles:
-       active: prod
+       active: dev
    #    active: test
-   #    active: dev
+   #    active: prod
    
    ```
 
@@ -4166,4 +4166,370 @@
 
 4. bootstrap配置文件、application配置文件以及Nacos的配置文件三者合一才是我们整个Maven工程的配置
 
-### 六、Nacos数据模型
+### 六、Nacos服务领域模型之数据模型
+
+1. Nacos数据模型代表Namespace-Group-DataId，即命名空间-分组-DataId， Nacos数据模型的key由三元组唯一确定 
+
+2. Nacos数据模型Namespace-Group-DataId名词解释
+
+	- Namespace是可以区分部署环境的，默认公共命名空间是public，Namespace主要用来实现隔离，比如有三个环境即开发、测试和生产环境，那么就可以创建三个Namespace，不同的Namespace之间是隔离的。Namespace类似Java里面的package
+	- Group可以把不同的微服务划分到同一个分组里面去，默认是DEFAULT_GROUP。Group类似Java里面的类名
+	- Service（DataId）：一个Service可以包含一个或多个Cluster（集群），Nacos默认集群是DEFAULT，Cluster是对指定微服务的一个虚拟划分
+
+	![image-20240527111421675](../../../TyporaImage/image-20240527111421675.png)
+
+3. Nacos服务的分级存储模型示例
+
+	![image-20240527111810512](../../../TyporaImage/image-20240527111810512.png)
+
+### 七、Nacos解决多环境多项目配置
+
+#### 一、DataID方案
+
+- 指定`spring.profile.active`和配置文件的DataID来使不同环境下读取不同的配置
+
+- 分配方式为：默认空间public + 默认分组DEFAULT_GROUP + 新建DataID
+
+- Nacos页面上新建DataID为`nacos-config-client-test.yaml`，配置类似`nacos-config-client-dev.yaml`
+
+	![image-20240527071312280](../../../TyporaImage/image-20240527071312280.png)
+
+- application配置文件中修改`spring.profile.active`的值为`test`，即可调用DataId为`nacos-config-client-test.yaml`的配置文件
+
+	```yaml
+	server:
+	  port: 3377
+	spring:
+	  profiles:
+	    active: test
+	
+	```
+
+#### 二、Group方案
+
+- 通过Group实现环境区分。配置方式为默认空间public + 新建GROUP + 新建DataID，此处的DataId复制之前的也可以，DateId的名称也可不用更改
+
+- Nacos页面上新建DataID为`nacos-config-client-prod.yaml`，配置类似`nacos-config-client-dev.yaml`；Group的值为`PROD_GROUP`
+
+- bootstrap配置文件中修改`group`的值为`PROD_GROUP`
+
+	```yaml
+	spring:
+	  application:
+	    name: nacos-config-client
+	  cloud:
+	    nacos:
+	      discovery:
+	        server-addr: localhost:8848
+	        # Nacos服务注册中心地址
+	      config:
+	        server-addr: localhost:8848
+	        # Nacos作为配置中心的地址
+	        file-extension: yaml
+	        group: PROD_GROUP
+	
+	```
+
+- application配置文件中修改`spring.profile.active`的值为`prod`，即可调用Group为`PROD_GROUP`且DataId为`nacos-config-client-prod.yaml`的配置文件
+
+	```yaml
+	server:
+	  port: 3377
+	spring:
+	  profiles:
+	    active: prod
+	
+	```
+
+#### 三、Namespace方案
+
+- 通过Namespace实现命名空间环境区分。配置方式为新建Namespace + 新建Group + 新建DataID。新建Namespace时命名空间ID不填系统会自动生成
+
+- Nacos命名空间目录中新建PROD_NAMESPACE + Nacos新建Group为`PROD_GROUP`且DataId为`nacos-config-client-prod.yaml`的配置文件
+
+- bootstrap配置文件中修改`group`的值为`PROD_GROUP`、`namespace`的值为`PROD_NAMESPACE`
+
+	```yaml
+	spring:
+	  application:
+	    name: nacos-config-client
+	  cloud:
+	    nacos:
+	      discovery:
+	        server-addr: localhost:8848
+	        # Nacos服务注册中心地址
+	      config:
+	        server-addr: localhost:8848
+	        # Nacos作为配置中心的地址
+	        file-extension: yaml
+	        group: PROD_GROUP
+	        namespace: PROD_NAMESPACE
+	        # PROD_NAMESPACE是命名空间的id，如果是自动生成的则需要把自动生成的id复制到此处
+	
+	```
+
+- application配置文件中修改`spring.profile.active`的值为`prod`，即可调用Namespace为`PROD_NAMESPACE`且Group为`PROD_GROUP`且DataId为`nacos-config-client-prod.yaml`的配置文件
+
+	```yaml
+	server:
+	  port: 3377
+	spring:
+	  profiles:
+	    active: prod
+	
+	```
+
+## 五、Sentinel熔断与限流
+
+### 一、Sentinel概述
+
+1. [Sentinel哨兵官方文档](https://sentinelguard.io/zh-cn/)
+
+2. Sentinel概念：Sentinel是面向分布式、多语言异构化服务架构的流量治理组件，主要以流量为切入点，从流量路由、流量控制、流量整形、熔断降级、系统自适应过载保护、热点流量防护等多个未读来帮助开发者保障微服务的稳定性。是轻量级的流量控制、熔断降级的Java库。简而言之就是阿里巴巴的保险丝
+
+3. Sentinel流量降级与容错标准
+
+	- Target，即针对怎样的流量：按名称划分（resourceName）、按HTTP请求进行划分，比如针对包含某个特定header的请求、按流量流向（IN/OUT）划分
+	- Strategy，即针对怎样的流量治理策略：流量控制、流量平滑、并发请求控制、熔断器、自适应过载保护
+	- FallbackAction，触发后的fallback行为：HTTP请求返回特定状态码和header以及body信息、RPC请求返回的特定的返回值或异常、流量调度至其他节点
+
+4. Sentinel特征
+
+	- 丰富的应用场景：秒杀（即突发流量控制在系统容量可以承受的范围）、消息削峰填谷、集群流量控制、实时熔断下游不可用应用等
+	- 完备的实时监控：Sentinel同时提供实时的监控功能
+	- 广泛的开源生态：Sentinel提供开箱即用的与其他开源框架/库的整合模块
+	- 完善的SPI扩展机制：Sentinel提供简单易用、完善的SPI扩展接口。例如定制规则管理、适配动态数据源等
+
+	![image-20240527150651301](../../../TyporaImage/image-20240527150651301.png)
+
+### 二、Sentinel下载安装
+
+1. Sentinel分为两部分
+
+	- 核心库（Java客户端）：不依赖任何框架/库，能够运行于所有Java运行时环境，同时对Dubbo/Spring Cloud等框架也有较好的支持
+	- 控制台（Dashboard）：基于SpringBoot开发，打包后可以直接运行，不需要额外的Tomcat等应用容器
+	- 后台端口是8719，前台端口是8080
+
+2. [Sentinel Dashboard下载地址](https://github.com/alibaba/Sentinel/releases)下载jar包
+
+3. Sentinel运行环境为JDK以及端口号8080
+
+4. 运行命令`java -jar sentinel-dashboard-1.8.6.jar`
+
+5. 访问Sentinel管理界面`localhost:8080`，账号和密码都是sentinel
+
+6. 创建Maven工程`cloud-alibaba-sentinel-service8401`将被哨兵纳入管控的8401微服务提供者，引入依赖、修改配置文件和主启动类
+
+	```xml
+	<dependencies>
+	    <dependency>
+	        <groupId>com.alibaba.cloud</groupId>
+	        <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+	    </dependency>
+	    <dependency>
+	        <groupId>com.alibaba.cloud</groupId>
+	        <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+	    </dependency>
+	    <!-- 引入自定义api通用库-->
+	    <dependency>
+	        <groupId>edu.wong</groupId>
+	        <artifactId>cloud-api-commons</artifactId>
+	        <version>1.0-SNAPSHOT</version>
+	    </dependency>
+	    <dependency>
+	        <groupId>org.springframework.boot</groupId>
+	        <artifactId>spring-boot-starter-web</artifactId>
+	    </dependency>
+	    <dependency>
+	        <groupId>org.springframework.boot</groupId>
+	        <artifactId>spring-boot-starter-actuator</artifactId>
+	    </dependency>
+	    <dependency>
+	        <groupId>cn.hutool</groupId>
+	        <artifactId>hutool-all</artifactId>
+	    </dependency>
+	    <dependency>
+	        <groupId>org.projectlombok</groupId>
+	        <artifactId>lombok</artifactId>
+	        <scope>provided</scope>
+	    </dependency>
+	    <dependency>
+	        <groupId>org.springframework.boot</groupId>
+	        <artifactId>spring-boot-starter-test</artifactId>
+	        <scope>test</scope>
+	    </dependency>
+	</dependencies>
+	<build>
+	    <plugins>
+	        <plugin>
+	            <groupId>org.springframework.boot</groupId>
+	            <artifactId>spring-boot-maven-plugin</artifactId>
+	        </plugin>
+	    </plugins>
+	</build>
+	```
+
+	```yaml
+	server:
+	  port: 8401
+	
+	spring:
+	  application:
+	    name: cloud-alibaba-sentinel-service
+	  cloud:
+	    nacos:
+	      discovery:
+	        server-addr: localhost:8848
+	    sentinel:
+	      transport:
+	        dashboard: localhost:8080
+	        port: 8719 # 默认端口
+	```
+
+	```java
+	@SpringBootApplication
+	@EnableDiscoveryClient
+	public class Main8401 {
+	    public static void main(String[] args) {
+	        SpringApplication.run(Main8401.class, args);
+	    }
+	}
+	```
+
+7. 新建FlowLimitController
+
+	```java
+	@Slf4j
+	@RestController
+	public class FlowLimitController {
+	
+	    @GetMapping("/testA")
+	    public String testA() {
+	        return "into ... A ...";
+	    }
+	
+	    @GetMapping("/testB")
+	    public String testB() {
+	        return "into ... B ...";
+	    }
+	}
+	
+	```
+
+8. 使用Sentinel对某个接口进行限流和降级等操作，一定要先访问下接口，是Sentinel检测出相应的接口，因为Sentinel默认采用的是懒加载
+
+### 三、Sentinel之流控规则
+
+1. Sentinel能够对流量进行控制，主要是监控应用的QPS流量或者并发线程数等指标，如果达到指定的阈值时，就会被流量进行控制，以避免服务被瞬时的高并发流量击垮，保证服务的高可靠性
+
+2. Sentinel流控目录中页面右上角点击新增流控规则
+
+	![image-20240527170137597](../../../TyporaImage/image-20240527170137597.png)
+
+3. 流控规则的重要属性
+
+	![image-20240527170255990](../../../TyporaImage/image-20240527170255990.png)
+
+	![image-20240527170608929](../../../TyporaImage/image-20240527170608929.png)
+
+4. 流控模式的分类
+
+	- 直接：默认的流控模式，当接口达到限流条件时，直接开启限流功能，可以有个类似fallback的兜底方法
+
+	- 关联：当关联的资源达到阈值时，就限流自己；当与A关联的资源B达到阈值后，就限流A自己。如当关联资源`/testB`的QPS阈值超过1时，就限流`/testA`的Rest访问地址，当关联资源到阈值后限制配置好的资源名，B惹事了但是A也受到惩罚
+
+		![image-20240527171814479](../../../TyporaImage/image-20240527171814479.png)
+
+	- 链路：来自不同链路的请求对同一个目标访问时，实施针对性的不同限流措施，比如C请求来访问就限流，D请求来访问就是OK的
+
+5. 测试流控模式为链路的案例
+
+	- 新建FlowLimitService类
+
+		```java
+		@Slf4j
+		@Service
+		public class FlowLimitService {
+		
+		    @SentinelResource("common")
+		    public void common() {
+		        log.info("into ... common ...");
+		    }
+		}
+		```
+
+	- 在FlowLimitController中新建接口
+
+		```java
+		@Slf4j
+		@RestController
+		public class FlowLimitController {
+		    @Resource
+		    private FlowLimitService flowLimitService;
+		
+		    @GetMapping("/testC")
+		    public String testC() {
+		        flowLimitService.common();
+		        return "into ... C ...";
+		    }
+		
+		    @GetMapping("/testD")
+		    public String testD() {
+		        flowLimitService.common();
+		        return "into ... D ...";
+		    }
+		
+		}
+		```
+
+	- 修改yaml配置
+
+		```yaml
+		server:
+		  port: 8401
+		
+		spring:
+		  application:
+		    name: cloud-alibaba-sentinel-service
+		  cloud:
+		    nacos:
+		      discovery:
+		        server-addr: localhost:8848
+		    sentinel:
+		      transport:
+		        dashboard: localhost:8080
+		        port: 8719 
+		        # 默认端口
+		      web-context-unify: false
+		      # 设置为false则controller层的方法对service层调用不认为是同一个根链路
+		      # 默认是true
+		
+		```
+
+	- 在控制台上点击如下
+
+		![image-20240527173521785](../../../TyporaImage/image-20240527173521785.png)
+
+		![image-20240527173623687](../../../TyporaImage/image-20240527173623687.png)
+
+	- 当疯狂访问`/test`接口时会报错，其他的接口不会
+
+6. 流控效果的分类
+
+	- 快速失败：
+	- Warm Up：
+	- 排队等待：
+
+7. 
+
+### 四、Sentinel之熔断规则
+
+### 五、Sentinel之@SentinelResource注解
+
+### 六、Sentinel之热点规则
+
+### 七、Sentinel之授权规则
+
+### 八、Sentinel之规则持久化
+
+### 九、OpenFeign和Sentinel集成实现fallback服务降级
