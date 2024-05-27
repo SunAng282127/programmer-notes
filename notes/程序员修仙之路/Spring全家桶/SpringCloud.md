@@ -4506,7 +4506,7 @@
 		
 		```
 
-	- 在控制台上簇点链路目录中点击如下
+	- 在控制台上簇点链路目录中选中某个需要流控的接口，点击右侧按钮流控即可进行设置
 
 		![image-20240527173521785](../../../TyporaImage/image-20240527173521785.png)
 
@@ -4524,7 +4524,7 @@
 
 ### 四、Sentinel之熔断规则
 
-1. 熔断降级则为暂时切断不稳定调用，避免局部不稳定因素导致整体的雪崩。熔断降级作为保护自身的手段，通常在客户端（调用端）进行配置 
+1. 熔断降级则为暂时切断不稳定调用，避免局部不稳定因素导致整体的雪崩。熔断降级作为保护自身的手段，通常在客户端（调用端）进行配置。当配置熔断规则后，当出现慢调用或者异常调用时，不会单纯的报异常信息，而是报Sentinel的提示信息（`Blocked by Sentinel（flow limiting）`），更好的进行服务熔断和降级
 
 2. Sentinel 提供以下几种熔断策略
 
@@ -4545,13 +4545,114 @@
      - 比例阈值：自己设定的。比例阈值 = 慢调用次数/调用次数
      - 统计时长：时间的判定依据
      - 最小请求数：设置的调用最小请求数。比如1秒钟进来10个请求线程（大于我们自己配置的5个），即调用被触发了
-   - 
+     - 熔断时长：即接口断开的时长，超过此时长，接口会自动派出探路先锋去调用接口，如果能调通则接口恢复，调不通则接口继续熔断
+   - 使用方式：在Sentinel控制台上簇点链路目录中选中某个需要流控的接口，点击右侧按钮流控即可进行设置熔断策略为慢调用比例
 
 4. Sentinel熔断降级之异常比例案例
 
+   - 使用方式：在Sentinel控制台上簇点链路目录中选中某个需要流控的接口，点击右侧按钮流控即可进行设置熔断策略为异常比例
+
 5. Sentinel熔断降级之异常数案例
 
+   - 使用方式：在Sentinel控制台上簇点链路目录中选中某个需要流控的接口，点击右侧按钮流控即可进行设置熔断策略为异常数
+
 ### 五、Sentinel之@SentinelResource注解
+
+1. `@SentinelResource`的概述：`SentinelResource`是一个流量防卫防护组件注解，用于指定防护资源，对配置的资源进行流量控制、熔断降级等功能
+
+2. `@SentinelResource`注解中的主要方法描述
+
+   | value              | 资源名称                                                     |
+   | ------------------ | ------------------------------------------------------------ |
+   | entryType          | entry类型，标记流量的方向，取值IN/OUT，默认是OUT             |
+   | blockHandler       | 处理BlockException的函数名称，函数要求：<br/>1.必须是public<br/>2.返回类型、参数与原方法一致。如果原方法无参则必须在处理BlockException的函数的参数中添加BlockExceptioncan参数<br/>3.默认需和原方法在同一个类中。若希望使用其他类的函数，可配置blockHandlerClass，并指定blockHandlerClass里面的方法 |
+   | blockHandlerClass  | 存放blockHandler的类，对应的处理函数必须static修饰           |
+   | fallback           | 用于在抛出异常的时候提供fallback处理逻辑。fallback函数可以针对所有类型的异常（除了exceptionsToIgnore里面排除掉的异常类型）进行处理。函数要求：<br/>1.返回类型与原方法一致<br/>2.参数类型需要和原方法相匹配。如果原方法无参则必须在处理Exception的函数的参数中添加Throwable参数<br/>3.默认需和原方法在同一个类中。若希望使用其他类的函数，可配置fallbackClass ，并指定fallbackClass里面的方法<br/> |
+   | fallbackClass      | 存放fallback的类。对应的处理函数必须static修饰               |
+   | defaultFallback    | 用于通用的fallback逻辑。默认fallback函数可以针对所有类型的异常进行处理。若同时配置了fallback和defaultFallback，以fallback为准。函数要求：<br/>1.返回类型与原方法一致<br/>2.方法参数列表为空，或者有一个Throwable类型的参数。<br/>3.默认需要和原方法在同一个类中。若希望使用其他类的函数，可配置fallbackClass ，并指定 fallbackClass 里面的方法<br/> |
+   | exceptionsToIgnore | 指定排除掉哪些异常。排除的异常不会计入异常统计，也不会进入fallback逻辑，而是原样抛出 |
+   | exceptionsToTrace  | 需要trace的异常                                              |
+
+3. `@SentinelResource`注解案例
+
+   - 按照rest地址限流并默认限流提示返回
+
+     - 在`cloud-alibaba-sentinel-service8401`工程中新建RateLimitController
+
+       ```java
+       @Slf4j
+       @RestController
+       public class RateLimitController {
+       
+           @GetMapping("/rateLimitByUrl")
+           public String rateLimitByUrl() {
+               return "按照rest地址限流测试，限流测试未使用注解";
+           }
+       
+       }
+       
+       ```
+
+     - 页面访问`http://localhost:8401/rateLimitByUrl`
+
+     - `/rateLimitByUrl`新增流控规则，当单机阈值设置为1时，疯狂刷新接口时会报提示信息
+
+       ![image-20240528064725962](../../../TyporaImage/image-20240528064725962.png)
+
+   - 按照SentinelResource资源名称限流并自定义限流提示返回
+
+     - 在RateLimitController中新加接口
+
+       ```java
+       @GetMapping("/rateLimitByResource")
+       @SentinelResource(value = "ByResource", blockHandler = "byResourceHandler")
+       public String rateLimitByResource() {
+           return "按照资源名称SentinelResource限流测试";
+       }
+       
+       public String byResourceHandler(BlockException blockException) {
+           return "服务不可用, 这是自定义返回的字符串";
+       }
+       ```
+
+     - `/rateLimitByResource`新增流控规则，当单机阈值设置为1时，疯狂刷新接口时会报自定义提示信息
+
+       ![image-20240528065737313](../../../TyporaImage/image-20240528065737313.png)
+
+   - 按照SentinelResource资源名称限流、自定义限流提示返回且服务降级处理
+
+     - 在RateLimitController中新加接口
+
+       ```java
+       @GetMapping("/rateLimitByFallback/{i}")
+       @SentinelResource(value = "rateLimitByFallback", blockHandler = "byBlockHandler", fallback = "byFallback")
+       public String rateLimitByFallback(@PathVariable("i") Integer i) {
+           if (i == 0) {
+               throw new RuntimeException("i == 0 异常");
+           }
+           return "使用注解并使用, Fallback";
+       }
+       
+       public String byBlockHandler(@PathVariable("i") Integer i, BlockException blockException) {
+           log.error("配置了自定义限流, {}", blockException.getMessage());
+           return "服务不可用, 这是自定义返回的字符串";
+       }
+       
+       public String byFallback(@PathVariable("i") Integer i, Throwable throwable) {
+           log.error("程序逻辑异常, {}", throwable.getMessage());
+           return "逻辑异常, 这是自定义返回的字符串";
+       }
+       ```
+
+     - `/rateLimitByFallback`新增流控规则，当单机阈值设置为1时，疯狂刷新接口时会报自定义提示信息
+
+       ![image-20240528071030980](../../../TyporaImage/image-20240528071030980.png)
+
+     - `blockHandler`和`fallback`的关系
+
+       - `blockHandler`主要针对Sentinel配置后出现的违规情况处理
+       - `fallback`主要针对程序JVM异常抛出的异常服务降级
+       - `blockHandler`和`fallback`可以共存
 
 ### 六、Sentinel之热点规则
 
