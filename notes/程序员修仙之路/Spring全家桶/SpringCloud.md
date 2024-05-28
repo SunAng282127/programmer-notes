@@ -4897,12 +4897,6 @@
 8. 在`cloudalibaba-consumer-nacos-order83`工程中新增依赖
 
 	```xml
-	<!-- 引入自定义api通用库-->
-	<dependency>
-	    <groupId>com.sunsh</groupId>
-	    <artifactId>cloud-api-commons</artifactId>
-	    <version>1.0-SNAPSHOT</version>
-	</dependency>
 	<dependency>
 	    <groupId>org.springframework.cloud</groupId>
 	    <artifactId>spring-cloud-starter-openfeign</artifactId>
@@ -4914,7 +4908,7 @@
 	    <version>2023.0.0.0-RC1</version>
 	</dependency>
 	```
-
+	
 9. 在`cloudalibaba-consumer-nacos-order83`工程中修改yaml配置文件
 
 	```yaml
@@ -4956,13 +4950,149 @@
 	}
 	```
 
-12. 由于SpringCloud、SpringBoot和SpringCloud Alibaba的版本匹配度问题，所以在根pom文件中修改SpringCloud、SpringBoot的版本号。后续还是要改回来的
+12. 由于SpringCloud、SpringBoot和SpringCloud Alibaba的版本匹配度问题，所以在根pom文件中修改SpringCloud、SpringBoot的版本号。也可以将SpringCloud Alibaba的版本改为2023.0.1.0
 
-	```xml
-	<spring.boot.version>3.0.9</spring.boot.version>
-	<spring.cloud.version>2022.0.2</spring.cloud.version>
-	```
+    ```xml
+    <spring.boot.version>3.0.9</spring.boot.version>
+    <spring.cloud.version>2022.0.2</spring.cloud.version>
+    <!-- 两者版本修改任选其一即可 -->
+    <spring.cloud.alibaba.version>2023.0.1.0</spring.cloud.alibaba.version>
+    ```
 
 13. 本案例测试完毕后，需要恢复SpringCloud、SpringBoot的版本号
 
 ### 十、Gateway和Sentinel集成实现服务限流
+
+1. 新建Maven工程`cloudalibaba-sentinel-gateway9528`引入依赖、修改yaml配置文件以及主启动类
+
+   ```xml
+   <dependencies>
+       <dependency>
+           <groupId>org.springframework.cloud</groupId>
+           <artifactId>spring-cloud-starter-gateway</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>com.alibaba.csp</groupId>
+           <artifactId>sentinel-transport-simple-http</artifactId>
+           <version>1.8.6</version>
+       </dependency>
+       <dependency>
+           <groupId>com.alibaba.csp</groupId>
+           <artifactId>sentinel-spring-cloud-gateway-adapter</artifactId>
+           <version>1.8.6</version>
+       </dependency>
+       <dependency>
+           <groupId>com.alibaba.cloud</groupId>
+           <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+       </dependency>
+       <!-- loadbalancer -->
+       <dependency>
+           <groupId>org.springframework.cloud</groupId>
+           <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>javax.annotation</groupId>
+           <artifactId>javax.annotation-api</artifactId>
+           <version>1.3.2</version>
+           <scope>compile</scope>
+       </dependency>
+   </dependencies>
+   ```
+
+   ```yaml
+   server:
+     port: 9528
+   
+   spring:
+     application:
+       name: cloud-alibaba-sentinel-gateway
+     cloud:
+       nacos:
+         discovery:
+           server-addr: localhost:8848 
+           # nacos地址
+       gateway:
+         routes:
+           - id: pay_routh1
+             uri: lb://nacos-pay-provider
+             # uri: http://localhost:9001
+             predicates:
+               - Path=/pay/**
+   ```
+
+   ```java
+   @SpringBootApplication
+   @EnableDiscoveryClient
+   public class Main9528 {
+       public static void main(String[] args) {
+           SpringApplication.run(Main9528.class,args);
+       }
+   }
+   ```
+
+2. Sentinel提供了SpringCloud Gateway的适配模块，可以提供两种资源维度的限流：
+
+   - route维度：即在Spring配置文件中配置的路由条目，资源名为对应的routeId
+   - 自定义API维度：用户可以利用Sentinel提供的API来自定义一些API分组
+
+3. 新建配置类GatewayConfiguration
+
+   ```java
+   @Configuration
+   public class GatewayConfiguration {
+       private final List<ViewResolver> viewResolvers;
+       private final ServerCodecConfigurer serverCodecConfigurer;
+   
+       public GatewayConfiguration(List<ViewResolver> viewResolvers, ServerCodecConfigurer serverCodecConfigurer) {
+           this.viewResolvers = viewResolvers;
+           this.serverCodecConfigurer = serverCodecConfigurer;
+       }
+   
+       @Bean
+       @Order(Ordered.HIGHEST_PRECEDENCE)
+       public SentinelGatewayBlockExceptionHandler sentinelGatewayBlockExceptionHandler() {
+           return new SentinelGatewayBlockExceptionHandler(viewResolvers, serverCodecConfigurer);
+       }
+   
+       @Bean
+       @Order(-1)
+       public GlobalFilter sentinelGatewayFilter() {
+           return new SentinelGatewayFilter();
+       }
+       
+       // 以上内容均来自官网直接复制即可
+   
+       @PostConstruct
+       public void doInit() {
+           initBlockHandler();
+       }
+   
+       // 处理自定义返回的例外信息内容，类似于调用接口触发了流控规则保护
+       private void initBlockHandler() {
+           Set<GatewayFlowRule> rules = new HashSet<>();
+           rules.add(
+               new GatewayFlowRule("pay_routh1")
+               .setCount(2)
+               .setIntervalSec(1)
+           );
+           GatewayRuleManager.loadRules(rules);
+   
+           BlockRequestHandler handler = (serverWebExchange, throwable) -> {
+               HashMap<String, String> map = new HashMap<>();
+               map.put("ErrorCode", HttpStatus.TOO_MANY_REQUESTS.getReasonPhrase());
+               map.put("ErrorMessage", "请求过于频繁, 触发了sentinel限流 ... ");
+               return ServerResponse.status(HttpStatus.TOO_MANY_REQUESTS)
+                   .contentType(MediaType.APPLICATION_JSON)
+                   .body(BodyInserters.fromValue(map));
+           };
+   
+           GatewayCallbackManager.setBlockHandler(handler);
+       }
+   }
+   
+   ```
+
+4. 页面疯狂访问`http://localhost:9528/pay/nacos/get/120`出现提示信息则说明配置成功
+
+## 六、Seata处理分布式事务
+
