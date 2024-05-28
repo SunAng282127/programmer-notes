@@ -4656,8 +4656,313 @@
 
 ### 六、Sentinel之热点规则
 
+1. 热点规则概述：热点即经常访问的数据，很多时候希望统计或者限制某个热点数据中访问频次最高的TopN数据，并对其进行限流或者其他操作。热点参数限流会统计传入参数中的热点参数，并根据配置的限流阈值与模式，对包含热点参数的资源调用进行限流。热点参数限流可以看做是一种特殊的流量控制，仅对包含热点参数的资源调用生效。下图是对同一接口的不同位置的参数产生了不同的效果
+
+	![image-20240528142704530](../../../TyporaImage/image-20240528142704530.png)
+
+2. 在`cloud-alibaba-sentinel-service8401`工程中的RateLimitController新增接口
+
+	```java
+	@GetMapping("/testHotKey")
+	@SentinelResource(value = "testHotKey", blockHandler = "testHotKeyBlockHandler")
+	public String testHotKey(@RequestParam(value = "p1", required = false) String p1,
+	                         @RequestParam(value = "p2", required = false) String p2) {
+	    return "testHotKey ...";
+	}
+	
+	public String testHotKeyBlockHandler(@RequestParam(value = "p1", required = false) String p1,
+	                                     @RequestParam(value = "p2", required = false) String p2, BlockException blockException) {
+	    return "testHotKey blockException ...";
+	}
+	```
+
+3. 在控制台上簇点链路目录中选中某个需要流控的接口，点击右侧按钮热点即可进行设置
+
+	![image-20240528143627210](../../../TyporaImage/image-20240528143627210.png)
+
+	- `@SentinelResource`注解的方法参数索引，0代表第一个参数，1代表第二个参数，以此类推
+	- 单机阈值以及统计窗口时长表示在此窗口时间超过阈值就限流
+	- 上图的参数设置表示含有参数P1，当每秒访问的频率超过1次时，会触发Sentinel的限流操作，只要参数中含有P1就会起作用
+
+4. 参数例外项：如期待上述案例中P1的参数当它是某个特殊值时，到达某个约定值后，那么P1的热点规则设置就会失效，而参数列外项的配置则会生效
+
+	![image-20240528144617657](../../../TyporaImage/image-20240528144617657.png)
+
 ### 七、Sentinel之授权规则
+
+1. 授权规则概述：在某下场景下，需要根据调用接口的来源判断是否允许执行本次请求。此时就可以使用Sentinel提供的授权规则来实现，Sentinel的授权规则能够根据请求的来源判断是否允许本次请求通过。在Sentinel的授权规则中，提供了白名单和黑名单两种授权类型，白放行、黑禁止。若配置白名单则只有请求来源位于白名单内时才可通过；若配置黑名单则请求来源位于黑名单时不通过，其余的请求通过
+
+2. 在`cloud-alibaba-sentinel-service8401`工程中新增EmpowerController
+
+	```java
+	@Slf4j
+	@RestController
+	public class EmpowerController {
+	    @GetMapping("empower")
+	    public String requestSentinel() {
+	        log.info("授权规则");
+	        return "授权规则";
+	    }
+	}
+	```
+
+3. 新建handler类MyRequestOriginParser，实现RequestOriginParser，即可实现官网说明信息：调用方信息通过 `ContextUtil.enter(resourceName, origin)` 方法中的 `origin` 参数传入 
+
+	```java
+	@Component
+	public class CustomRequestOriginParser implements RequestOriginParser {
+	    @Override
+	    public String parseOrigin(HttpServletRequest httpServletRequest) {
+	        return httpServletRequest.getParameter("serverName");
+	    }
+	}
+	```
+
+4. 在控制台上簇点链路目录中选中某个需要流控的接口，点击右侧按钮授权即可进行设置
+
+	![image-20240528151226679](../../../TyporaImage/image-20240528151226679.png)
+
+5. 在页面访问`http://localhost:8401/empower?serverName=test`则会出现Sentinel提示信息，表示此访问在黑名单中
 
 ### 八、Sentinel之规则持久化
 
+1. 持久化需求：将限流配置规则持久化进Nacos保存，只要刷新8401某个rest地址，sentinel控制台的流控规则就能看到，只要Nacos的配置不删除，针对8401上的sentinel上的流控规则持续有效
+
+2. 在`cloud-alibaba-sentinel-service8401`工程中新增依赖
+
+	```xml
+	<dependency>
+	    <groupId>com.alibaba.csp</groupId>
+	    <artifactId>sentinel-datasource-nacos</artifactId>
+	</dependency>
+	```
+
+3. 修改`cloud-alibaba-sentinel-service8401`工程中配置文件
+
+	```yaml
+	server:
+	  port: 8401
+	
+	spring:
+	  application:
+	    name: cloudalibaba-sentinel-service
+	  cloud:
+	    nacos:
+	      discovery:
+	        server-addr: localhost:8848
+	    sentinel:
+	      transport:
+	        dashboard: localhost:8080
+	        port: 8719 # 默认端口
+	      web-context-unify: false
+	      datasource:
+	        ds1:
+	        # 可以自定义
+	          nacos:
+	            server-addr: localhost:8848
+	            data-id: ${spring.application.name}
+	            group-id: DEFAULT_GROUP
+	            data-type: json
+	            rule-type: flow 
+	            # com.alibaba.cloud.sentinel.datasource.RuleType (flow代表流控)
+	            # flow：流控
+	            # degrade：熔断
+	            # param-flow：热点
+	            # system：系统保护
+	            # authority：访问控制
+			ds2:
+	         # 可以自定义
+	          nacos:
+	            server-addr: localhost:8848
+	            data-id: ${spring.application.name}
+	            group-id: DEFAULT_GROUP
+	            data-type: json
+	            rule-type: degrade 
+	
+	```
+
+4. 在Nacos控制台上新加配置，DataID为`cloudalibaba-sentinel-service`，配置格式选择JSON，如配置流控持久化，JSON的格式如下
+
+	```json
+	{
+	  "resource":"/rateLimitByUrl",
+	  "limitApp":"default",
+	  "grade":1,
+	  "count":1,
+	  "strategy":0,
+	  "controlBehavior":0,
+	  "clusterMode":false
+	}
+	```
+
+	- resource：资源名称
+	- limitApp：来源应用
+	- grade：阈值类型即0表示线程数，1表示QPS
+	- count：单机阈值
+	- strategy：流控模式即0表示直接，1表示关联，2表示链路
+	- controlBehavior：流控效果即0表示快速失败，1表示Warm Up，2表示排队等待
+	- clusterMode：是否集群
+
 ### 九、OpenFeign和Sentinel集成实现fallback服务降级
+
+1. 需求说明
+
+	![image-20240528162700479](../../../TyporaImage/image-20240528162700479.png)
+
+2. 在`cloudalibaba-provider-payment9001`工程中修改pom文件新增依赖
+
+	```xml
+	<dependency>
+	    <groupId>org.springframework.cloud</groupId>
+	    <artifactId>spring-cloud-starter-openfeign</artifactId>
+	</dependency>
+	<dependency>
+	    <groupId>com.alibaba.cloud</groupId>
+	    <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+	</dependency>
+	```
+
+3. 在`cloudalibaba-provider-payment9001`工程中修改yaml配置文件
+
+	```yaml
+	server:
+	  port: 9001
+	spring:
+	  application:
+	    name: nacos-pay-provider
+	  cloud:
+	    nacos:
+	      discovery:
+	        server-addr: localhost:8848 # nacos地址
+	    sentinel:
+	      transport:
+	        dashboard: localhost:8080
+	        port: 8719 # 默认端口8719
+	
+	```
+
+4. 在`cloudalibaba-provider-payment9001`工程中的PayAlibabaController新增接口
+
+	```java
+	// openfeign和sentinel
+	@GetMapping("/pay/nacos/get/{orderNo}")
+	@SentinelResource(value = "getPayByOrderNo", blockHandler = "handlerBlockHandler")
+	public Result<PayDTO> getPayByOrderNo(@PathVariable("orderNo") String orderNo) {
+	    // 模拟查询
+	    PayDTO payDTO = new PayDTO(1024, orderNo, "pay" + IdUtil.simpleUUID(), 1, BigDecimal.valueOf(9.9));
+	    return Result.success(payDTO);
+	}
+	
+	public Result<PayDTO> handlerBlockHandler(String orderNo, BlockException e) {
+	    return Result.fail("服务提供者" + e.getMessage());
+	}
+	```
+
+5. 在`cloud-api-commons`工程中修改pom文件
+
+	```xml
+	<dependency>
+	    <groupId>org.springframework.cloud</groupId>
+	    <artifactId>spring-cloud-starter-openfeign</artifactId>
+	</dependency>
+	<dependency>
+	    <groupId>com.alibaba.cloud</groupId>
+	    <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+	</dependency>
+	```
+
+6. 在`cloud-api-commons`工程中新建PayFeignSentinelApi
+
+	```java
+	@FeignClient(value = "nacos-pay-provider", fallback = PayFeignSentinelFallback.class)
+	public interface PayFeignSentinelApi {
+	
+	    @GetMapping("/pay/nacos/get/{orderNo}")
+	    Result<PayDTO> getPayByOrderNo(@PathVariable("orderNo") String orderNo);
+	}
+	```
+
+7. 在`cloud-api-commons`工程中新建全局同一服务降级类PayFeignSentinelFallback
+
+	```java
+	@Component
+	public class PayFeignSentinelFallback implements PayFeignSentinelApi {
+	    @Override
+	    public Result<PayDTO> getPayByOrderNo(String orderNo) {
+	        return Result.fail("服务不可达");
+	    }
+	}
+	```
+
+8. 在`cloudalibaba-consumer-nacos-order83`工程中新增依赖
+
+	```xml
+	<!-- 引入自定义api通用库-->
+	<dependency>
+	    <groupId>com.sunsh</groupId>
+	    <artifactId>cloud-api-commons</artifactId>
+	    <version>1.0-SNAPSHOT</version>
+	</dependency>
+	<dependency>
+	    <groupId>org.springframework.cloud</groupId>
+	    <artifactId>spring-cloud-starter-openfeign</artifactId>
+	    <version>4.1.0</version>
+	</dependency>
+	<dependency>
+	    <groupId>com.alibaba.cloud</groupId>
+	    <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
+	    <version>2023.0.0.0-RC1</version>
+	</dependency>
+	```
+
+9. 在`cloudalibaba-consumer-nacos-order83`工程中修改yaml配置文件
+
+	```yaml
+	server:
+	  port: 9000
+	spring:
+	  application:
+	    name: nacos-order-consume
+	  cloud:
+	    nacos:
+	      discovery:
+	        server-addr: localhost:8848 # nacos地址
+	
+	service-url:
+	  nacos-user-service: http://nacos-pay-provider
+	
+	feign:
+	  sentinel:
+	    enabled: true
+	
+	```
+
+10. 在`cloudalibaba-consumer-nacos-order83`工程主启动类增加注解`@EnableFeignClients`来激活Feign
+
+11. 在`cloudalibaba-consumer-nacos-order83`工程新增业务类OrderNacosController
+
+	```java
+	@RestController
+	public class OrderNacosController {
+	
+	    @Resource
+	    private PayFeignSentinelApi payFeignSentinelApi;
+	
+	    @GetMapping("/consume/pay/nacos/get/{orderNo}")
+	    Result<PayDTO> getPayByOrderNo(@PathVariable("orderNo") String orderNo){
+	        return payFeignSentinelApi.getPayByOrderNo(orderNo);
+	    }
+	
+	}
+	```
+
+12. 由于SpringCloud、SpringBoot和SpringCloud Alibaba的版本匹配度问题，所以在根pom文件中修改SpringCloud、SpringBoot的版本号。后续还是要改回来的
+
+	```xml
+	<spring.boot.version>3.0.9</spring.boot.version>
+	<spring.cloud.version>2022.0.2</spring.cloud.version>
+	```
+
+13. 本案例测试完毕后，需要恢复SpringCloud、SpringBoot的版本号
+
+### 十、Gateway和Sentinel集成实现服务限流
