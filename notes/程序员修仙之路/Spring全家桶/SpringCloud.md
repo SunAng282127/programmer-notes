@@ -5096,3 +5096,180 @@
 
 ## 六、Seata处理分布式事务
 
+### 一、Seata概述
+
+1. Seata概述：Seata是一款简单可扩展的自治事务框架
+
+2. Seata作用：Seata是一款开源的分布式事务解决方案，致力于在微服务架构下提供高性能和简单易用的分布式事务服务。Seata纵观分布式事务的管理，就是全局事务ID的传递和变更，要让开发者无感知，我们只需要使用一个`@GlobalTransactional`注解在业务方法上即分布式事务就可以处理了
+
+3. Seata图示
+
+   ![image-20240529055421073](../../../TyporaImage/image-20240529055421073.png)
+
+4. Seata事务的协调与控制：使用的XID、TC、TM、RM相互配合的机制
+
+   - XID是全局事务的唯一标识，它可以在服务的调用链中传递，绑定到服务的事务上下文中
+   - Transaction Coordinator(TC)：事务协调者。维护全局和分支事务的状态，驱动全局事务提交或回滚。简而言之TC就是Seata本身，负责维护全局事务和分支事务的状态，驱动全局事务提交或回滚。全局有且只有一个。类似于一个班的班主任
+   - Transaction Manager(TM)：事务管理者。定义全局事务的范围即开始全局事务、提交或回滚全局事务。简而言之TM就是标注全局`@GlobalTransactional`启动入口动作的微服务模块（比如订单模块），它是事务的发起者，负责定义全局事务的范围，并根据TC维护的全局事务和分支事务状态，做出开始事务、提交事务、回滚事务的决议。全局有且只有一个。类似于一个班的班长
+   - Resource Manager(RM)：资源管理器。管理分支事务处理的资源，与TC交谈以注册分支事务和报告分支事务的状态，并驱动分支事务提交或回滚。简而言之RM就是数据库本身，负责管理分支事务上的资源，向TC注册分支事务，汇报分支事务状态，驱动分支事务的提交或回滚。可能会有多个
+   - TC以Seata服务器（Server）形式独立部署，TM和RM则是以Seata Client的形式集成在微服务中运行。类似于一个班的学生
+
+5. Seata的工作流程
+
+   ![image-20240529062240507](../../../TyporaImage/image-20240529062240507.png)
+
+   - TM向TC申请开启一个全局事务，全局事务创建成功并生成一个全局唯一的XID
+   - XID在微服务调用链路的上下文中传播
+   - RM向TC注册分支事务，将其纳入XID对应的全局事务的管辖
+   - TM向TC发起针对XID的全局提交或回滚决议
+   - TC调度XID下管辖的全部分支事务完成提交或回滚请求
+
+6. Seata的四种事务模式
+
+   - Seata AT模式
+   - Seata TCC模式
+   - Seata Sega模式
+   - Seata XA模式
+
+7. Seata资源目录介绍
+
+   - client：存放client端sql脚本 (包含 undo_log表) ，参数配置
+
+   - config-center：各个配置中心参数导入脚本，config.txt（包含server和client，原名nacos-config.txt）为通用参数文件
+
+   - server：server端数据库脚本 (包含 lock_table、branch_table 与 global_table) 及各个容器配置
+
+### 二、Seata下载安装
+
+1. [Seata官网下载地址](https://seata.apache.org/zh-cn/unversioned/download/seata-server)
+
+2. 准备MySQL8的环境，不推荐将MySQL放到Docker中
+
+   - 创建seata数据库
+
+   - 建立seata所需的表
+
+     ```sql
+     -- -------------------------------- The script used when storeMode is 'db' --------------------------------
+     -- the table to store GlobalSession data
+     CREATE TABLE IF NOT EXISTS `global_table`
+     (
+         `xid`                       VARCHAR(128) NOT NULL,
+         `transaction_id`            BIGINT,
+         `status`                    TINYINT      NOT NULL,
+         `application_id`            VARCHAR(32),
+         `transaction_service_group` VARCHAR(32),
+         `transaction_name`          VARCHAR(128),
+         `timeout`                   INT,
+         `begin_time`                BIGINT,
+         `application_data`          VARCHAR(2000),
+         `gmt_create`                DATETIME,
+         `gmt_modified`              DATETIME,
+         PRIMARY KEY (`xid`),
+         KEY `idx_status_gmt_modified` (`status` , `gmt_modified`),
+         KEY `idx_transaction_id` (`transaction_id`)
+     ) ENGINE = InnoDB
+       DEFAULT CHARSET = utf8mb4;
+     
+     -- the table to store BranchSession data
+     CREATE TABLE IF NOT EXISTS `branch_table`
+     (
+         `branch_id`         BIGINT       NOT NULL,
+         `xid`               VARCHAR(128) NOT NULL,
+         `transaction_id`    BIGINT,
+         `resource_group_id` VARCHAR(32),
+         `resource_id`       VARCHAR(256),
+         `branch_type`       VARCHAR(8),
+         `status`            TINYINT,
+         `client_id`         VARCHAR(64),
+         `application_data`  VARCHAR(2000),
+         `gmt_create`        DATETIME(6),
+         `gmt_modified`      DATETIME(6),
+         PRIMARY KEY (`branch_id`),
+         KEY `idx_xid` (`xid`)
+     ) ENGINE = InnoDB
+       DEFAULT CHARSET = utf8mb4;
+     
+     -- the table to store lock data
+     CREATE TABLE IF NOT EXISTS `lock_table`
+     (
+         `row_key`        VARCHAR(128) NOT NULL,
+         `xid`            VARCHAR(128),
+         `transaction_id` BIGINT,
+         `branch_id`      BIGINT       NOT NULL,
+         `resource_id`    VARCHAR(256),
+         `table_name`     VARCHAR(32),
+         `pk`             VARCHAR(36),
+         `status`         TINYINT      NOT NULL DEFAULT '0' COMMENT '0:locked ,1:rollbacking',
+         `gmt_create`     DATETIME,
+         `gmt_modified`   DATETIME,
+         PRIMARY KEY (`row_key`),
+         KEY `idx_status` (`status`),
+         KEY `idx_branch_id` (`branch_id`),
+         KEY `idx_xid` (`xid`)
+     ) ENGINE = InnoDB
+       DEFAULT CHARSET = utf8mb4;
+     
+     CREATE TABLE IF NOT EXISTS `distributed_lock`
+     (
+         `lock_key`       CHAR(20) NOT NULL,
+         `lock_value`     VARCHAR(20) NOT NULL,
+         `expire`         BIGINT,
+         primary key (`lock_key`)
+     ) ENGINE = InnoDB
+       DEFAULT CHARSET = utf8mb4;
+     
+     INSERT INTO `distributed_lock` (lock_key, lock_value, expire) VALUES ('AsyncCommitting', ' ', 0);
+     INSERT INTO `distributed_lock` (lock_key, lock_value, expire) VALUES ('RetryCommitting', ' ', 0);
+     INSERT INTO `distributed_lock` (lock_key, lock_value, expire) VALUES ('RetryRollbacking', ' ', 0);
+     INSERT INTO `distributed_lock` (lock_key, lock_value, expire) VALUES ('TxTimeoutCheck', ' ', 0);
+     ```
+
+3. 提前备份并更改seata的配置文件`application.yml`的`config.store`处
+
+   ```yaml
+   seata:
+     config:
+       # support: nacos, consul, apollo, zk, etcd3
+       type: nacos
+       nacos: 
+           server-addr: 127.0.0.1:8848
+           namespace: 
+           group: SEATA_GROUP 
+           #需要在Nacos中新建分组，不想建则使用默认的DEFAULT_GROUP
+           username: nacos
+           password: nacos
+     registry:
+       # support: nacos, eureka, redis, zk, consul, etcd3, sofa
+       type: nacos
+       nacos: 
+           application: seata-server
+           server-addr: 127.0.0.1:8848
+           namespace: 
+           group: SEATA_GROUP 
+           #需要在Nacos中新建分组，不想建则使用默认的DEFAULT_GROUP
+           cluster: default
+           username: nacos
+           password: nacos
+     store:
+       # support: file 、 db 、 redis 、 raft
+       mode: db
+       db:
+         datasource: druid
+         db-type: mysql
+         driver-class-name: com.mysql.cj.jdbc.Driver
+         url: jdbc:mysql://127.0.0.1:13306/seata?rewriteBatchedStatements=true
+         user: root
+         password: ******
+         min-conn: 10
+         max-conn: 100
+         global-table: global_table
+         branch-table: branch_table
+         lock-table: lock_table
+         distributed-lock-table: distributed_lock
+         query-limit: 1000
+         max-wait: 5000
+   ```
+
+4. 启动Seata之前一定要启动Nacos，启动Seata方式是在Seata的安装目录bin文件下执行`seata-server.bat`即可运行，在Nacos服务管理中出现seata-server以及访问地址`http://localhost:7091/`成功出现Seata的管控台则说明配置完成
+
