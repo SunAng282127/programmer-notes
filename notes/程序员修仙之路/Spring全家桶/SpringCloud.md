@@ -5225,7 +5225,7 @@
      INSERT INTO `distributed_lock` (lock_key, lock_value, expire) VALUES ('TxTimeoutCheck', ' ', 0);
      ```
 
-3. 提前备份并更改seata的配置文件`application.yml`的`config.store`处
+3. 提前备份并更改seata的配置文件`application.yml`的`config`处
 
    ```yaml
    seata:
@@ -5382,7 +5382,311 @@
 	
 	```
 
-	
+3. 在`cloud-api-commons`工程中新增两个接口类为`AccountFeignApi`和`StorageFeignApi`
 
+   ```java
+   @FeignClient(value = "seata-account-service")
+   public interface AccountFeignApi {
+   
+       /**
+        * 余额扣减
+        * @param userId 用户id
+        * @param money 扣了多少钱
+        * @return 结果集
+        */
+       @PostMapping("/account/decrease")
+       public Result<Object> decrease(@RequestParam("userId") Long userId, @RequestParam("money") Long money);
+   }
+   
+   ```
 
+   ```java
+   @FeignClient(value = "seata-storage-service")
+   public interface StorageFeignApi {
+   
+       /**
+        * 扣减库存
+        * @param productId 商品ID
+        * @param count 扣减数量
+        * @return 结果集
+        */
+       @PostMapping("/storage/decrease")
+       public Result<Object> decrease(@RequestParam("productId") Long productId, @RequestParam("count") Integer count);
+   }
+   
+   ```
+
+4. 新建订单Order微服务：新建`cloud-seata-order-service2001`工程引入依赖、修改yaml配置文件和主启动类以及业务代码
+
+   ```xml
+   <dependencies>
+       <dependency>
+           <groupId>com.alibaba.cloud</groupId>
+           <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>com.alibaba.cloud</groupId>
+           <artifactId>spring-cloud-starter-alibaba-seata</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>org.springframework.cloud</groupId>
+           <artifactId>spring-cloud-starter-openfeign</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>org.springframework.cloud</groupId>
+           <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+       </dependency>
+       <!-- 引入自定义api通用库-->
+       <dependency>
+           <groupId>com.sunsh.cloud</groupId>
+           <artifactId>cloud-api-commons</artifactId>
+           <version>1.0-SNAPSHOT</version>
+       </dependency>
+       <dependency>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-starter-web</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-starter-actuator</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>com.alibaba</groupId>
+           <artifactId>druid-spring-boot-starter</artifactId>
+       </dependency>
+       <!-- http://localhost:8001/swagger-ui/index.html -->
+       <dependency>
+           <groupId>org.springdoc</groupId>
+           <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>org.mybatis.spring.boot</groupId>
+           <artifactId>mybatis-spring-boot-starter</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>mysql</groupId>
+           <artifactId>mysql-connector-java</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>javax.persistence</groupId>
+           <artifactId>persistence-api</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>tk.mybatis</groupId>
+           <artifactId>mapper</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>cn.hutool</groupId>
+           <artifactId>hutool-all</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>com.alibaba.fastjson2</groupId>
+           <artifactId>fastjson2</artifactId>
+       </dependency>
+       <dependency>
+           <groupId>org.projectlombok</groupId>
+           <artifactId>lombok</artifactId>
+           <scope>provided</scope>
+       </dependency>
+       <dependency>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-starter-test</artifactId>
+           <scope>test</scope>
+       </dependency>
+   </dependencies>
+   ```
+
+   ```yaml
+   server:
+     port: 2001
+   
+   spring:
+     application:
+       name: seata-order-service
+     cloud:
+       nacos:
+         server-addr: localhost:8848
+     datasource:
+       type: com.alibaba.druid.pool.DruidDataSource
+       driver-class-name: com.mysql.cj.jdbc.Driver
+       url: jdbc:mysql://localhost:13306/seata_order?characterEncoding=utf-8&useSSL=false&serverTimezone=GMT%2B8&rewriteBatchedStatements=true&allowPublicKeyRetrieval=true
+       username: root
+       password: ******
+   
+   mybatis:
+     mapper-locations: classpath:mapper/*.xml
+     type-aliases-package: com.sunsh.cloud.entities
+     configuration:
+       map-underscore-to-camel-case: true
+   
+   seata:
+     registry:
+       type: nacos
+       nacos:
+         server-addr: localhost:8848
+         namespace: ""
+         group: SEATA_GROUP
+         application: seata-server
+     tx-service-group: default_tx_group 
+     #事务组，由它获得TC服务的集群名称
+     service:
+       vgroup-mapping:
+         default_tx_group: default
+         #事务组与TC服务集群的映射关系
+     data-source-proxy-mode: AT
+     #默认代理模式为AT，此处可以不写
+   
+   logging:
+     level:
+       io:
+         seata: info
+   ```
+
+   ```java
+   @SpringBootApplication
+   @EnableDiscoveryClient
+   @EnableFeignClients
+   @MapperScan("com.sunsh.cloud.mapper")
+   public class Main2001 {
+       public static void main(String[] args) {
+           SpringApplication.run(Main2001.class,args);
+       }
+   }
+   ```
+
+   ```java
+   @Table(name = "t_order")
+   @ToString
+   @Data
+   public class Order implements Serializable {
+       @Id
+       @GeneratedValue(generator = "JDBC")
+       private Long id;
+   
+       /**
+        * 用户ID
+        */
+       @Column(name = "user_id")
+       private Long userId;
+   
+       /**
+        * 产品ID
+        */
+       @Column(name = "product_id")
+       private Long productId;
+   
+       /**
+        * 数量
+        */
+       private Integer count;
+   
+       /**
+        * 金额
+        */
+       private Long money;
+   
+       /**
+        * 订单状态: 0:创建中, 1:已完结
+        */
+       private Integer status;
+       
+   }
+   
+   public interface OrderMapper extends Mapper<Order> {
+   }
+   
+   public interface OrderService {
+   
+       void create(Order order);
+   }
+   
+   @Service
+   @Slf4j
+   public class OrderServiceImpl implements OrderService {
+   
+       @Resource
+       private OrderMapper orderMapper;
+       @Resource
+       private StorageFeignApi storageFeignApi;
+       @Resource
+       private AccountFeignApi accountFeignApi;
+   
+       @Override
+       @GlobalTransactional(name = "create-order-transaction", rollbackFor = Exception.class)
+       public void create(Order order) {
+           // xid全局事务检查
+           String xid = RootContext.getXID();
+   
+           // 1. 新建订单
+           log.info("-------------> 开始新建订单, XID: {}", xid);
+           order.setStatus(0);
+           int result = orderMapper.insertSelective(order);
+   
+           Order orderFromDB;
+           if (result > 0) {
+               orderFromDB = orderMapper.selectOne(order);
+               log.info("-------------> 新建订单成功, OrderInfo: {}", orderFromDB);
+   
+               // 2. 扣减库存
+               log.info("-------------> 开始扣减库存");
+               storageFeignApi.decrease(orderFromDB.getProductId(), orderFromDB.getCount());
+               log.info("-------------> 扣减库存成功");
+   
+               // 3. 扣减账户余额
+               log.info("-------------> 开始扣减余额");
+               accountFeignApi.decrease(order.getUserId(), order.getMoney());
+               log.info("-------------> 扣余额存成功");
+   
+               // 4. 修改订单状态
+               log.info("-------------> 开始修改订单状态");
+               Example whereCondition = new Example(Order.class);
+               Example.Criteria criteria = whereCondition.createCriteria();
+               criteria.andEqualTo("id", orderFromDB.getId());
+               criteria.andEqualTo("status", 0);
+               orderFromDB.setStatus(1);
+               int updateResult = orderMapper.updateByExampleSelective(orderFromDB, whereCondition);
+               log.info("-------------> 修改订单状态成功");
+   
+   
+           }
+           log.info("-------------> 结束新建订单, XID: {}", xid);
+       }
+   }
+   
+   @Slf4j
+   @RestController
+   public class OrderController {
+   
+       @Resource
+       private OrderService orderService;
+   
+       @GetMapping("/order/create")
+       public Result<Order> create(Order order) {
+           orderService.create(order);
+           return Result.success(order);
+       }
+   
+   }
+   
+   ```
+
+5. 新建库存Storage微服务：新建`cloud-seata-storage-service2002`工程同`cloud-seata-order-service2001`工程类似引入依赖、修改yaml配置文件和主启动类以及业务代码
+
+6. 新建账户Account微服务：新建`cloud-seata-account-service2003`工程同`cloud-seata-order-service2001`工程类似引入依赖、修改yaml配置文件和主启动类以及业务代码
+
+7. 如果代码中没有使用`@GlobalTransactional(name = "create-order-transaction", rollbackFor = Exception.class)`时，接口链路中出现异常信息则数据不会恢复。而使用了此注解则不会出现数据逻辑上的错误
+
+   - `name`定义`@GlobalTransactional`的唯一性
+   - `rollbackFor `表示遇到什么样的异常会回滚
+
+### 四、Seata运行原理
+
+1. Seata是两阶段提交机制
+   - 在一阶段，Seata会拦截业务SQL
+     - 解析SQL语句，找到业务SQL要更新的业务数据，在业务数据被更新前，将其保存成`before iamge`
+     - 执行业务SQL更新业务数据，在业务数据更新之后其保存成`after iamge`
+     - 以上操作全部在一个数据库事务中完成，这样保证了一阶段操作的原子性
+   - 在二阶段
+     - 如果顺利提交，因为业务SQL在一阶段已经提交至数据库，所以Seata框架只需将一阶段保存的快照数据和行帧删掉，完成数据清理即可
+     - 如果是异常回滚，Seata就需回滚一阶段已经执行的业务SQL，还原业务数据，回滚方式便是使用`before iamge`还原业务数据，但在还原前要首先检验脏写，对比数据库当前业务和`after iamge`，如果两份数据完全一致就说明没有脏写，可以还原业务数据，如果不一致就说明有脏写，出现脏写就需要转人工处理
 
