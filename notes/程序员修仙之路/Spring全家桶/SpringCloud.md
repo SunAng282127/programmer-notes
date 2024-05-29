@@ -5273,3 +5273,116 @@
 
 4. 启动Seata之前一定要启动Nacos，启动Seata方式是在Seata的安装目录bin文件下执行`seata-server.bat`即可运行，在Nacos服务管理中出现seata-server以及访问地址`http://localhost:7091/`成功出现Seata的管控台则说明配置完成
 
+### 三、Seata案例
+
+1. 案例需求说明：存储订单、存储库存、存储账户信息三表之间进行关联，用于用户支付
+
+2. 创建数据库以及表
+
+	- 数据库：seata_order即存储订单的数据库、seata_storage即存储库存的数据库、seata_account即存储账户信息的数据库
+	- 数据库表：按照上述三个数据库建立对应的undo_log回滚日志表（AT模式专用，其他模式不需要）、数据库对应的业务表
+
+	```mysql
+	create database seata_order;
+	create database seata_storage;
+	create database seata_account;
+	
+	
+	use seata_order;
+	
+	create table t_order
+	(
+	    id	bigint auto_increment	primary key,
+	    user_id    bigint      null comment '用户ID',
+	    product_id bigint      null comment '产品ID',
+	    count      int         null comment '数量',
+	    money      decimal(11) null comment '金额',
+	    status     int         null comment '订单状态: 0:创建中, 1:已完结'
+	);
+	
+	INSERT INTO seata_order.t_order (id, user_id, product_id, count, money, status) VALUES (17, 1, 1, 1, 1, 1);
+	INSERT INTO seata_order.t_order (id, user_id, product_id, count, money, status) VALUES (23, 1, 1, 1, 10, 1);
+	
+	create table undo_log
+	(
+	    branch_id     bigint       not null comment 'branch transaction id',
+	    xid           varchar(128) not null comment 'global transaction id',
+	    context       varchar(128) not null comment 'undo_log context,such as serialization',
+	    rollback_info longblob     not null comment 'rollback info',
+	    log_status    int          not null comment '0:normal status,1:defense status',
+	    log_created   datetime(6)  not null comment 'create datetime',
+	    log_modified  datetime(6)  not null comment 'modify datetime',
+	    constraint ux_undo_log
+	        unique (xid, branch_id)
+	)
+	    comment 'AT transaction mode undo table';
+	
+	create index ix_log_created on undo_log (log_created);
+	
+	
+	use seata_storage;
+	
+	create table t_storage
+	(
+	    id	bigint auto_increment	primary key,
+	    product_id bigint      null comment '用户ID',
+	    total      decimal(11) null comment '总库存',
+	    used       decimal(11) null comment '已用库存',
+	    residue    decimal(11) null comment '剩余库存'
+	);
+	
+	INSERT INTO seata_storage.t_storage (id, product_id, total, used, residue) VALUES (1, 1, 100, 2, 98);
+	
+	create table undo_log
+	(
+	    branch_id     bigint       not null comment 'branch transaction id',
+	    xid           varchar(128) not null comment 'global transaction id',
+	    context       varchar(128) not null comment 'undo_log context,such as serialization',
+	    rollback_info longblob     not null comment 'rollback info',
+	    log_status    int          not null comment '0:normal status,1:defense status',
+	    log_created   datetime(6)  not null comment 'create datetime',
+	    log_modified  datetime(6)  not null comment 'modify datetime',
+	    constraint ux_undo_log
+	        unique (xid, branch_id)
+	)
+	    comment 'AT transaction mode undo table';
+	
+	create index ix_log_created on undo_log (log_created);
+	
+	
+	use seata_account;
+	
+	create table t_account
+	(
+	    id	bigint auto_increment primary key,
+	    user_id bigint      null comment '用户ID',
+	    total   decimal(11) null comment '总额度',
+	    used    decimal(11) null comment '已用账户余额',
+	    residue decimal(11) null comment '余额'
+	);
+	
+	INSERT INTO seata_account.t_account (id, user_id, total, used, residue) VALUES (1, 1, 1000, 20, 980);
+	
+	create table undo_log
+	(
+	    branch_id     bigint       not null comment 'branch transaction id',
+	    xid           varchar(128) not null comment 'global transaction id',
+	    context       varchar(128) not null comment 'undo_log context,such as serialization',
+	    rollback_info longblob     not null comment 'rollback info',
+	    log_status    int          not null comment '0:normal status,1:defense status',
+	    log_created   datetime(6)  not null comment 'create datetime',
+	    log_modified  datetime(6)  not null comment 'modify datetime',
+	    constraint ux_undo_log
+	        unique (xid, branch_id)
+	)
+	    comment 'AT transaction mode undo table';
+	
+	create index ix_log_created on undo_log (log_created);
+	
+	
+	```
+
+	
+
+
+
