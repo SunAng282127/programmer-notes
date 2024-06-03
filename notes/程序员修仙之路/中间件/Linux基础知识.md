@@ -201,7 +201,7 @@
 	  |  $ 或功能键[End]   |               移动到这一行的最后面字符处(常用)               |
 	  |         H          |         光标移动到这个屏幕的最上方那一行的第一个字符         |
 	  |         M          |          光标移动到这个屏幕的中央那一行的第一个字符          |
-  |         L          |         光标移动到这个屏幕的最下方那一行的第一个字符         |
+    |         L          |         光标移动到这个屏幕的最下方那一行的第一个字符         |
 	  |         G          |                移动到这个档案的最后一行(常用)                |
 	  |         nG         | n 为数字。移动到这个档案的第 n 行。例如 20G 则会移动到这个档案的第 20 行(可配合 :set nu) |
 	  |         gg         |        移动到这个档案的第一行，相当于 1G 啊！ (常用)         |
@@ -210,7 +210,7 @@
 	  |  搜索  |                           功能描述                           |
 	  | :----: | :----------------------------------------------------------: |
 	  | /word  | 向光标之下寻找一个名称为word的字符串。例如要在档案内搜寻vbird这个字符串，就输入 /vbird 即可！ (常用) |
-  | ‘?word |          向光标之上寻找一个字符串名称为word的字符串          |
+    | ‘?word |          向光标之上寻找一个字符串名称为word的字符串          |
 	  | /^abc  |                     查找以abc为行首的行                      |
 	  | /abc$  |                     查找以abc为行尾的行                      |
 	  |   n    | 这个n是英文按键。代表重复前一个搜寻的动作。举例来说， 如果刚刚我们执行 /vbird去向下搜寻vbird这个字符串，则按下n后，会向下继续搜寻下一个名称为 vbird的字符串。如果是执行?vbird的话，那么按下n则会向上继续搜寻名称为 vbird的字符串 |
@@ -606,4 +606,580 @@
 5. 远程登录
 
 	- [使用WindTerm进行远程连接](https://blog.51cto.com/yunskj/9941019)
+
+# 五、系统管理
+
+## 一、Linux中的进程和服务
+
+- 计算机中，一个正在执行的程序或命令，被叫做“进程”（process）
+- 启动之后一只存在、常驻内存的进程，一般被称作“服务”（service）
+
+## 二、systemctl服务管理
+
+### 一、systemctl介绍
+
+1. CentOS7使用Systemd管理守护进程。CentOS7采用systemd管理，服务独立的运行在内存中，服务响应速度快，但占用更多内存。独立服务的服务启动脚本都在目录`/usr/lib/systemd/system`里。Systend的新特性：
+
+	- 系统引导时实现服务的并行启动
+	- 按需激活进程
+	- 系统实现快照
+	- 基于依赖关系定义服务的控制逻辑
+2. systemctl可用于内省和控制systemd系统和服务管理器的状态。centos7.x系统环境下我们经常使用此命令启停服务，实际上此命令除了其他独立服务还有很多其他用途
+
+### 二、systemctl参数说明
+
+1. 基本语法
+
+	- `systemctl start | stop | restart | status | reload 服务名`
+	- `systemctl`指令管理的服务在`/usr/lib/systemd/system` 
+	- 查看查看服务的方法：`pwd /usr/lib/systemd/system`
+
+2. 使用语法：`systemctl [OPTIONS…] {COMMAND} …`
+
+3. 参数说明
+
+	| 参数            | 参数说明                                                     |
+	| :-------------- | :----------------------------------------------------------- |
+	| start           | 立刻启动后面接的unit                                         |
+	| stop            | 立刻关闭后面接的unit                                         |
+	| restart         | 立刻关闭后启动后面接的unit，亦即执行stop再start的意思        |
+	| reload          | 不关闭后面接的unit的情况下，重载配置文件，让设定生效         |
+	| enable          | 设定下次开机时，后面接的unit会被启动                         |
+	| disable         | 设定下次开机时，后面接的unit 不会被启动                      |
+	| status          | 目前后面接的这个unit 的状态，会列出是否正在执行、是否开机启动等信息。 |
+	| is-active       | 目前有没有正在运行中                                         |
+	| is-enable       | 开机时有没有预设要启用这个unit                               |
+	| kill            | 不要被kill这个名字吓着了,它其实是向运行unit的进程发送信号    |
+	| show            | 列出unit的配置。                                             |
+	| mask            | 注销unit,注销后你就无法启动这个unit了                        |
+	| unmask          | 取消对unit的注销                                             |
+	| list-units      | 依据unit列出目前有启动的unit。若加上–all才会列出没启动的。（等价于无参数） |
+	| list-unit-files | 列出所有以安装unit以及他们的开机启动状态（enabled、disabled、static、mask）。 |
+	| –type=TYPE      | 就是unit type，主要有service，socket，target等               |
+	| get-default     | 取得目前的 target                                            |
+	| set-default     | 设定后面接的 target 成为默认的操作模式                       |
+	| isolate         | 切换到后面接的模式                                           |
+
+4. unit file结构
+
+	- 文件通常由三部分组成：
+		- Unit: 定义与Unit类型无关的通用选项；用于提供unit的描述信息，unit行为及依赖关系等
+		- Service：与特定类型相关的专用选项；此处为Service类型
+
+		- Install：定义由"systemctl enable"及"systemctl disable"命令在实现服务启用或禁用时用到的一些选项
+
+5. unit段的常用选项
+
+	- Description：描述信息，意义性描述
+	- After：定义unit的启动次序；表示当前unit应晚于哪些unit启动；其功能与Before相反
+	- Requies：依赖到其它的units；强依赖，被依赖的units无法激活时，当前的unit即无法激活
+	- Wants：依赖到其它的units；弱依赖
+	- Confilcts：定义units 的冲突关系
+
+6. Service段的常用选项
+
+	- Type：用于定义影响ExecStart及相关参数的功能的unit进程类型；
+		类型有：simple、forking、oneshot、dbus、notify、idle
+	- EnvironmentFile：环境配置文件
+	- ExecStart：指明启动unit要运行的命令或脚本；ExecStart, ExecStartPost
+	- ExecStop：指明停止unit要运行的命令或脚本
+	- Restart
+
+7. Install段的常用配置
+
+	- Alias：
+	- RequiredBy：被哪些unit所依赖
+	- WantBy：被哪些unit所依赖
+
+8. unit文件样例
+
+	```bash
+	[root@s153 system]# cat chronyd.service
+	[Unit]
+	Description=NTP client/server
+	Documentation=man:chronyd(8) man:chrony.conf(5)
+	After=ntpdate.service sntp.service ntpd.service
+	Conflicts=ntpd.service systemd-timesyncd.service
+	ConditionCapability=CAP_SYS_TIME
+	
+	[Service]
+	Type=forking
+	PIDFile=/var/run/chronyd.pid
+	EnvironmentFile=-/etc/sysconfig/chronyd
+	ExecStart=/usr/sbin/chronyd $OPTIONS
+	ExecStartPost=/usr/libexec/chrony-helper update-daemon
+	PrivateTmp=yes
+	ProtectHome=yes
+	ProtectSystem=full
+	
+	[Install]
+	WantedBy=multi-user.target
+	```
+
+### 三、systemctl使用示例
+
+1. 查看开机启动列表
+
+	```bash
+	systemctl list-unit-files [ | grep 服务名] (查看服务开机启动状态, grep 可以进行过滤)
+	[root@localhost ~]# systemctl list-unit-files
+	[root@localhost ~]# systemctl list-unit-files | grep firewalld
+	firewalld.service                             disabled
+	
+	#查看已启动的服务列表
+	systemctl list-unit-files|grep enabled
+	#
+	显示所有已启动的服务
+	systemctl list-units --type=service
+	```
+
+	![image-20220816153223542](../../../TyporaImage/8f3ccb6e4eb3773f018eafbcc5958c7f307c256d.png)
+
+	- 可以**写一半**再查看完整的服务名，一般也可以简写：`firewalld.service = firewall`
+
+	![image-20220816153519618](../../../TyporaImage/d6f8f45c8d6d676c9037ae76599649939b44d19c.png)
+
+	- 说明防火墙是一个自启的状态，Linux系统启动的时候防火墙也会自启
+
+2. 设置开机启动：systemctl在enable、disable、mask子命令里面增加了–now选项，可以激活同时启动服务，激活同时停止服务等
+
+	```bash
+	# 设置开机启动并现在启动
+	## 相当于同时执行了systemctl start 服务名
+	systemctl enable --now firewalld
+	
+	# 查看服务启动状态
+	root@localhost ~]# systemctl status firewalld
+	```
+
+3. 取消开机启动
+
+	```bash
+	# 取消开机启动并现在就停止服务
+	systemctl disable --now firewalld
+	## 查看服务状态是否停止
+	[root@localhost ~]# systemctl status firewalld
+	# 查看启动列表
+	[root@localhost ~]# systemctl list-unit-files |grep firewalld
+	firewalld.service                             disabled
+	```
+
+	- 使用 `systemctl disable firewalld`时，下次重启系统时防火墙还是处于关闭的状态
+
+	![image-20220816153845865](../../../TyporaImage/d0a44045e2e5d9b285645fcc1b1acfdd484cac29.png)
+
+	- 重新打开自启动防火墙：
+		- `systemctl enable 服务名` (设置服务开机启动)，对 `3` （无界面）和 `5` （GUI）运行级别都生效
+		- `systemctl disable 服务名` (关闭服务开机启动)，对 `3` （无界面）和 `5` （GUI）运行级别都生效
+
+	![image-20220816153905563](../../../TyporaImage/d7c296ec3443d9ab5ddc54905e7daf6ea7dec6da.png)
+
+4. 开启服务
+
+	```bash
+	systemctl start firewall
+	```
+
+	- 开启防火墙：
+
+	![image-20220816153707677](../../../TyporaImage/f87769820ac96afcfb6482b5cfe93585251e0821.png)
+
+5. 关闭服务（但是下次开机还是会启动）
+
+	```
+	systemctl stop firewall
+	```
+
+	- 关闭防火墙：
+
+	![image-20220816153641546](../../../TyporaImage/ebacad6bc276ef0657f682f6fc16c3d429630be4.png)
+
+6. 重启服务
+
+	```bash
+	systemctl restart 服务名
+	```
+
+7. 重新加载配置
+
+	```bash
+	systemctl reload 服务名
+	```
+
+8. 输出服务运行的状态
+
+	```bash
+	systemctl status 服务名
+	systemctl status firewalld
+	```
+
+	- 查看防火墙的状态，现在是运行中：
+
+	![image-20220816153614211](../../../TyporaImage/2ab17ff6081e34c5e95ab4371c18afbbb3dbf6fd.png)
+
+9. 检查service是否在启动状态：
+
+	```bash
+	# systemctl is-active 服务名
+	systemctl is-active NetworkManager
+	# active
+	```
+
+10. 检测unit单元是否为自动启动
+
+	```bash
+	# systemctl is-enabled 服务名
+	systemctl is-enabled firewalld
+	# enabled
+	```
+
+	![image-20220816153416785](../../../TyporaImage/71cc922dae47090936df0308581c83ee41d1e350.png)
+
+11. 注销一个服务（service）：systemctl mask 是注销服务的意思。注销服务意味着：该服务在系统重启的时候不会启动；该服务无法进行做systemctl start/stop操作；该服务无法进行systemctl enable/disable操作
+
+	```bash
+	systemctl mask firewalld
+	```
+
+12. 取消注销服务（service）
+
+	```bash
+	systemctl unmask firewalld
+	```
+
+13. 显示单元的手册页（前提是由unit提供）
+
+	```bash
+	systemctl help
+	```
+
+14. 当新增或修改service单元文件时，需要系统重新加载所有修改过的配置文件
+
+	```bash
+	systemctl daemon-reload
+	```
+
+15. 查看systemd资源使用率
+
+	```bash
+	systemd-cgtop
+	```
+
+16. 杀死服务
+
+	```bash
+	[root@s153 system]# systemctl kill xinetd
+	[root@s153 system]# systemctl is-failed xinetd
+	inactive
+	```
+
+## 三、系统运行级别
+
+### 一、Linux运行级别CentOS6
+
+![image-20220816154334839](../../../TyporaImage/9e03760af35f6c5a47222c2cba602d0b10b0f797.png)
+
+### 二、Centos7的启动流程图
+
+![](../../../TyporaImage/42bd95859fd306d1d3182e5701374d77f733c980.png)
+
+```bash
+CentOS7中我们的初始化进程变为了systemd。执行默认target配置文件/etc/systemd/system/default.target（这是一个软链接，与默认运行级别有关）。然后执行sysinit.target来初始化系统和basic.target来准备操作系统。接着启动multi-user.target下的本机与服务器服务，并检查/etc/rc.d/rc.local文件是否有用户自定义脚本需要启动。最后执行multi-user下的getty.target及登录服务，检查default.target是否有其他的服务需要启动。
+
+　　注意：/etc/systemd/system/default.target指向了/lib/systemd/system/目录下的graphical.target或multiuser.target。而graphical.target依赖multiuser.target，multiuser.target依赖basic.target，basic.target依赖sysinit.target，所以倒过来执行
+```
+
+1. CentOS7 的运行级别简化为:
+
+	- multi-user.target 等价于原运行级别 3（多用户有网，无图形界面） 
+
+	- graphical.target 等价于原运行级别 5（多用户有网，有图形界面）
+
+2. 查看当前运行级别:
+
+	```bash
+	[root@localhost etc]# systemctl get-default
+	multi-user.target
+	```
+
+3. 修改当前运行级别
+
+	```bash
+	[root@localhost etc]# systemctl set-default graphical.target
+	```
+
+	- centos7中取消了通过修改配置文件设置系统默认运行级别
+
+	```bash
+	[root@localhost etc]# cat /etc/inittab 
+	# inittab is no longer used when using systemd.
+	#
+	# ADDING CONFIGURATION HERE WILL HAVE NO EFFECT ON YOUR SYSTEM.
+	#
+	# Ctrl-Alt-Delete is handled by /usr/lib/systemd/system/ctrl-alt-del.target
+	#
+	# systemd uses 'targets' instead of runlevels. By default, there are two main targets:
+	#
+	# multi-user.target: analogous to runlevel 3    #类似运行级别3
+	# graphical.target: analogous to runlevel 5     #类似运行级别5
+	#
+	# To view current default target, run:
+	# systemctl get-default                    #查看系统运行级别
+	#
+	# To set a default target, run:
+	# systemctl set-default TARGET.target      #修改系统默认运行级别
+	```
+
+## 四、关机重启命令
+
+1. 关机重启命令汇总
+
+	| halt      | **关机**                                                     | **root用户**      | **halt：只关闭系统，电源还在运行**<br/>**halt -p：关闭系统，关闭电源（先执行halt，再执行poweroff）** |
+	| --------- | ------------------------------------------------------------ | ----------------- | ------------------------------------------------------------ |
+	| poweroff  | 关机                                                         | root用户          | poweroff会发送一个关闭电源的信号给acpi                       |
+	| reboot    | 重启                                                         | root用户          |                                                              |
+	| shutdown  | -h：关机<br/>-r：重启<br/>-c：取消shutdown操作               | root用户          | shutdown实际上是调用init 0, init 0会cleanup一些工作然后调用halt或者poweroff<br/>shutdown -r now：一分钟后重启<br/>shutdown -r 05:30：最近的5:30重启<br/>shutdown -r +10：十分钟后重启 |
+	| init      | init 0：关机<br/>init 6：重启                                | root用户          | init：切换系统的运行级别                                     |
+	| systemctl | systemctl halt [-i]：关机 systemctl poweroff [-i]：关机 systemctl reboot [-i]：重启 | 普通用户 超级用户 | 普通用户需要加-i root用户不需要加-i                          |
+	- sync：将数据由内存同步到硬盘中
+	- halt：停机，关闭系统，但不断电
+	- poweroff：关机，断电
+	- reboot：重启，等同于shutdown -r now
+	- 在关机或者重启之前，执行3至4次sync，将在内存中还未保存到硬盘的数据更新到硬盘中，否则会造成数据的丢失。执行sync时要以管理员的身份运行，因为管理员具有所有文件的权限，而普通用户只具有自己的部分文件的权限
+
+2. shutdown命令
+
+	- 基本格式：shutdown [选项] [时间] [警告信息]
+
+	- 选项：
+
+		- -h：关机
+		- -r：重启
+		- -c：取消shutdown执行的关机或者重启命令
+		- -k：不关机，发出警告
+
+	- 时间：
+
+		- shutdown：一分钟后关机（默认）
+		- shutdown now：立刻关机
+		- shutdown 10：10分钟后关机
+		- shutdown 05:00：5点关机
+
+	- 示例
+
+		```bash
+		shutdown -r now：系统立马重启（等同于 reboot
+		shutdown -r 05:30：最近的5:30重启
+		shutdown -r 10：十分钟后重启
+		
+		shutdown -h now：立马关机（等同于 poweroff
+		shutdown -h 05:30：最近的5:30关机
+		shutdown -h +10：十分钟后关机
+		
+		shutdown -c：取消上面的关机重启操作
+		
+		shutdown -k +10 “I will shutdown in 10 minutes”：10分钟后并不会真的关机，但是会把警告信息发给所有的用户
+		```
+
+3. sync命令
+
+	- sync：linux同步数据命令，**将数据由内存同步到硬盘中**，包含已修改的 i-node、已延迟的块 I/O 和读写映射文件。如果不去手动的输入sync命令来真正的去写磁盘，linux系统也会周期性的去sync数据
+
+		```bash
+		[root@hadoop100 桌面]#sync 
+		```
+
+	- 使用场景
+
+		- 在关机或者开机之前最好多执行这个几次，以确保数据写入硬盘
+		- 挂载时，需要很长时间的操作动作（比如，cp 大文件，检测文件），在这个动作之后接sync
+		- 卸载U盘或其他存储设备，需要很长时间，使用sync
+
+4. 经验技巧
+
+	- Linux系统中为了提高磁盘的读写效率，对磁盘采取了 “预读迟写”操作方式。当用户 保存文件时，Linux 核心并不一定立即将保存数据写入物理磁盘中，而是将数据保存在缓 冲区中，等缓冲区满时再写入磁盘，这种方式可以极大的提高磁盘写入数据的效率。但是， 也带来了安全隐患，如果数据还未写入磁盘时，系统掉电或者其他严重问题出现，则将导 致数据丢失。使用 sync 指令可以立即将缓冲区的数据写入磁盘
+
+# 六、文件目录管理基础知识
+
+## 一、帮助命令
+
+1. 通常linux命令都十分简单，但是有些还是有些复杂度的。比如`find`，`ps`这种命令，如果要照顾到所有的场合，可能需要非常巨大的篇幅。但是，万一用到这种偏门的场合怎么办？全面了解一下是非常有必要的，以便在使用的时候能够唤起记忆中最浅显的印象。然后剩下的，就可以交给类似于`man `的这种命令了。Linux上的每一个命令，都会有配套的帮助文件，这远比网络上那些转来转去的信息，正确的多
+
+2. 介绍一下下面的两个命令：这些帮助信息，仅集中在命令的作用域本身。对于它的组合使用场景，并没有过多信息。也就是说，它教会了你怎么用，但并没有告诉你用它能够来做什么
+
+	- `man` 用来显示某个命令的文档信息。比如：`man ls`
+	- `info` 你可以认为和man是一样的，虽然有一些能够互补的内容。它们会在内容中进行提示的
+	- `--help` 很多命令通过参数`--help`提供非常简短的帮助信息。这通常是最有用最快捷的用例展示。如果你根本就记不住一个非常拗口的单词，那就找找这些地方吧
+
+3. TAB补全：在终端里，输入`ca`，然后快速按2次`<TAB>`键盘，命令行会进入补全模式，显示以ca打头的所有命令
+
+	```bash
+	[root@localhost ~]# ca
+	cacertdir_rehash     cache_dump           cache_repair         cache_writeback      
+	ca-legacy            capsh                case                 catchsegv
+	cache_check          cache_metadata_size  cache_restore        cal                  caller               captoinfo            cat                  catman
+	```
+
+## 二、文件和目录管理基础知识
+
+### 一、文件系统的层次结构
+
+- 平时打交道的都是文件，那么，应该如何找到它们呢？很简单，在 Linux 操作系统中，所有的文件和目录都被组织成以一个根节点“/”开始的倒置的树状结构。其中，目录就相当于 Windows 中的文件夹，目录中存放的既可以是文件，也可以是其他的子目录，而文件中存储的是真正的信息
+- 文件系统的最顶层是由根目录开始的，系统使用“/”来表示根目录，在根目录之下的既可以是目录，也可以是文件，而每一个目录中又可以包含（子）目录或文件。如此反复就可以构成一个庞大的文件系统。其实，使用这种树状、具有层次的文件结构主要目的是方便文件系统的管理和维护，想象一下，如果所有的文件都放在一个目录下，其文件系统的管理和维护将变成一场噩梦
+- 目录名或文件名都是区分大小写的，如 dog、DOG 和 Dog 为 3 个不同的目录或文件。完整的目录或文件路径是由一连串的目录名所组成的，其中每一个目录由“/”来分隔。如 cat 的完整路径是 /home/cat
+- 在文件系统中，有两个特殊的目录，一个是用户所在的工作目录，即当前目录，可用一个点“.”表示；另一个是当前目录的上一层目录，也叫父目录，用两个点“..”表示。如果一个目录或文件名是以一个点开始，就表示这个目录或文件是一个隐藏目录或文件。即以默认方式査找（后续会讲查找命令）时，不显示该目录或文件
+- 为了方便管理和维护，Linux 系统采用了文件系统层次标准，也称为 FHS 标准，它规定了根目录下各个目录应该存在哪些类型的文件（或子目录），比如说，在 /bin 和 /sbin 目录中存放的应该是可执行文件，有关各个目录存放文件的类型
+
+![image-20220817210102283](../../../TyporaImage/fa695b742d612fe2cae3a2058e37bf268db12a56-1717406367718.png)
+
+### 二、绝对路径和相对路径详解
+
+- 在 Linux 中，简单的理解一个文件的路径，指的就是该文件存放的位置，例如， /home/cat 就表示的是 cat 文件所存放的位置。只要我们告诉 Linux 系统某个文件存放的准确位置，那么它就可以找到这个文件。指明一个文件存放的位置，有 2 种方法，分别是使用绝对路径和相对路径。我们知道，Linux 系统中所有的文件（目录）都被组织成以根目录“/”开始的倒置的树状结构
+
+- 绝对路径一定是由根目录 / 开始写起。例如，使用绝对路径的表示方式指明 bin 文件所在的位置，该路径应写为 /usr/bin，测试代码如下，如果仅传递给 Linux 系统一个文件名，它无法找到指定文件；而当将 bin 文件的绝对路径传递 Linux 系统时，它就可以成功找到
+
+	```bash
+	[root@localhost ~]# bin
+	bash： bin： command not found  <-- 没有找到
+	[root@localhost ~]# /usr/bin
+	bash: /usr/bin: is a directory  <-- 是一个文件
+	```
+
+- 相对路径不是从根目录 / 开始写起，而是从当前所在的工作目录开始写起。使用相对路径表明某文件的存储位置时，经常会用到前面讲到的 2 个特殊目录，即当前目录（用 . 表示）和父目录（用 .. 表示）。举个例子，当我们使用 root 身份登录 Linux 系统时，当前工作目录默认为 /root，如果此时需要将当前工作目录调整到 root 的子目录 Desktop 中，当然可以使用绝对路径，示例代码如下，可以看到，通过使用绝对路径，我们成功地改变了当前工作路径。但除此之外，使用相对路径的方式会更简单。因为目前处于 /root 的位置，而 Desktop 就位于当前目录下。此代码中，./Desktop 表示的就是 Destop 文件相对于 /root 所在的路径
+
+	```bash
+	[root@localhost ~]# pwd   <-- 显示当前所在的工作路径
+	/root
+	[root@localhost ~]# cd /root/Desktop
+	[root@localhost Desktop]# pwd
+	/root/Desktop
+	```
+
+- 如果以 root 身份登录 Linux 系统，并实现将当前工作目录由 /root 转换为 /usr 目录，有以下 2 种方式：
+
+	```bash
+	#使用绝对路径
+	[root@localhost ~]# pwd <-- 显示当前所在的工作路径
+	/root
+	[root@localhost ~]# cd /usr
+	[root@localhost ~]# pwd
+	/usr
+	#使用相对路径
+	[root@localhost ~]# pwd <-- 显示当前所在的工作路径
+	/root
+	[root@localhost ~]# cd ../usr <-- 相对 root，usr 位于其父目录 /，因此这里要用到 ..
+	[root@localhost ~]# pwd
+	/usr
+	```
+
+- 总之，绝对路径是相对于根路径 / 的，只要文件不移动位置，那么它的绝对路径是恒定不变的；而相对路径是相对于当前所在目录而言的，随着程序的执行，当前所在目录可能会改变，因此文件的相对路径不是固定不变的
+
+### 三、文件（目录）命名规则
+
+1. Linux 系统中，文件和目录的命名规则如下：
+
+	- 除了字符“/”之外，所有的字符都可以使用，但是要注意，在目录名或文件名中，使用某些特殊字符并不是明智之举。例如，在命名时应避免使用 <、>、？、* 和非打印字符等。如果一个文件名中包含了特殊字符，例如空格，那么在访问这个文件时就需要使用引号将文件名括起来。
+	- 目录名或文件名的长度不能超过 255 个字符。
+	- 目录名或文件名是区分大小写的。如 DOG、dog、Dog 和 DOg ，是互不相同的目录名或文件名，但使用字符大小写来区分不同的文件或目录，也是不明智的。
+	- 与 Windows 操作系统不同，文件的扩展名对 Linux 操作系统没有特殊的含义，换句话说，Linux 系统并不以文件的扩展名开分区文件类型。例如，dog.exe 只是一个文件，其扩展名 .exe 并不代表此文件就一定是可执行文件。
+		需要注意的是，在 Linux 系统中，硬件设备也是文件，也有各自的文件名称。Linux 系统内核中的 udev 设备管理器会自动对硬件设备的名称进行规范，目的是让用户通过设备文件的名称，就可以大致猜测处设备的属性以及相关信息
+
+2. udev 设备管理器会一直以进程的形式运行，并侦听系统内核发出的信号来管理位于 /dev 目录下的设备文件
+
+3. Linux 系统中常见硬件设备的文件名
+
+	| 硬件设备      | 文件名称                                                     |
+	| ------------- | ------------------------------------------------------------ |
+	| IDE设备       | /dev/hd[a-d]，现在的 IDE设备已经很少见了，因此一般的硬盘设备会以 /dev/sd 开头。 |
+	| SCSI/SATA/U盘 | /dev/sd[a-p]，一台主机可以有多块硬盘，因此系统采用 a~p 代表 16 块不同的硬盘。 |
+	| 软驱          | /dev/fd[0-1]                                                 |
+	| 打印机        | /dev/lp[0-15]                                                |
+	| 光驱          | /dev/cdrom                                                   |
+	| 鼠标          | /dev/mouse                                                   |
+	| 磁带机        | /dev/st0 或 /dev/ht0                                         |
+
+### 四、命令提示符
+
+1. 登录系统后，第一眼看到的内容是：`[root@localhost ~]#`这就是 Linux 系统的命令提示符
+
+	- []：这是提示符的分隔符号，没有特殊含义
+	- root：显示的是当前的登录用户，笔者现在使用的是 root 用户登录
+	- @：分隔符号，没有特殊含义。
+	- localhost：当前系统的简写主机名（完整主机名是 localhost.localdomain）
+	- ~：代表用户当前所在的目录，此例中用户当前所在的目录是家目录
+	- \#：命令提示符，Linux 用这个符号标识登录的用户权限等级。如果是超级用户，提示符就是 #；如果是普通用户，提示符就是 $
+
+2. 家目录（又称主目录）是什么？ Linux 系统是纯字符界面，用户登录后，要有一个初始登录的位置，这个初始登录位置就称为用户的家：
+
+	- 超级用户的家目录：/root
+	- 普通用户的家目录：/home/用户名
+
+3. 用户在自己的家目录中拥有完整权限，所以我们也建议操作实验可以放在家目录中进行。我们切换一下用户所在目录，看看有什么效果
+
+	```bash
+	[root@localhost ~]# cd /usr/local
+	[root@localhost local]#
+	```
+
+4. 仔细看，如果切换用户所在目录，那么命令提示符中的会变成用户当前所在目录的最后一个目录（不显示完整的所在目录 /usr/ local，只显示最后一个目录 local)
+
+### 五、命令基本格式
+
+1. 基本格式：`[root@localhost ~]# 命令[选项][参数]`
+
+	- 命令格式中的 [] 代表可选项，也就是有些命令可以不写选项或参数，也能执行。那么，我们就用 Linux 中最常见的 ls 命令来解释一下命令的格式。如果按照命令的分类，那么 ls 命令应该属于目录操作命令
+
+	- 示例
+
+		```bash
+		`[root@localhost ~]# ls
+		anaconda-ks.cfg install.log install.log.syslog`
+		```
+
+2. 选项的作用
+
+	- ls 命令之后不加选项和参数也能执行，不过只能执行最基本的功能，即显示当前目录下的文件名。那么加入一个选项，会出现什么结果
+
+		```bash
+		[root@localhost ~]# Is -l
+		总用量44
+		-rw-------.1 root root 1207 1 月 14 18:18 anaconda-ks.cfg
+		-rw-r--r--.1 root root 24772 1 月 14 18:17 install.log
+		-rw-r--r--.1 root root 7690 1 月 14 18:17 install.log.syslog
+		```
+
+	- 如果加一个"-l"选项，则可以看到显示的内容明显增多了。"-l"是长格式（long list）的意思，也就是显示文件的详细信息。至于 "-l" 选项的具体含义，我们稍后再详细讲解。可以看到选项的作用是调整命令功能。如果没有选项，那么命令只能执行最基本的功能；而一旦有选项，则可以显示更加丰富的数据
+
+	- Linux 的选项又分为短格式选项（-l）和长格式选项（--all）。短格式选项是英文的简写，用一个减号调用，例如：
+
+		```bash
+		[root@localhost ~]# ls -l
+		
+		# 而长格式选项是英文完整单词，一般用两个减号调用，例如：
+		[root@localhost ~]# ls --all
+		```
+
+	- 一般情况下，短格式选项是长格式选项的缩写，也就是一个短格式选项会有对应的长格式选项。当然也有例外，比如 ls 命令的短格式选项 -l 就没有对应的长格式选项。所以具体的命令选项可以通过后面我们要学习的帮助命令来进行査询
+
+3. 参数的作用
+
+	- 参数是命令的操作对象，一般文件、目录、用户和进程等可以作为参数被命令操作。例如：
+
+		```bash
+		[root@localhost ~]# ls -l anaconda-ks.cfg
+		-rw-------.1 root root 1207 1 月 14 18:18 anaconda-ks.cfg
+		```
+
+	- 但是为什么一开始 ls 命令可以省略参数？那是因为有默认参数。命令一般都需要加入参数，用于指定命令操作的对象是谁。如果可以省略参数，则一般都有默认参数。例如：
+
+		```bash
+		[root@localhost ~]# ls
+		anaconda-ks.cfg install.log install.log.syslog
+		```
+
+	- 这个 ls 命令后面没有指定参数，默认参数是当前所在位置，所以会显示当前目录下的文件名
+
+	- 总结一下：命令的选项用于调整命令功能，而命令的参数是这个命令的操作对象
+
+
 
