@@ -200,7 +200,7 @@
 	|         M          |          光标移动到这个屏幕的中央那一行的第一个字符          |
 	|         L          |         光标移动到这个屏幕的最下方那一行的第一个字符         |
 	|         G          |               移动到这个档案的最后一行（常用）               |
-   |         nG         | n为数字。移动到这个档案的第n行。例如20G则会移动到这个档案的第 20行(可配合`:set nu`，显示行数) |
+  |         nG         | n为数字。移动到这个档案的第n行。例如20G则会移动到这个档案的第 20行(可配合`:set nu`，显示行数) |
 	|         gg         |           移动到这个档案的第一行，相当于1G（常用）           |
 	|      n<Enter>      |               n为数字。光标向下移动n行（常用）               |
 	
@@ -209,7 +209,7 @@
 	| /word | 向光标之下寻找一个名称为word的字符串。例如要在档案内搜寻vbird这个字符串，就输入 /vbird 即可！ (常用) |
 	| ?word |          向光标之上寻找一个字符串名称为word的字符串          |
 	| /^abc |                     查找以abc为行首的行                      |
-   | /abc$ |                     查找以abc为行尾的行                      |
+  | /abc$ |                     查找以abc为行尾的行                      |
 	|   n   | 这个n是英文按键。代表重复前一个搜寻的动作。举例来说，如果刚刚我们执行/vbird去向下搜寻vbird这个字符串，则按下n后，会向下继续搜寻下一个名称为vbird的字符串。如果是执行?vbird的话，那么按下n则会向上继续搜寻名称为vbird的字符串 |
 	|   N   | 这个N是英文按键。与n刚好相反，为『反向』进行前一个搜寻动作。例如 /vbird后，按下N则表示『向上』搜寻vbird |
 	
@@ -571,7 +571,7 @@
 	- 修改主机名称
 
 		- `hostname` （功能描述：查看当前服务器的主机名称）
-		- 如果感觉此主机名不合适，我们可以进行修改。通过编辑`vim /etc/hostname` 文文件
+		- 如果感觉此主机名不合适，我们可以进行修改。通过编辑`vim /etc/hostname` 文件
 		- 修改完成后重启生效。如果想立即生效可以通过`hostnamectl set-hostname sunsh`这个命令，然后重启终端就可以看到效果了
 
 	- 修改hosts映射文件
@@ -727,10 +727,12 @@
 	systemctl list-units --type=service
 	```
 	
+
 ![image-20220816153223542](../../../TyporaImage/8f3ccb6e4eb3773f018eafbcc5958c7f307c256d.png)
 	
 - 可以**写一半**再查看完整的服务名，一般也可以简写：`firewalld.service = firewall`
 	
+
 ![image-20220816153519618](../../../TyporaImage/d6f8f45c8d6d676c9037ae76599649939b44d19c.png)
 	
 - 说明防火墙是一个自启的状态，Linux系统启动的时候防火墙也会自启
@@ -922,15 +924,15 @@ CentOS7中我们的初始化进程变为了systemd。执行默认target配置文
 
 1. 关机重启命令汇总
 
-  | 命令      | 功能                                                         | 用户权限           | 示例                                                         |
-  | :-------- | :----------------------------------------------------------- | :----------------- | :----------------------------------------------------------- |
-  | halt      | 停机，关闭系统但不断电                                       | root用户           | halt：只关闭系统，电源还在运行<br/>halt -p：关闭系统，关闭电源（先执行halt，再执行poweroff） |
-  | poweroff  | 关机，断电                                                   | root用户           | poweroff会发送一个关闭电源的信号给acpi                       |
-  | reboot    | 重启                                                         | root用户           | 等同于shutdown -r now                                        |
-  | shutdown  | -h：关机<br/>-r：重启<br/>-c：取消shutdown操作               | root用户           | shutdown实际上是调用init 0, init 0会cleanup一些工作然后调用halt或者poweroff<br/>shutdown -r now：一分钟后重启<br/>shutdown -r 05:30：最近的5:30重启<br/>shutdown -r +10：十分钟后重启 |
-  | init      | init 0：关机；init 6：重启                                   | root用户           | init：切换系统的运行级别                                     |
-  | systemctl | systemctl halt [-i]：关机 <br/>systemctl poweroff [-i]：关机 <br/>systemctl reboot [-i]：重启 | 普通用户、超级用户 | 普通用户需要加-i root用户不需要加-i                          |
-  | sync      | 将数据由内存同步到硬盘中                                     | root用户           | 在关机或者重启之前，执行3至4次sync，将在内存中还未保存到硬盘的数据更新到硬盘中，否则会造成数据的丢失。执行sync时要以管理员的身份运行，因为管理员具有所有文件的权限，而普通用户只具有自己的部分文件的权限 |
+| 命令      | 功能                                                         | 用户权限           | 示例                                                         |
+| :-------- | :----------------------------------------------------------- | :----------------- | :----------------------------------------------------------- |
+| halt      | 停机，关闭系统但不断电                                       | root用户           | halt：只关闭系统，电源还在运行<br/>halt -p：关闭系统，关闭电源（先执行halt，再执行poweroff） |
+| poweroff  | 关机，断电                                                   | root用户           | poweroff会发送一个关闭电源的信号给acpi                       |
+| reboot    | 重启                                                         | root用户           | 等同于shutdown -r now                                        |
+| shutdown  | -h：关机<br/>-r：重启<br/>-c：取消shutdown操作               | root用户           | shutdown实际上是调用init 0, init 0会cleanup一些工作然后调用halt或者poweroff<br/>shutdown -r now：一分钟后重启<br/>shutdown -r 05:30：最近的5:30重启<br/>shutdown -r +10：十分钟后重启 |
+| init      | init 0：关机；init 6：重启                                   | root用户           | init：切换系统的运行级别                                     |
+| systemctl | systemctl halt [-i]：关机 <br/>systemctl poweroff [-i]：关机 <br/>systemctl reboot [-i]：重启 | 普通用户、超级用户 | 普通用户需要加-i root用户不需要加-i                          |
+| sync      | 将数据由内存同步到硬盘中                                     | root用户           | 在关机或者重启之前，执行3至4次sync，将在内存中还未保存到硬盘的数据更新到硬盘中，否则会造成数据的丢失。执行sync时要以管理员的身份运行，因为管理员具有所有文件的权限，而普通用户只具有自己的部分文件的权限 |
 
 2. shutdown命令
 
@@ -1165,6 +1167,138 @@ CentOS7中我们的初始化进程变为了systemd。执行默认target配置文
 	- 这个 ls 命令后面没有指定参数，默认参数是当前所在位置，所以会显示当前目录下的文件名
 
 	- 总结一下：命令的选项用于调整命令功能，而命令的参数是这个命令的操作对象
+
+## 三、文件目录类命令
+
+### 一、pwd显示当前工作目录的绝对路径
+
+1. 到现在为止，我们还不知道自己在系统的什么地方。在浏览器上，我们能够通过导航栏上的url，了解到自己在互联网上的具体坐标。相似的功能，是由`pwd`命令提供的，它能够输出当前的工作目录。我们使用root用户默认登陆后，就停留在`/root`目录中。Linux中的目录层次，是通过`/`进行划分的。使用其他账户登录的时候，默认停留在`/home/用户名`目录中
+
+2. `pwd`命令是非常非常常用的命令，尤其是在一些命令提示符设置不太友好的机器上。另外，它也经常用在shell脚本中，用来判断当前的运行目录是否符合需求
+
+3. 有很多线上事故，都是由于没有确认当前目录所引起的。比如`rm -rf *`这种危险的命令。在执行一些高危命令时，随时确认当前目录，是个好的习惯
+
+4. 选项与参数
+
+   - -P：显示出确实的路径，而非使用链接（link）路径
+
+5. 实例显示出实际的工作目录，而非链接档本身的目录名而已
+
+   ```shell
+   [root@www ~]# cd /var/mail   <==注意，/var/mail是一个链接档
+   [root@www mail]# pwd
+   /var/mail         <==列出目前的工作目录
+   [root@www mail]# pwd -P
+   /var/spool/mail   <==怎么回事？有没有加 -P 差很多～
+   [root@www mail]# ls -ld /var/mail
+   lrwxrwxrwx 1 root root 10 Sep  4 17:54 /var/mail -> spool/mail
+   # 看到这里应该知道为啥了吧？因为 /var/mail 是链接档，链接到 /var/spool/mail 
+   # 所以，加上 pwd -P 的选项后，会不以链接档的数据显示，而是显示正确的完整路径啊！
+   ```
+
+### 二、ls列出目录的内容
+
+1. ls能够列出相关目录的文件信息，语法有：
+
+   ```shell
+   [root@www ~]# ls [-aAdfFhilnrRSt] 目录名称
+   [root@www ~]# ls [--color={never,auto,always}] 目录名称
+   [root@www ~]# ls [--full-time] 目录名称
+   ```
+
+2. 选项与参数：
+
+   - -a ：全部的文件，连同隐藏文件（开头为`.`的文件）一起列出来（常用）。直接在/root目录里，执行`ls -al`，会看到更多东西。这些额外的隐藏文件，都是以`.`开头，以配置文件居多，这就是参数`a`的作用。可以使用`ls -al --full-time`查看可读的日期
+
+     ```shell
+     [root@localhost ~]# ls -al
+     total 28
+     dr-xr-x---.  2 root root  135 Nov  4 07:53 .
+     dr-xr-xr-x. 17 root root  224 Nov  3 20:28 ..
+     -rw-------.  1 root root 1273 Nov  3 20:28 anaconda-ks.cfg
+     -rw-------.  1 root root  246 Nov  4 11:41 .bash_history
+     -rw-r--r--.  1 root root   18 Dec 28  2013 .bash_logout
+     -rw-r--r--.  1 root root  176 Dec 28  2013 .bash_profile
+     -rw-r--r--.  1 root root  176 Dec 28  2013 .bashrc
+     -rw-r--r--.  1 root root  100 Dec 28  2013 .cshrc
+     -rw-r--r--.  1 root root  129 Dec 28  2013 .tcshrc
+     ```
+
+   - -d ：仅列出目录本身，而不是列出目录内的文件数据（常用）
+
+   - -l ：长数据串列出，包含文件的属性与权限等等数据（常用）。每行列出的信息依次是： 文件类型与权限、链接数、文件属主、文件属组、文件大小用byte来表示、建立或最近修改的时间、名字
+
+     ![image-20220816220526783](../../../TyporaImage/0b901b1573479aada8d856c091084281de5c1b7b.png)
+
+     ```shell
+     [root@localhost /]# ls /
+     # 注意：ls可以接受路径参数，你不用先跳转，就可以输出相关信息
+     bin  boot  dev  etc  home  lib  lib64  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
+     [root@localhost /]# ls -l /
+     # 带上 -l参数，能够看到文件的一些权限信息已经更新日期等
+     total 20
+     lrwxrwxrwx.   1 root root    7 Nov  3 20:24 bin -> usr/bin
+     dr-xr-xr-x.   5 root root 4096 Nov  3 20:34 boot
+     drwxr-xr-x.  19 root root 3080 Nov  3 21:19 dev
+     drwxr-xr-x.  74 root root 8192 Nov  3 20:34 etc
+     drwxr-xr-x.   2 root root    6 Apr 11  2018 home
+     lrwxrwxrwx.   1 root root    7 Nov  3 20:24 lib -> usr/lib
+     lrwxrwxrwx.   1 root root    9 Nov  3 20:24 lib64 -> usr/lib64
+     drwxr-xr-x.   2 root root    6 Apr 11  2018 media
+     drwxr-xr-x.   2 root root    6 Apr 11  2018 mnt
+     drwxr-xr-x.   2 root root    6 Apr 11  2018 opt
+     dr-xr-xr-x. 108 root root    0 Nov  3 21:19 proc
+     dr-xr-x---.   2 root root  135 Nov  4 07:53 root
+     drwxr-xr-x.  24 root root  740 Nov  3 21:20 run
+     lrwxrwxrwx.   1 root root    8 Nov  3 20:24 sbin -> usr/sbin
+     drwxr-xr-x.   2 root root    6 Apr 11  2018 srv
+     dr-xr-xr-x.  13 root root    0 Nov  3 21:19 sys
+     drwxrwxrwt.   9 root root 4096 Nov  4 03:40 tmp
+     drwxr-xr-x.  13 root root  155 Nov  3 20:24 usr
+     drwxr-xr-x.  19 root root  267 Nov  3 20:34 var
+     ```
+
+### 三、cd切换目录
+
+1. `.`表示的是当前目录，`..`表示的是上层目录
+2. 执行cd命令，可以将工作目录切换到目标文件夹
+3. 切换到当前目录上级n层目录，只需使用多层级的`../`即可
+4. 常用的cd命令
+   - `../` 指的是上层目录
+   - `../../` 指的是上两层目录
+   - `./` 指的是当前目录
+   - `~` 指的是当前的用户目录，这是一个缩写符号
+   - `-` 使用它，可以在最近两次的目录中来回切换
+
+### 四、mkdir创建一个新的目录
+
+1. 语法：`mkdir [-mp] 目录名称`
+
+2. 选项与参数
+
+   - -m ：配置文件的权限喔！直接配置，不需要看默认权限 (umask) 的脸色
+
+     ```shell
+     [root@www tmp]# mkdir -m 711 test2
+     #（-m 711 来给予新的目录 drwx--x--x 的权限）
+     [root@www tmp]# ls -l
+     drwxr-xr-x  3 root  root 4096 Jul 18 12:50 test
+     drwxr-xr-x  3 root  root 4096 Jul 18 12:53 test1
+     drwx--x--x  2 root  root 4096 Jul 18 12:54 test2
+     ```
+
+   - -p ：帮助你直接将所需要的目录（包含上一级目录）递归创建起来
+
+     ```shell
+     [root@www ~]# cd /tmp
+     [root@www tmp]# mkdir test    <==创建一名为 test 的新目录
+     [root@www tmp]# mkdir test1/test2/test3/test4
+     mkdir: cannot create directory `test1/test2/test3/test4': 
+     No such file or directory       <== 没办法直接创建此目录啊！
+     [root@www tmp]# mkdir -p test1/test2/test3/test4
+     ```
+
+### 五、rmdir删除空的目录
 
 
 
