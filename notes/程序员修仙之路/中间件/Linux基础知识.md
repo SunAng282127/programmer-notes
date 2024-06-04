@@ -1276,7 +1276,7 @@ CentOS7中我们的初始化进程变为了systemd。执行默认target配置文
 
 2. 选项与参数
 
-   - -m ：配置文件的权限喔！直接配置，不需要看默认权限 (umask) 的脸色
+   - -m ：配置文件的权限，直接配置，不需要看默认权限 (umask) 的脸色
 
      ```shell
      [root@www tmp]# mkdir -m 711 test2
@@ -1287,7 +1287,7 @@ CentOS7中我们的初始化进程变为了systemd。执行默认target配置文
      drwx--x--x  2 root  root 4096 Jul 18 12:54 test2
      ```
 
-   - -p ：帮助你直接将所需要的目录（包含上一级目录）递归创建起来
+   - -p ：直接将所需要的目录（包含上一级目录）递归创建起来
 
      ```shell
      [root@www ~]# cd /tmp
@@ -1300,5 +1300,470 @@ CentOS7中我们的初始化进程变为了systemd。执行默认target配置文
 
 ### 五、rmdir删除空的目录
 
+1. 语法：`mkdir [-mp] 目录名称`
 
+2. 选项与参数：
 
+   - -p ：从该目录起，一次删除多级空目录
+
+3. 示例：利用-p这个选项，立刻就可以将test1/test2/test3/test4一次删除。删除完test4发现test3是空目录继续删除，以此类推。不过要注意的是，这个rmdir仅能删除空的目录，可以使用rm 命令来删除非空目录
+
+   ```shell
+   [root@www tmp]# ls -l   <==看看有多少目录存在？
+   drwxr-xr-x  3 root  root 4096 Jul 18 12:50 test
+   drwxr-xr-x  3 root  root 4096 Jul 18 12:53 test1
+   drwx--x--x  2 root  root 4096 Jul 18 12:54 test2
+   [root@www tmp]# rmdir test   <==可直接删除掉，没问题
+   [root@www tmp]# rmdir test1  <==因为尚有内容，所以无法删除！
+   rmdir: `test1': Directory not empty
+   [root@www tmp]# rmdir -p test1/test2/test3/test4
+   [root@www tmp]# ls -l        <==您看看，底下的输出中test与test1不见了！
+   drwx--x--x  2 root  root 4096 Jul 18 12:54 test2
+   ```
+
+### 六、touch创建空文件
+
+1. 语法：`touch 文件名称`
+
+2. 示例
+
+   ```shell
+   [root@hadoop101 ~]# touch xiyou/dssz/sunwukong.txt
+   ```
+
+### 七、cp复制文件或目录
+
+1. 语法
+
+   ```shell
+   [root@www ~]# cp [-adfilprsu] 来源档(source) 目标档(destination)
+   [root@www ~]# cp [options] source1 source2 source3 .... directory
+   ```
+
+2. 选项与参数
+
+   - -i：若目标档（destination）已经存在时，在覆盖时会先询问动作的进行
+   - -p：连同文件的属性一起复制过去，而非使用默认属性
+   - -r：递归持续复制，用于目录的复制行为
+   - -f：为强制（force）的意思，若目标文件已经存在且无法开启，则移除后再尝试一次
+
+3. 示例：用root身份，将root目录下的.bashrc复制到/tmp下，并命名为bashrc
+
+   ```shell
+   [root@www ~]# cp ~/.bashrc /tmp/bashrc
+   [root@www ~]# cp -i ~/.bashrc /tmp/bashrc
+   cp: overwrite `/tmp/bashrc'? n  <==n不覆盖，y为覆盖
+   ```
+
+### 八、rm删除文件或目录
+
+1. rm是强大的删除命令，它可以永久性地删除文件系统中指定的文件或目录。在使用rm命令删除文件或目录时，系统不会产生任何提示信息
+
+2. 语法：`rm [-fir] 文件或目录`
+
+3. 选项与参数
+
+   - -f ：就是force的意思，忽略不存在的文件，不会出现警告信息
+   - -i ：互动模式，在删除前会询问使用者是否动作
+   - -r ：递归删除啊！最常用在目录的删除了！这是非常危险的选项
+
+4. 注意点：rm命令是一个具有破坏性的命令，因为rm命令会永久性地删除文件或目录，这就意味着，如果没有对文件或目录进行备份，一旦使用rm命令将其删除，将无法恢复，因此，尤其在使用rm命令删除目录时，要慎之又慎
+
+5. 示例一：rm命令如果任何选项都不加，则默认执行的是`rm -i 文件名`，也就是在删除一个文件之前会先询问是否删除
+
+   ```shell
+   [root@localhost ~]# touch cangls
+   [root@localhost ~]# rm cangls
+   rm:是否删除普通空文件"cangls"?y
+   #删除前会询问是否删除
+   ```
+
+6. 示例二 ：如果需要删除目录，则需要使用`-r`选项。如果每级目录和每个文件都需要确认，那么在实际使用中简直是灾难
+
+   ```shell
+   [root@localhost ~]# mkdir -p /test/lm/movie/jp
+   #递归建立测试目录
+   [root@localhost ~]# rm /test
+   rm:无法删除"/test/": 是一个目录
+   #如果不加"-r"选项，则会报错
+   [root@localhost ~]# rm -r /test
+   rm:是否进入目录"/test"?y
+   rm:是否进入目录"/test/lm/movie"?y
+   rm:是否删除目录"/test/lm/movie/jp"?y
+   rm:是否删除目录"/test/lm/movie"?y
+   rm:是否删除目录"/test/lm"?y
+   rm:是否删除目录"/test"?y
+   #会分别询问是否进入子目录、是否删除子目录
+   ```
+
+7. 示例三：强制删除。如果要删除的目录中有1万个子目录或子文件，那么普通的rm删除最少需要确认1万次。所以，在真正删除文件的时候，我们会选择强制删除。加入了强制功能之后，删除就会变得很简单，但是需要注意，数据强制删除之后无法恢复，除非依赖第三方的数据恢复工具，如`extundelete`等。但要注意，数据恢复很难恢复完整的数据，一般能恢复70%~80%就很难得了。所以，与其把宝压在数据恢复上，不如养成良好的操作习惯。虽然`-rf`选项是用来删除目录的，但是删除文件也不会报错。所以，为了使用方便，一般不论是删除文件还是删除目录，都会直接使用`-rf`选项
+
+### 九、mv移动文件与目录或重命名
+
+1. 语法：
+
+   ```shell
+   [root@www ~]# mv [-fiu] source destination
+   [root@www ~]# mv [options] source1 source2 source3 .... directory
+   ```
+
+2. 选项与参数：
+
+   - -f：force强制的意思，如果目标文件已经存在，不会询问而直接覆盖
+   - -i：若目标文件（destination）已经存在时，就会询问是否覆盖
+   - -u：若目标文件已经存在，且source比较新，才会升级 (update)
+
+3. 示例一：复制一文件，创建一目录，将文件移动到目录中。将某个文件移动到某个目录去，就是这样做
+
+   ```shell
+   [root@www ~]# cd /tmp
+   [root@www tmp]# cp ~/.bashrc bashrc
+   [root@www tmp]# mkdir mvtest
+   [root@www tmp]# mv bashrc mvtest
+   ```
+
+4. 示例二：将目录或文件改名
+
+   ```shell
+   [root@www tmp]# mv mvtest mvtest2
+   ```
+
+### 十、cat查看文件内容
+
+1. cat的作用：为了查看文件的生成效果，可以使用`cat`命令检测。`cat`命令将会把文件的内容，输出打印到终端上。如果加上参数`n`，甚至可以打印行号。效果如下
+
+   ```shell
+   [root@localhost ~]# cat spring
+   10
+   11
+   12
+   [root@localhost ~]# cat -n spring
+   1	10
+   2	11
+   3	12
+   ```
+
+2. 除了查看文件内容，cat命令通常用和其他命令联合起来
+
+   ```shell
+   # 合并a文件和b文件到c文件
+   cat a  b>> c
+   
+   # 把a文件的内容作为输入，使用管道处理
+   cat a | cmd
+   
+   # 写入内容到指定文件。在shell脚本中非常常用
+   cat > index.html <<EOF
+   <html>
+       <head><title></title></head>
+       <body></body>
+   </html>
+   EOF
+   ```
+
+3. 由于我们的文件不大，`cat`命令没有什么危害。但假如文件有几个`GB`，使用`cat`就危险的多，这只叫做猫的小命令，会在终端上疯狂的进行输出，你可以通过多次按`ctrl+c`来终止它
+
+### 十一、less分屏显示文件内容
+
+1. 既然`cat`命令不适合操作大文件，那一定有替换的方案。`less`和`mor`e就是。由于`less`的加载速度比`more`快一些，所以现在一般都使用`less`。它最主要的用途，是用来分页浏览文件内容，并提供一些快速查找的方式。less是一个交互式的命令，你需要使用一些快捷键来控制它
+
+2. 为了方面用户浏览文本内容，`less`命令还提供了以下几个功能：
+
+   - 使用光标键可以在文本文件中前后（左后）滚屏
+   - 用行号或百分比作为书签浏览文件
+   - 提供更加友好的检索、高亮显示等操作
+   - 兼容常用的字处理程序（如 Vim、Emacs）的键盘操作
+   - 阅读到文件结束时，`less`命令不会退出
+   - 屏幕底部的信息提示更容易控制使用，而且提供了更多的信息
+
+3. `less`命令的基本格式如下：`less [选项] 文件名`
+
+4. `less`命令可用的选项以及各自的含义如表所示
+
+   | 选项            | 选项含义                                             |
+   | --------------- | ---------------------------------------------------- |
+   | -N              | 显示每行的行号                                       |
+   | -S              | 行过长时将超出部分舍弃                               |
+   | -e              | 当文件显示结束后，自动离开                           |
+   | -g              | 只标志最后搜索到的关键词                             |
+   | -Q              | 不使用警告音                                         |
+   | -i              | 忽略搜索时的大小写                                   |
+   | -m              | 显示类似more命令的百分比                             |
+   | -f              | 强迫打开特殊文件，比如外围设备代号、目录和二进制文件 |
+   | -s              | 显示连续空行为一行                                   |
+   | -b <缓冲区大小> | 设置缓冲区的大小                                     |
+   | -o <文件名>     | 将less输出的内容保存到指定文件中                     |
+   | -x <数字>       | 将【Tab】键显示为规定的数字空格                      |
+
+5. 在使用`less`命令查看文件内容的过程中，和`more`命令一样，也会进入交互界面，因此需要掌握一些常用的交互指令
+
+   - `空格`：向下滚屏翻页
+   - `b`：向上滚屏翻页
+   - `/`：进入查找模式，比如`/1111`将查找1111字样
+   - `q`：退出less
+   - `g`：到开头
+   - `G`：去结尾
+   - `j`：向下滚动，和vim的作用非常像
+   - `k`：向上滚动，和vim的作用非常像
+
+6. 示例：使用`less`命令查看`/boot/grub/grub.cfg`文件中的内容。可以看到，less在屏幕底部显示一个冒号`:`，等待用户输入命令，比如说，用户想向下翻一页，可以按空格键；如果想向上翻一页，可以按b键
+
+   ```shell
+   [root@localhost ~]# less /boot/grub/grub.cfg
+   #
+   #DO NOT EDIT THIS FILE
+   #
+   #It is automatically generated by grub-mkconfig using templates from /etc/grub.d and settings from /etc/default/grub
+   #
+   
+   ### BEGIN /etc/grub.d/00_header ###
+   if [ -s $prefix/grubenv ]; then
+    set have_grubenv=true
+    load_env
+   fi
+   set default="0"
+   if [ "$ {prev_saved_entry}" ]; then
+    set saved_entry="${prev_saved_entry}"
+    save_env saved_entry
+    set prev_saved_entry= save_env prev_saved_entry
+    set boot_once=true
+   fi
+   
+   function savedefault {
+    if [ -z "${boot_once}" ]; then
+   :
+   ```
+
+### 十二、echo输出内容到控制台
+
+1. 语法：`echo [选项] [输出内容]`
+
+2. 选项：
+
+   - -e：支持反斜线控制的字符转换
+
+3. 控制字符
+
+   | 控制字符 | 作用              |
+   | -------- | ----------------- |
+   | \\       | 输出\本身         |
+   | \n       | 换行符            |
+   | \t       | 制表符，也就是Tab |
+
+4. 示例
+
+   ```shell
+   [atguigu@hadoop101 ~]$ echo “hello\tworld”
+   hello\tworld
+   [atguigu@hadoop101 ~]$ echo -e “hello\tworld”
+   hello world
+   ```
+
+### 十三、head显示文件头部内容
+
+1. `head`取出文件前面几行
+
+2. 语法：`head [-n number] 文件`
+
+3. 选项与参数
+
+   - -n ：后面接数字，代表显示几行的意思。默认十行
+
+4. 示例：显示前20行
+
+   ```shell
+   [root@www ~]# head -n 20 /etc/man.config
+   ```
+
+### 十四、tail输出文件尾部内容
+
+1. `tail`取出文件后面几行
+
+2. 语法：`tail [-n number] 文件`
+
+3. 选项与参数
+
+   - -n ：后面接数字，代表显示几行的意思。默认最后十行
+   - -f ：表示持续侦测后面所接的档名，要等到按下`ctrl+c`才会结束tail的侦测
+   - -F：能够监控到重新创建的文件。比如像一些log4j等日志是按天滚动的，`tail -f`无法监控到这种变化
+
+4. 示例一：
+
+   ```shell
+   [root@www ~]# tail /etc/man.config
+   # 默认的情况中，显示最后的十行！若要显示最后的 20 行，就得要这样：
+   [root@www ~]# tail -n 20 /etc/man.config
+   ```
+
+5. 示例二：
+
+   - `tail -f`或许是最常用的命令之一。它可以在控制终端，实时监控文件的变化，来看一些滚动日志。比如查看nginx或者tomcat日志等等。这条命令会显示文件的最后10行内容，而且光标不会退出命令，每隔一秒会检查一下文件是否增加新的内容，如果增加就追加到原来的输出结果后面并显示
+
+   ```shell
+   # 滚动查看系统日志
+   [root@localhost ~]#tail -f anaconda-ks.cfg
+   @server-platform
+   @server-policy
+   pax
+   oddjob
+   sgpio
+   certmonger
+   pam_krb5
+   krb5-workstation
+   perl-DBD-SQLite
+   %end
+   #光标不会退出文件，而会一直监听在文件的结尾处
+   ```
+
+   - 通常情况下，日志滚动的过快，依然会造成一些困扰，需要配合grep命令达到过滤效果
+
+   ```shell
+   # 滚动查看包含info字样的日志信息
+   tail -f /var/log/messages | grep info
+   ```
+
+### 十五、>输出重定向和>>追加
+
+1. 基本语法
+
+   - `ls -l > 文件`：列表的内容写入文件中（覆盖写）
+   - `ls -al >> 文件`：列表的内容追加到文件的末尾
+   - `cat 文件 1 > 文件 2` ：将文件1的内容覆盖到文件2
+   - `cat 文件1 文件2 > 文件3`：将文件1和2的内容合并后输出到文件3中
+   - `echo “内容” >> 文件`
+
+2. 示例
+
+   - 将`ls`查看信息写入到文件中：`ls -l>a.tx`
+
+   - 将`ls`查看信息追加到文件中：`ls -l>>b.txt`
+
+   - 采用`echo`将hello单词追加到文件中：`echo hello>>c.txt`
+
+   - 将文件file1.txt和file2.txt的内容合并后输出到文件file3.txt中
+
+     ```shell
+     [root@localhost base]# ls
+     file1.txt    file2.txt
+     [root@localhost base]# cat file1.txt
+     ds(file1.txt)
+     [root@localhost base]# cat file2.txt
+     is great(file2.txt)
+     [root@localhost base]# cat file1.txt file2.txt > file3.txt
+     [root@localhost base]# more file3.txt
+     #more 命令可查看文件中的内容
+     ds(file1.txt)
+     is great(file2.txt)
+     [root@localhost base]# ls
+     file1.txt    file2.txt    file3.txt
+     ```
+
+### 十六、history查看已经执行过历史命令
+
+1. 基本语法：`history `查看已经执行过历史命令
+2. 示例
+   - 查看已经执行过的历史命令：`history`
+   - 显示最近3条命令历史：`histroy 3`
+   - 清除历史记录：`history -c`
+
+### 十七、ln软链接
+
+1. 软链接也称为符号链接，类似于windows里的快捷方式，有自己的数据块，主要存放了链接其他文件的路径
+
+2. 基本语法：`	ln -s [原文件或目录] [软链接名] `
+
+3. 注意点：
+
+   - 删除软链接是`rm -rf 软链接名`，而不是`rm -rf 软链接名/`。如果使用 `rm -rf 软链接名/`删除，会把软链接对应的真实目录下内容删掉
+   - 查询软连接是通过`ll`就可以查看，列表属性第1位是`l`，尾部会有位置指向
+
+4. 示例
+
+   - 创建软连接
+
+     ```shell
+     [root@hadoop101 ~]# mv houge.txt xiyou/dssz/
+     [root@hadoop101 ~]# ln -s xiyou/dssz/houge.txt ./houzi
+     [root@hadoop101 ~]# ll
+     lrwxrwxrwx. 1 root root 20 6 月 17 12:56 houzi ->
+     xiyou/dssz/houge.txt
+     ```
+
+   - 删除软连接
+
+     ```shell
+     [root@hadoop101 ~]# rm -rf houzi
+     ```
+
+   - 进入软连接实际物理路径
+
+     ```shell
+     [root@hadoop101 ~]# ln -s xiyou/dssz/ ./dssz
+     [root@hadoop101 ~]# cd -P dssz/
+     ```
+
+### 十八、文件目录类命令总结
+
+1. 文件剪贴删除复制重名等
+
+   - `pwd`：显示当前工作目录的绝对路径
+
+   - `ls`：
+
+     - `ls -a`：显示当前目录所有的文件和目录，包括隐藏的
+
+     * `ls -l`：以列表的方式显示信息
+
+   - `cd`：
+
+     - `cd ~`：回到自己的家目录
+     - `cd …`：回到当前目录的上一级目录
+
+   - `mkdir`：创建目录
+
+     - `mkdir -P`：创建多级目录
+
+   - `rmdir`：删除空目录。`rmdir`不能删除非空的目录。如果需要删除非空的目录，需要使用`rm -rf`
+
+   - `cp`：拷贝文件到指定目录
+
+     * `cp -rf`：递归复制整个文件夹。强制覆盖不提示的方法
+
+   - `rm`：移除文件或目录
+
+     * `rm -r`：递归删除整个文件夹
+     * `rm -f`：强制删除不提示
+
+   - `mv`：移动文件与目录或重命名，两种功能
+
+   - `touch`：创建空文件。可以一次性创建多个文件
+
+   - `ln`：给文件创建一个软连接
+
+     * 基本用法`ln -s [源文件或目录][软连接名]`
+
+2. 文件查看
+
+   - `cat`：查看文件内容。只能浏览文件，而不能修改文件
+     * `cat -n`：显示行号
+     * `cat | more`：分页显示，不会全部一下显示完
+   - `more`：是一个基于VI编辑器的文本过滤器，它以全屏幕的方式按页显示文本文件的内容。more还内置了很多快捷键：
+     * `空白键（Space）`：向下翻一页
+     * `Enter`：向下翻一行
+     * `q`：立刻离开more，不再显示该文件内容
+     * `Ctrl + F`：向下滚动一屏
+     * `Ctrl + B`：返回上一屏
+     * `=` ：输出当前行的行号
+     * `:f`：输出文件名和当前行的行号
+   - `less`：用来分屏查看文件内容，与`more`相似，但是更强大，支持各种显示终端。`less`指令在显示文件内容时，并不是一次将整个文件加载之后才显示，而是根据显示需要加载内容。对于显示大型文件具有较高的效率
+   - `head`：显示文件的开头部分
+     - `head -n 5`：看前面5行内容
+   - `tail`：输出文件中尾部的内容
+     * `tail -n 5`：看后面5行内容
+     * `tail -f`：实时追踪该文档的所有更新
+   - `>指令`：输出重定向。如果不存在会创建文件，否则会将原来的文件内容覆盖
+   - `>>指令`：追加。如果不存在会创建文件，否则不会覆盖原来的文件内容，而是追加到文件的尾部
+   - `echo`：输出内容到控制台
+   - `history`：查看历史指令	
+
+## 四、时间日期类命令
