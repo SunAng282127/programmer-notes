@@ -2151,7 +2151,7 @@ CentOS7中我们的初始化进程变为了systemd。执行默认target配置文
      [root@localhost ~]#vim /etc/sudoers 
      ```
 
-   - 修改 /etc/sudoers 文件，找到下面一行(91 行)，在 root 下面添加一行，如下所示：
+   - 修改/etc/sudoers文件，找到下面一行（91 行），在root下面添加一行，如下所示：
 
      ```shell
      ## Allow root to run any commands anywhere
@@ -2162,7 +2162,7 @@ CentOS7中我们的初始化进程变为了systemd。执行默认target配置文
      #%组名 被管理主机的地址=(可使用的身份) 授权命令(绝对路径)
      ```
 
-   - 或者配置成采用 sudo 命令时，不需要输入密码
+   - 或者配置成采用sudo命令时，不需要输入密码
 
      ```shell
      ## Allow root to run any commands anywhere
@@ -2172,7 +2172,7 @@ CentOS7中我们的初始化进程变为了systemd。执行默认target配置文
 
    - 修改完毕，现在可以用lamp帐号登录，然后用命令sudo，即可获得root权限进行操作
 
-6. 对以上 2 个模板的各部分进行详细的说明
+6. 对以上2个模板的各部分进行详细的说明
 
    |       模块       |                             含义                             |
    | :--------------: | :----------------------------------------------------------: |
@@ -2467,10 +2467,303 @@ CentOS7中我们的初始化进程变为了systemd。执行默认target配置文
    - 如果查看到是文件：链接数指的是硬链接个数
    - 如果查看的是文件夹：链接数指的是子文件夹个数
 
-### 四、chmod命令使用数字修改文件权限
+### 四、chmod命令使用数字修改文件权限（常用）
+
+1. Linux 系统中，文件的基本权限由9个字符组成，以`rwxrw-r-x`为例，我们可以使用数字来代表各个权限，各个权限与数字的对应关系如下：
+
+   ```shell
+   r --> 4
+   w --> 2
+   x --> 1
+   ```
+
+2. 由于这9个字符分属3类用户，因此每种用户身份包含3个权限（r、w、x），通过将3个权限对应的数字累加，最终得到的值即可作为每种用户所具有的权限。777y也就是最大的权限
+
+3. 以`rwxrw-r-x`为例，所有者、所属组和其他人分别对应的权限值为如下，此权限对应的权限值就是765
+
+   ```shell
+   所有者 = rwx = 4+2+1 = 7
+   所属组 = rw- = 4+2 = 6
+   其他人 = r-x = 4+1 = 5
+   ```
+
+4. 使用数字修改文件权限的chmod命令基本格式为：`chmod [-R] 权限值 文件名`
+
+5. 选项及参数
+
+   - -R（注意是大写）选项表示连同子目录中的所有文件，也都修改设定的权限
+
+6. 示例：以Vim编辑Shell文件批处理文件后，文件权限通常是rw-r--r--（644），那么，如果要将该文件变成可执行文件，并且不让其他人修改此文件，则只需将此文件的权限该为 rwxr-xr-x（755）即可
+
+   ```shell
+   [root@localhost ~]# chmod -R 755 .bashrc
+   ```
 
 ### 五、chmod命令使用字母修改文件权限
 
-### 六、chown改变所有者和所属组
+1. 既然文件的基本权限就是3种用户身份（所有者、所属组和其他人）搭配3种权限（rwx），chmod命令中用u、g、o分别代表3种身份，还用a表示全部的身份（all的缩写）。另外，chmod命令仍使用r、w、x分别表示读、写、执行权限
+
+2. 使用字母修改文件权限的chmod命令，其基本格式如图所示
+
+   ![image-20220819133048560](../../../TyporaImage/d23d9415f6b458accf29eba74ba0c53de5fe8cce.png)
+
+3. 示例一：如果我们要设定.bashrc文件的权限为`rwxr-xr-x`，则可执行如下命令
+
+   ```shell
+   [root@localhost ~]# chmod u=rwx,go=rx .bashrc
+   [root@localhost ~]# ls -al .bashrc
+   -rwxr-xr-x. 1 root root 176 Sep 22 2004 .bashrc
+   ```
+
+4. 示例二：增加.bashrc文件的每种用户都可做写操作的权限，可以使用如下命令
+
+   ```shell
+   [root@localhost ~]# ls -al .bashrc
+   -rwxr-xr-x. 1 root root 176 Sep 22 2004 .bashrc
+   [root@localhost ~]# chmod a+w .bashrc
+   [root@localhost ~]# ls -al .bashrc
+   -rwxrwxrwx. 1 root root 176 Sep 22 2004 .bashrc
+   ```
+
+### 六、chown改变文件所有者和所属组
+
+1. chown命令，可以认为是"change owner"的缩写，主要用于修改文件（或目录）的所有者，除此之外，这个命令也可以修改文件（或目录）的所属组
+
+2. chown命令的基本格式：`chown [-R] 所有者 文件或目录`
+
+3. 选项及参数：
+
+   - -R（注意大写）选项表示连同子目录中的所有文件，都更改所有者
+
+4. 同时更改所有者和所属组，chown命令的基本格式为：`chown [-R] 所有者:所属组 文件或目录`
+
+   - 在chown命令中，所有者和所属组中间也可以使用点`.`
+   - 建议使用`:`连接所有者和所属组
+
+5. 注意点：
+
+   - chown命令也支持单纯的修改文件或目录的所属组，例如`chown :group install.log`就表示修改install.log文件的所属组，但修改所属组通常使用chgrp命令，因此并不推荐使用chown命令
+   - 使用chown命令修改文件或目录的所有者（或所属者）时，要保证使用者用户（或用户组）存在，否则该命令无法正确执行，会提示 "invalid user" 或者 "invaild group"
+
+6. 示例一：通过修改file文件的所有者，user用户从其他人身份（只对此文件有读取权限）转变成了所有者身份，对此文件拥有读和写权限
+
+   ```shell
+   [root@localhost ~]# touch file
+   #由root用户创建file文件
+   [root@localhost ~]# ll file
+   -rw-r--r--. 1 root root 0 Apr 17 05:12 file
+   #文件的所有者是root，普通用户user对这个文件拥有只读权限
+   [root@localhost ~]# chown user file
+   #修改文件的所有者
+   [root@localhost ~]# ll file
+   -rw-r--r--. 1 user root 0 Apr 17 05:12 file
+   #所有者变成了user用户，这时user用户对这个文件就拥有了读、写权限
+   ```
+
+7. 示例二：Linux系统中，用户等级权限的划分是非常清楚的，root用户拥有最高权限，可以修改任何文件的权限，而普通用户只能修改自己文件的权限（所有者是自己的文件）。例如user用户无权更改所有者为root用户文件的权限，只有普通用户是这个文件的所有者，才可以修改文件的权限
+
+   ```shell
+   [root@localhost ~]# cd /home/user
+   #进入user用户的家目录
+   [root@localhost user]# touch test
+   #由root用户新建文件test
+   [root@localhost user]# ll test
+   -rw-r--r--. 1 root root 0 Apr 17 05:37 test
+   #文件所有者和所属组都是root用户
+   [root@localhost user]# su - user
+   #切换为user用户
+   [user@localhost ~]$ chmod 755 test
+   chmod:更改"test"的权限：不允许的操作 #user用户不能修改test文件的权限
+   [user@localhost ~]$ exit
+   #退回到root身份
+   [root@localhost user]# chown user test
+   #由root用户把test文件的所有者改为user用户
+   [root@localhost user]# su - user
+   #切换为user用户
+   [user@localhost ~]$ chmod 755 test
+   #user用户由于是test文件的所有者，所以可以修改文件的权限
+   [user@localhost ~]$ ll test
+   -rwxr-xr-x. 1 user root 0 Apr 17 05:37 test
+   #查看权限
+   ```
 
 ### 七、chgrp改变所属组
+
+1. chgrp命令用于修改文件（或目录）的所属组。可以将chgrp理解为"change group"的缩写
+
+2. chgrp命令其基本格式为：`chgrp [-R] 所属组 文件名（目录名）`
+
+3. 选项及参数
+
+   - -R（注意是大写）选项作用于更改目录的所属组，表示更改连同子目录中所有文件的所属组信息
+
+4. 注意点：要被改变的群组名必须是真实存在的，否则命令无法正确执行，会提示 "invaild group name"
+
+5. 示例：当以root身份登录Linux系统时，主目录中会存在一个名为install.log的文件，可以使用如下方法修改此文件的所属组。例如在具有group1群组的前提下，能成功修改install.log文件的所属组，但再次试图将所属组修改为testgroup时，命令执行失败，就是因为系统的/etc/group文件中，没有testgroup群组
+
+   ```shell
+   [root@localhost ~]# groupadd group1
+   #新建用于测试的群组 group1
+   [root@localhost ~]# chgrp group1 install.log
+   #修改install.log文件的所属组为group1
+   [root@localhost ~]# ll install.log
+   -rw-r--r--. 1 root group1 78495 Nov 17 05:54 install.log
+   #修改生效
+   [root@localhost ~]# chgrp testgroup install.log
+   chgrp: invaild group name 'testgroup'
+   ```
+
+## 八、搜索查找类命令
+
+### 一、find查找文件或者目录
+
+1. find的作用
+
+   - find命令用来在指定目录下查找文件。任何位于参数之前的字符串都将被视为欲查找的目录名或文件名
+   - 如果使用该命令时，不设置任何参数，则find命令将在当前目录下查找子目录与文件。并且将查找到的子目录和文件全部进行显示
+   - find命令有非常大的灵活性，可以向其指定丰富的搜索条件（如文件权限、属主、属组、文件类型、日期和大小等）来定位系统中的文件和目录
+   - find还支持对搜索到的结果进行多种类型的命令操作
+
+2. 基本语法：`find [搜索范围] [选项]`
+
+3. 搜索范围：一般设置某个目录即可
+
+4. 选项说明
+
+   - -name<查询方式>：按照指定的文件名查找模式查找文件
+   - -user<用户名>：查找属于指定用户名所有文件
+   - -size<文件大小>：按照指定的文件大小查找文件，单位为
+     - b —— 块（512 字节）
+     - c —— 字节 
+     - w —— 字（2 字节） 
+     - k —— 千字节 
+     - M —— 兆字节 
+     - G —— 吉字节
+
+5. 示例
+
+   - 按文件名：根据名称查找`/tmp`目录下的`*.log`文件
+
+     ```shell
+     [root@CentOS201 /]# find tmp/ -name "*.log"
+     ```
+
+   - 将当前目录及其子目录下所有文件后缀为`.c`的文件列出来
+
+     ```shell
+     [root@CentOS201 /]# find . -name "*.c"
+     ```
+
+   - 按拥有者：查找`/home/sunsh/`目录下，所属用户名称为`sunsh`的文件
+
+     ```shell
+     [root@CentOS201 /]# find /home/sunsh/ -user sunsh
+     ```
+
+   - 按文件大小：在/home目录下查找大于200m的文件（+n：大于；-n：小于；n：等于）
+
+     ```shell
+     [root@CentOS201 /]# find /home -size +204800
+     ```
+
+### 二、locate快速定位文件路径
+
+1. locate的作用和原理：
+
+   - locate命令用于查找符合条件的文档，他会去保存文档和目录名称的数据库内，查找合乎范本样式条件的文档或目录
+   - locate指令无需遍历整个文件系统，查询速度较快。为了保证查询结果的准确度，管理员必须定期更新locate时刻
+
+2. 基本语法：`locate 搜索文件`
+
+3. locate与find的区别：
+
+   - find是去硬盘找，locate只在/var/lib/slocate资料库中找
+   - locate的速度比find快，它并不是真的查找，而是查数据库，一般文件数据库在 /var/lib/slocate/slocate.db中，所以locate的查找并不是实时的，而是以数据库的更新为准，一般是系统自己维护，也可以手工升级数据库 ，命令为：`updatedb`
+
+4. 示例：
+
+   - 查询文件夹
+
+     ```shell
+     [root@hadoop101 ~]#updatedb
+     [root@hadoop101 ~]#locate tmp
+     ```
+
+   - 查找passwd文件
+
+     ```shell
+     [root@hadoop101 ~]# locate passwd
+     ```
+
+### 三、grep过滤查找
+
+1. grep的作用：
+
+   - grep命令用于查找文件里符合条件的字符串
+   - grep指令用于查找内容包含指定的范本样式的文件，如果发现某文件的内容符合所指定的范本样式，预设grep指令会把含有范本样式的那一列显示出来。若不指定任何文件名称，或是所给予的文件名为`-`，则grep指令会从显示屏读取数据
+
+2. 基本语法：`grep 选项 查找内容 源文件`
+
+3. 选项说明：
+
+   - `-n 或 --line-number`：在显示符合样式的那一行之前，标示出该行的列数编号
+
+4. 示例：在当前目录中，查找后缀有file字样的文件，且文件内容包含test字符串
+
+   ```shell
+   [root@hadoop101 ~]#grep test *file 
+   ```
+
+### 四、"|"管道符
+
+1. 管道符的作用：管道符主要用于多重命令处理，前面命令的打印结果作为后面命令的输入。简单点说就是，就像工厂的流水线一样，进行完一道工序后，继续传送给下一道工序处理…
+
+   ![image-20220819143831999](../../../TyporaImage/16d256b0723671e30bec77446903a97ff201a3c6.png)
+
+2. 示例一：使用两个管道，利用第一个管道将cat命令（显示passwd文件的内容）的输出送给grep命令，grep命令找出含有`/bin/bash`的所有行
+
+   ```shell
+   [root@hadoop101 ~]#cat /etc/passwd | grep /bin/bash
+   ```
+
+3. 示例二：查找某文件在第几行
+
+   ```shell
+   [root@hadoop101 ~]#ls | grep -n test
+   ```
+
+### 五、wc计算字数
+
+1. wc的作用：
+
+   - wc命令用于计算字数
+   - 利用wc指令我们可以计算文件的Byte数、字数、或是列数，若不指定文件名称、或是所给予的文件名为`-`，则wc指令会从显示屏读取数据
+
+2. 语法：`wc [-clw][--help][--version][文件...]`
+
+3. 选项及参数
+
+   - -c或--bytes或--chars：只显示Bytes数
+   - -l或--lines：显示行数
+   - -w或--words：只显示字数
+   - --help：在线帮助
+   - --version：显示版本信息
+
+4. 示例一：在默认的情况下，wc将计算指定文件的行数、字数，以及字节数
+
+   ```shell
+   [root@hadoop101 ~]#wc testfile           # testfile文件的统计信息  
+   3 92 598 testfile       # testfile文件的行数为3、单词数92、字节数598 
+   ```
+
+5. 示例二：同时统计多个文件的信息，例如同时统计testfile、testfile_1、testfile_2
+
+   ```shell
+   [root@hadoop101 ~]#wc testfile testfile_1 testfile_2   #统计三个文件的信息  
+   3 92 598 testfile                #第一个文件行数为3、单词数92、字节数598  
+   9 18 78 testfile_1               #第二个文件的行数为9、单词数18、字节数78  
+   3 6 32 testfile_2                #第三个文件的行数为3、单词数6、字节数32  
+   15 116 708 总用量                #三个文件总共的行数为15、单词数116、字节数708 
+   ```
+
+## 九、压缩和解压类命令
