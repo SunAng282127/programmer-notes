@@ -192,7 +192,7 @@
 │   ├── koi-win
 │   ├── mime.types                   # 媒体类型
 │   ├── mime.types.default
-│   ├── nginx.conf                   #这是Nginx默认的主配置文件，日常使用和修改的文件
+│   ├── nginx.conf                   # Nginx默认的主配置文件，日常使用和修改的文件
 │   ├── nginx.conf.default
 │   ├── scgi_params                  # scgi相关参数文件
 │   ├── scgi_params.default  
@@ -201,12 +201,14 @@
 │   └── win-utf
 ├── fastcgi_temp                     # fastcgi临时数据目录
 ├── html                             # Nginx默认站点目录
-│   ├── 50x.html                     # 错误页面优雅替代显示文件，例如出现502错误时会调用此页面
+│   ├── 50x.html                     # 错误页面优雅替代显示文件，
+								  # 例如出现502错误时会调用此页面
 │   └── index.html                   # 默认的首页文件
 ├── logs                             # Nginx日志目录
 │   ├── access.log                   # 访问日志文件
 │   ├── error.log                    # 错误日志文件
-│   └── nginx.pid                    # pid文件，Nginx进程启动后，会把所有进程的ID号写到此文件
+│   └── nginx.pid                    # pid文件，Nginx进程启动后，
+                                     # 会把所有进程的ID号写到此文件
 ├── proxy_temp                       # 临时目录
 ├── sbin                             # Nginx 可执行文件目录
 │   └── nginx                        # Nginx 二进制可执行程序
@@ -214,7 +216,7 @@
 └── uwsgi_temp                       # 临时目录
 ```
 
-1. 其中这几个文件夹在刚安装后是没有的，主要用来存放运行过程中的临时文件 
+1. 其中以下文件夹在刚安装后是没有的，主要用来存放运行过程中的临时文件 
 
    -  client_body_temp
    - fastcgi_temp proxy_temp
@@ -275,7 +277,7 @@
        #以平衡磁盘与网络IO处理速度。
        sendfile        on;
        
-        #长连接超时时间，单位是秒
+       #长连接超时时间，单位是秒
        keepalive_timeout  65;
    
     	#虚拟主机的配置
@@ -293,7 +295,7 @@
                index  index.html index.htm;
            }
    
-   		#出错页面配置
+   	    #出错页面配置
            error_page   500 502 503 504  /50x.html;
            #/50x.html文件所在位置
            location = /50x.html {
