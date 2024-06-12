@@ -305,28 +305,26 @@
            #出错页/50x.html文件所在位置
            location = /50x.html {
                root   html;
-        }
-           
-    }
-   
-}
+        	}
+   	}
+   }
    ```
 
    - worker_processes：默认为1，表示开启一个业务进程 
 
    - worker_connections：默认为1024; 单个业务进程可接受连接数 
    
-- include mime.types：引入http mime类型 
+   - include mime.types：引入http mime类型 
    
-- default_type application/octet-stream：如果mime类型没匹配上，默认使用二进制流的方式传输 
+   - default_type application/octet-stream：如果mime类型没匹配上，默认使用二进制流的方式传输 
    
-- sendfile：默认为on，使用 linux 的 sendfile（socket, file, len）高效网络传输，也就是数据0拷贝
+   - sendfile：默认为on，使用 linux 的 sendfile（socket, file, len）高效网络传输，也就是数据0拷贝
      未开启sendfile的流程
-
+   
      ![image-20220823112052472](../../../TyporaImage/274b7fd11c8a1c8575db88bb5a6abfa9c64a4033.png)
-
+   
      开启sendfile的流程，开启后Nginx不需要再复制一份磁盘上的文件数据，而是通过Nginx直接使用sendfile()函数给操作系统发送信息，操作系统的网络接口来读取磁盘上的文件数据，通过网络直接发送给客户端
-
+   
      ![image-20220823112108345](../../../TyporaImage/77dc6e6b39146a41451d078ecc49d8868c636c5b.png)
    
    - keepalive_timeout：默认为65，保持连接，超时时间
