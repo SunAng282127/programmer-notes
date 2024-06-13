@@ -533,6 +533,104 @@
    - 正向代理一般是客户端架设的；反向代理一般是服务器架设的
    - 正向代理主要是用来解决访问限制问题；反向代理则是提供负载均衡、安全防护等作用   
 
+## 五、基于反向代理的负载均衡
+
+### 一、负载均衡的概述
+
+1. 负载均衡主要用于集群中
+2. 负载均衡的大概意思是当很多用户的请求进行访问时，nginx集群作为中间代理，集群中的每一台nginx服务器都会接收一定数量的请求，所有的请求并不会集中的发送给某个nginx。集群中的每台nginx服务器的配置基本一致，如果nginx集群中有一台服务器出现故障，那么请求就会转移到其他的服务器
+3. 故障转移是高可用性的一个核心特性，而负载均衡是实现HA的一种关键技术手段。负载均衡可以将请求分布到多个后端服务器上，从而提高系统的容错性和可用性，同时也可以平衡服务器的负载，提高系统的性能和吞吐量
+
+### 二、负载均衡策略
+
+1. 轮询：默认情况下使用轮询方式，逐一转发，这种方式适用于无状态请求。每个请求会按时间顺序逐一分配到不同的后端服务器。有以下参数
+
+   | 参数         | 说明                                                         |
+   | ------------ | ------------------------------------------------------------ |
+   | fail_timeout | 与max_fails结合使用                                          |
+   | max_fails    | 设置在fail_timeout参数设置的时间内最大失败次数，如果在这个时间内，所有针对该服务器的请求都失败了，那么认为该服务器会被认为是停机了 |
+   | fail_time    | 服务器会被认为停机的时间长度,默认为10s                       |
+   | backup       | 标记该服务器为备用服务器。当主服务器停止时，请求会被发送到它这里 |
+   | down         | 标记服务器永久停机了                                         |
+
+   - 在轮询中，如果服务器down掉了，会自动剔除该服务器
+   - 缺省配置就是轮询策略
+   - 此策略适合服务器配置相当，无状态且短平快的服务使用 
+
+2. weight（权重）：指定轮询几率，weight和访问比率成正比，用于后端服务器性能不均的情况
+
+   ```shell
+   upstream httpd {
+   server localhost:8070 weight=10 down;
+   server localhost:8071 weight=1;
+   server localhost:8072 weight=1 backup;
+   server localhost:8080 weight=2; #tomcat 7.0
+   server localhost:8081; #tomcat 8.0
+   server localhost:8082 backup; #tomcat 8.5
+   server localhost:8083 max_fails=3 fail_timeout=20s; #tomcat 9.0
+   }
+   ```
+
+   | 参数   | 说明                                                   |
+   | ------ | ------------------------------------------------------ |
+   | down   | 表示当前的server暂时不参与负载                         |
+   | weight | 默认为1。weight越大，负载的权重就越大                  |
+   | backup | 其它所有的非backup机器down或者忙的时候，请求backup机器 |
+
+   - 权重越高分配到需要处理的请求越多。在该例子中，weight参数用于指定轮询几率，weight的默认值为1；weight的数值与访问比率成正比，比如Tomcat 7.0被访问的几率为其他服务器的两倍 
+   - 此策略可以与least_conn和ip_hash结合使用
+   - 此策略比较适合服务器的硬件配置差别比较大的情况
+
+3. ip_hash：根据客户端的ip地址转发同一台服务器，可以保持回话。这个方法确保了相同的客户端的请求一直发送到相同的服务器，以保证session会话。这样每个访客都固定访问一个后端服务器，可以解决session不能跨服务器的问题 
+
+   ```shell
+   upstream httpd {
+   ip_hash; #保证每个访客固定访问一个后端服务器
+   server localhost:8080 weight=2; #tomcat 7.0
+   server localhost:8081; #tomcat 8.0
+   server localhost:8082; #tomcat 8.5
+   server localhost:8083 max_fails=3 fail_timeout=20s; #tomcat 9.0
+   }
+   ```
+
+   - 在nginx版本1.3.1之前，不能在ip_hash中使用权重（weight）
+   - ip_hash不能与backup同时使用
+   - 此策略适合有状态服务，比如session
+   - 当有服务器需要剔除，必须手动down掉
+
+4. least_conn：最少连接访问。把请求转发给连接数较少的后端服务器。轮询算法是把请求平均的转发给各个后端，使它们的负载大致相同；但是，有些请求占用的时间很长，会导致其所在的后端负载较高。这种情况下，least_conn这种方式就可以达到更好的负载均衡效果。 此负载均衡策略适合请求处理时间长短不一造成服务器过载的情况 
+
+   ```shell
+   upstream httpd {
+   least_conn; #把请求转发给连接数较少的后端服务器
+   server localhost:8080 weight=2; #tomcat 7.0
+   server localhost:8081; #tomcat 8.0
+   server localhost:8082 backup; #tomcat 8.5
+   server localhost:8083 max_fails=3 fail_timeout=20s; #tomcat 9.0
+   }
+   ```
+
+5. url_hash：根据用户访问的url定向转发请求。需要安装第三方插件
+
+   ```shell
+   upstream httpd {
+   hash $request_uri; #实现每个url定向到同一个后端服务器
+   server localhost:8080; #tomcat 7.0
+   }
+   ```
+
+6. fair：根据后端服务器响应时间转发请求。需要安装第三方插件
+
+   ```shell
+   upstream httpd {
+   server localhost:8080; #tomcat 7.0
+   server localhost:8081; #tomcat 8.0
+   server localhost:8082; #tomcat 8.5
+   server localhost:8083; #tomcat 9.0
+   fair; #实现响应时间短的优先分配
+   }
+   ```
+
 # 五、动静分离和URLRewrite
 
 ## 一、动静分离介绍

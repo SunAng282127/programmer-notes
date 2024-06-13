@@ -560,7 +560,7 @@
 
 	- 物理机能ping通虚拟机，但是虚拟机ping不通物理机，一般都是因为物理机的防火墙问题，把防火墙关闭就行
 	- 虚拟机能ping通物理机，但是虚拟机ping不通外网，一般都是因为DNS的设置有问题 
-	- 虚拟机 ping www.baidu.com 显示域名未知等信息,一般查看GATEWAY和DNS设置是否正确
+	- 虚拟机 ping www.baidu.com 显示域名未知等信息，一般查看GATEWAY和DNS设置是否正确
 	- 如果以上全部设置完还是不行，需要关闭NetworkManager服务 
 		- systemctl stop NetworkManager：关闭  
 		- systemctl disable NetworkManager：禁用 
