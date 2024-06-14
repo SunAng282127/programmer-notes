@@ -631,6 +631,48 @@
    }
    ```
 
+## 六、反向代理服务器的配置
+
+1. 将`192.168.35.201`服务器中的nginx的配置恢复到默认，然后在配置文件中添加内容
+
+   ```shell
+   location / {
+   	# proxy_pass和root、index的组合只能二选一
+   	proxy_pass: http://www.baidu.com;
+   	#root html;
+   	#index index.html index.htm
+   }
+   
+   
+   #重启nginx
+   systemctl reload nginx
+   ```
+
+2. 当访问`192.168.35.201`时，会直接跳转到百度的地址，这就是反向代理的基本使用
+
+3. 注意点
+
+   - 当`proxy_pass`中的网点未写`www`等完整路径时，会自动临时重定向到被代理的网点，这样真实的服务器地址就暴露了
+   - `proxy_pass`默认不能代理https网点，需要证书才能代理
+
+4. 将`192.168.35.202`和`192.168.35.203`服务器中的nginx的配置恢复到默认，并分别在index.html重写内容，标识出两台服务器的地址即可。可当负载均衡来使用
+
+   ```shell
+   #定义一组服务器，upstream的级别是和server在同一级别，httpd可以随意定义
+   upstream httpd {
+   server 192.168.35.202:80;
+   server 192.168.35.203:80;
+   }
+   
+   #在proxy_pass中加入服务器组，实现负载均衡
+   location / {
+   	# proxy_pass和root、index的组合只能二选一
+   	proxy_pass: http://httpd;
+   	#root html;
+   	#index index.html index.htm
+   }
+   ```
+
 # 五、动静分离和URLRewrite
 
 ## 一、动静分离介绍
@@ -641,11 +683,11 @@
 
 2. 动静分离可通过location对请求url进行匹配，将网站静态资源（HTML，JavaScript，CSS，img等文件）与后台应用分开部署，提高用户访问静态代码的速度，降低对后台应用访问。通常将静态资源放到nginx中，动态资源转发到tomcat服务器中
 
-## 二、Nginx动静分离配置
+## 二、动静分离配置
 
 1. 动静分离是让动态网站里的动态网页根据一定规则把不变的资源和经常变的资源区分开来，动静资源做好了拆分以后，我们就可以根据静态资源的特点将其做缓存操作，这就是网站静态化处理的核心思路
 
-2. 在Nginx中的html目录中放入这样的资源
+2. 在nginx中的html目录中放入这样的资源
 
    ![image-20220824153311942](../../../TyporaImage/8b18138dc7651795656fb9678a4c39b76de3bf7e.png)
 
@@ -669,26 +711,32 @@
    </html>
    ```
 
-4. 直接访问Nginx服务器地址是能看到图片的
+4. 直接访问nginx服务器地址是能看到图片的
 
 5. 由于服务器是使用了nginx的，每次访问这些资源都被代理了一次，但其实这些资源是不需要被改变的，这样很浪费性能，所以我们把这些静态资源放在nginx服务器上
 
-6. 修改Nginx服务器的`nginx.conf`配置文件
+6. 修改nginx服务器的`nginx.conf`配置文件
 
    ```shell
       server {
            listen 80;
            server_name  localhost;
            location / {
-               proxy_pass http://192.168.8.101:8080;
+           	#tomcat的地址
+               proxy_pass http://192.168.35.202:8080;
            }
            # 所有静态请求都由nginx处理，存放目录为nginx中的html
      	    location ~ .(gif|jpg|jpeg|png|bmp|swf|css|js)$ {
                root html;
            }
+           
+        # 此配置方式可以匹配到/html/css下的文件，使用上述的配置就行
+     	    location /css {
+               root html;
+           }
        }
    ```
-
+   
    - `location ~ .(gif|jpg|jpeg|png|bmp|swf|css|js)${root html;} `这行的意思是匹配到这些后缀名的文件，就把资源引入的地址指向html目录中，将html文件夹作为这些资源引入的根目录
    - 例1：`/css/index.css`的这个`/`就是相对于html目录中来说的
    - 例2：当我们后缀为gif的时候，Nginx默认会从html中获取到当前请求的动态图文件返回，当然这里的静态文件跟Nginx是同一台服务器，我们也可以在另外一台服务器，然后通过反向代理和负载均衡配置过去就好了，只要搞清楚了最基本的流程，很多配置就很简单了
@@ -727,7 +775,7 @@ $ ：匹配输入字符串的结束位置
 
 #location常用的匹配规则：
 = ：进行普通字符精确匹配，也就是完全匹配
-^~ ：表示前缀字符串匹配（不是正则匹配，需要使用字符串），如果匹配成功，则不再匹配其它 location。
+^~ ：表示前缀字符串匹配（不是正则匹配，需要使用字符串），如果匹配成功，则不再匹配其它 location
 ~ ：区分大小写的匹配（需要使用正则表达式）
 ~* ：不区分大小写的匹配（需要使用正则表达式）
 !~ ：区分大小写的匹配取非（需要使用正则表达式）
@@ -743,24 +791,25 @@ $ ：匹配输入字符串的结束位置
 
 1. location正则注意点
 
-   - 精确匹配： `=` ， 后面的表达式中写的是纯字符串
-   - 字符串匹配： `^~` 和 `无符号匹配` ， 后面的表达式中写的是纯字符串
-   - 正则匹配： `~` 和 `~*` 和 `!~` 和 `!~*` ， 后面的表达式中写的是正则表达式
+   - 精确匹配：`=` ， 后面的表达式中写的是纯字符串
+   - 字符串匹配：`^~`和`无符号匹配` ， 后面的表达式中写的是纯字符串
+   - 正则匹配：`~`和`~*`和`!~`和`!~*`， 后面的表达式中写的是正则表达式
 
 2. location的说明
 
    ```shell
-    (1）location = / {}
-   =为精确匹配 / ，主机名后面不能带任何字符串，比如访问 / 和 /data，则 / 匹配，/data 不匹配
-   再比如 location = /abc，则只匹配/abc ，/abc/或 /abcd不匹配。若 location  /abc，则即匹配/abc 、/abcd/ 同时也匹配 /abc/。
+   （1）location = / {}：=为精确匹配 / ，主机名后面不能带任何字符串。
+   比如访问 / 和 /data，则 / 匹配，/data 不匹配；
+   再比如 location = /abc，则只匹配/abc ，/abc/ 或 /abcd不匹配；
+   若 location  /abc，则即匹配/abc 、/abcd/ 同时也匹配 /abc/
    
-   （2）location / {}
-   因为所有的地址都以 / 开头，所以这条规则将匹配到所有请求 比如访问 / 和 /data, 则 / 匹配， /data 也匹配，
+   （2）location / {}：因为所有的地址都以 / 开头，所以这条规则将匹配到所有请求。
+   比如访问 / 和 /data, 则 / 匹配， /data 也匹配，
    但若后面是正则表达式会和最长字符串优先匹配（最长匹配）
    
    （3）location /documents/ {}
    匹配任何以 /documents/ 开头的地址，匹配符合以后，还要继续往下搜索其它 location
-   只有其它 location后面的正则表达式没有匹配到时，才会采用这一条
+   只有其它 location 后面的正则表达式没有匹配到时，才会采用这一条
    
    （4）location /documents/abc {}
    匹配任何以 /documents/abc 开头的地址，匹配符合以后，还要继续往下搜索其它 location
@@ -788,9 +837,9 @@ $ ：匹配输入字符串的结束位置
 
 3. location匹配顺序
 
-   - 多个正则location直接按书写顺序匹配，成功后就不会继续往后面匹配 
+   - 多个正则location直接按书写顺序匹配，成功后就不会继续往后面匹配。但是还是要和其他规则一起使用
    - 普通（非正则）location会一直往下，直到找到匹配度最高的（最大前缀匹配） 
-   - 当普通location与正则location同时存在，如果正则匹配成功,则不会再执行普通匹配 
+   - 当普通location与正则location同时存在，如果正则匹配成功，则不会再执行普通匹配 
    - 所有类型location存在时，“=”匹配 > “^~”匹配 > 正则匹配 > 普通（最大前缀匹配） 
 
 4. 实际网站使用中，至少有三个匹配规则定义
@@ -832,7 +881,7 @@ $ ：匹配输入字符串的结束位置
 
 ### 二、URLRewrite概述
 
-```
+```shell
 rewrite是实现URL重写的关键指令，根据regex(正则表达式)部分内容，重定向到repacement，结尾是flag标记
 
 rewrite 	<regex> 	<replacement> 	[flag];
@@ -843,27 +892,24 @@ rewrite 	<regex> 	<replacement> 	[flag];
 2. 正则：perl兼容正则表达式语句进行规则匹配 
 3. 替代内容：将正则匹配的内容替换成replacement 
 4. flag标记：rewrite支持的flag标记 
-5. rewrite参数的标签段位置： server,location,if 
+5. rewrite参数的标签段位置：server -> location -> if（或server -> location）
 6. flag标记说明
    - last：本条规则匹配完成后，继续向下匹配新的location URI规则 
    - break：本条规则匹配完成即终止，不再匹配后面的任何规则 
-   - redirect：返回302临时重定向，浏览器地址会显示跳转后的URL地址   (防爬虫)
+   - redirect：返回302临时重定向，浏览器地址会显示跳转后的URL地址，会把真实的地址带出来。可以防爬虫
    - permanent：返回301永久重定向，浏览器地址栏会显示跳转后的URL地址
 
 ### 三、配置Nginx
 
-![image-20220824161112740](../../../TyporaImage/9128e33ba1717612604f3017018f9bbb352808b5.png)
-
-1. 上图配置的意思是如果路径是`/index.html?testParms=3`就重写成`/test.html`
-
-2. 也可以用正则表达式的形式：
+1. rewrite的示例写法
 
    ```shell
-   rewrite ^/[0-9]+.html$ /index.html?testParam=$1 break; 
-   //$1表示第一个匹配的字符串 
+   location / {
+   	rewrite ^/([0-9]+).html$ /index.jsp?pageNum=$1 break;
+   }
    ```
 
-3. 访问`/index.html?testParam=2`
+2. 上图配置的意思是如果路径是`/index.jsp?pageNum=3`就重写成`/3.html`，访问`/3.html`路径即可达到与访问`/index.jsp?pageNum=3`一样的效果
 
 ## 五、负载均衡+URLRewrite
 
@@ -910,32 +956,31 @@ rewrite 	<regex> 	<replacement> 	[flag];
    ```
 
    - 这个时候只有一台服务器102，如果102服务器崩了，那么将无法访问，所以要配置负载均衡。这时也要用防火墙配置103服务器的规则
-
-
-   ```bash
-   ...
-   http {
    
-   #定义一组服务器
-   upstream httpds{
-       server 192.168.8.101:8080 weight=8 down;
-       server 192.168.8.103:8080 weight=2 backup;
-   }
-   ...
-    	#虚拟主机的配置
-       server {
-       	#监听端口
-           listen       80;
-           #域名，可以有多个，用空格隔开
-           server_name  localhost;
-   
-   		#配置根目录以及默认页面
-           location / {
-               proxy_pass http://httpds;
-           }
-           
-       }
-   }
+   ```shell
+      ...
+      http {
+      
+      #定义一组服务器
+      upstream httpds{
+          server 192.168.8.101:8080 weight=8 down;
+          server 192.168.8.103:8080 weight=2 backup;
+      }
+      ...
+       	#虚拟主机的配置
+          server {
+          	#监听端口
+              listen       80;
+              #域名，可以有多个，用空格隔开
+              server_name  localhost;
+      
+      		#配置根目录以及默认页面
+              location / {
+                  proxy_pass http://httpds;
+              }
+              
+          }
+      }
    ```
 
 3. 测试
