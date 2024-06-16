@@ -655,7 +655,7 @@
    - 当`proxy_pass`中的网点未写`www`等完整路径时，会自动临时重定向到被代理的网点，这样真实的服务器地址就暴露了
    - `proxy_pass`默认不能代理https网点，需要证书才能代理
 
-4. 将`192.168.35.202`和`192.168.35.203`服务器中的nginx的配置恢复到默认，并分别在index.html重写内容，标识出两台服务器的地址即可。可当负载均衡来使用
+4. 将`192.168.35.202`和`192.168.35.203`服务器中的nginx的配置恢复到默认，并分别在index.html重写内容，标识出两台服务器的地址即可。可当负载均衡来使用。在`192.168.35.202`服务器nginx配置文件中添加以下配置
 
    ```shell
    #定义一组服务器，upstream的级别是和server在同一级别，httpd可以随意定义
@@ -909,7 +909,7 @@ rewrite 	<regex> 	<replacement> 	[flag];
    }
    ```
 
-2. 上图配置的意思是如果路径是`/index.jsp?pageNum=3`就重写成`/3.html`，访问`/3.html`路径即可达到与访问`/index.jsp?pageNum=3`一样的效果
+2. 上述配置的意思是如果路径是`/index.jsp?pageNum=3`就重写成`/3.html`，访问`/3.html`路径即可达到与访问`/index.jsp?pageNum=3`一样的效果
 
 ## 五、负载均衡+URLRewrite
 
@@ -967,14 +967,14 @@ rewrite 	<regex> 	<replacement> 	[flag];
           server 192.168.8.103:8080 weight=2 backup;
       }
       ...
-       	#虚拟主机的配置
+          #虚拟主机的配置
           server {
-          	#监听端口
+          	   #监听端口
               listen       80;
               #域名，可以有多个，用空格隔开
               server_name  localhost;
       
-      		#配置根目录以及默认页面
+      		  #配置根目录以及默认页面
               location / {
                   proxy_pass http://httpds;
               }
@@ -988,6 +988,8 @@ rewrite 	<regex> 	<replacement> 	[flag];
    - 现在直接访问http://192.168.8.102/就访问不了了
    - 访问http://192.168.8.101/可以正常访问
    - 访问http://192.168.8.103/可以正常访问
+   
+4. 负载均衡+URLRewrite的组合可以当作网关服务器进行使用了
 
 # 六、防盗链
 
