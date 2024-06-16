@@ -415,7 +415,7 @@
 
   - 如果网络ip资源紧缺，但是又希望你的虚拟机能够联网，这时候NAT模式是最好的选择。NAT模式借助虚拟NAT设备和虚拟DHCP服务器，使得虚拟机可以联网。虚拟设备中主机就相当于NAT服务器和DHCP服务器。其网络结构如下图所示：
 
-  	![image-20220815200210830](../../../TyporaImage/e9688aa206ae1003042fe5256a25497b91c05c05.png)
+      	![image-20220815200210830](../../../TyporaImage/e9688aa206ae1003042fe5256a25497b91c05c05.png)
 
   - 在NAT模式中，主机网卡直接与虚拟NAT设备相连，然后虚拟NAT设备与虚拟DHCP服务器一起连接在虚拟交换机VMnet8上，这样就实现了虚拟机联网。VMware Network Adapter VMnet8虚拟网卡主要是为了实现主机与虚拟机之间的通信
 
@@ -433,7 +433,7 @@
 
   - 然后开机启动系统，编辑网卡配置文件，在终端输入命令`vim /etc/sysconfig/network-scripts/ifcfg-eth0`。具体配置如下：
 
-  	![image-20220815200401415](../../../TyporaImage/72bd28d00d8b752da7078c509706c890d3d6d859.png)
+![image-20220815200401415](../../../TyporaImage/72bd28d00d8b752da7078c509706c890d3d6d859.png)
 
   - 编辑完成，保存退出，然后重启虚拟机网卡，动态获取ip地址，使用ping命令ping外网ip，测试能否联网
 
