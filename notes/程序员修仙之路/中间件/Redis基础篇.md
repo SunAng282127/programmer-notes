@@ -1,4 +1,4 @@
-# 一、Redis入门概述
+#  一、Redis入门概述
 
 ## 一、Redis概述
 
@@ -1267,32 +1267,52 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
    (integer) 0
    ```
 
-6. strlen key：统计字节数占用多少。不是字符串长度而是占据几个字节，超过8位后自己按照8位一组**byte**再扩容
+6. strlen key：统计字节数占用多少。不是字符串长度而是占据几个字节，超过8位后自己按照8位一组**byte（字节）**再扩容
 
    ```shell
    127.0.0.1:6379> strlen bit1
    (integer) 1
    ```
 
-7. bitcount key [start end [byte|bit]]：全部key里面包含有1的有多少个
+7. bitcount key [start end [byte|bit]]：全部key里面包含有1的有多少个byte或bit，默认单位为bit
 
    ```shell
-   127.0.0.1:6379> bitcount bit1 0 1 byte
-   (integer) 2
-   127.0.0.1:6379> bitcount bit1 0 1 bit
-   (integer) 1
-   127.0.0.1:6379> bitcount bit1 0 5 bit
-   (integer) 2
-   127.0.0.1:6379> bitcount bit1 0 5 byte
+   127.0.0.1:6379> bitcount bit1
    (integer) 2
    ```
-
+   
 8. bitop operation(and|or|xor|not) destkey key [key ...]
 
    - 统计连续2天都签到的用户数量。假如某个网站或者系统，它的用户有1000W，我们可以使用redis的HASH结构和bitmap结构做个用户id和位置的映射
 
    ```shell
+   #通过map结构添加用户数据
+   127.0.0.1:6379> hset uid:map 0 uid-092iok-ljz
+   (integer) 1
+   127.0.0.1:6379> hset uid:map 1 uid-7388c-xxx
+   (integer) 1
+   ......很多很多很多用户
    
+   #日期作为bitmap的key，用户的id作为bitmap的offset，val为1则说明用户已签到
+   127.0.0.1:6379> setbit 20240601 0 1
+   (integer) 0
+   127.0.0.1:6379> setbit 20240601 1 1
+   (integer) 0
+   127.0.0.1:6379> setbit 20240601 2 1
+   (integer) 0
+   127.0.0.1:6379> setbit 20240601 3 1
+   (integer) 0
+   127.0.0.1:6379> setbit 20240602 0 1
+   (integer) 0
+   127.0.0.1:6379> setbit 20240602 1 1
+   (integer) 0
+   
+   #统计连续两天都签到的用户数量，统计成功则返回1
+   127.0.0.1:6379> bitop and towDay 20240601 20240602
+   (integer) 1
+   #显示连续两天都签到的用户数量
+   127.0.0.1:6379> bitcount towDay
+   (integer) 2
    ```
 
 ## 十、redis基数统计（HyperLogLog）
@@ -1312,7 +1332,7 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
      Redis HyperLogLog是用来做基数统计的算法
      HyperLogLog的优点是，在输入元素的数量或者体积非常非常大时，计算基数所需的空间总是固定的、并且是很小的
      在Redis里面，每个HyperLogLog键只需要花费12KB内存，就可以计算接近2^64个不同元素的基数。这和计算基数时，元素越多耗费，内存就越多的集合形成鲜明对比
-     但是，因为HyperLogLog只会根据输入元素来计算基数，而不会储存输入元素本身，所以HyperLogLog不能像集合那样，返回输入的各个元素。
+     但是，因为HyperLogLog只会根据输入元素来计算基数，而不会储存输入元素本身，所以HyperLogLog不能像集合那样，返回输入的各个元素
      ```
 
    - 基数：是一种数据集，去重复后的真实个数
@@ -1598,7 +1618,7 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
    - xread [count count] [block milliseconds] streams key [key ...] id [id ...]：可以读取多个key
 
      - 用于获取消息（阻塞/非阻塞）：只会返回大于指定ID的消息，COUNT最多读取多少条消息；BLOCK是否以阻塞的方式读取消息，默认不阻塞，如果milliseconds设置为0，表示永远阻塞
-     - 非阻塞：`$`表特殊ID，表示以当前Stream已经存储的最大的ID作为最后一个ID，当前Stream中不存在大于当前最大ID的消息，因此此时返回nil。0-0代表从最小的ID开始获取Stream中的消息，当不指定count，将会返回Stream中的所有消息，注意也可以使用0（00/000也都是可以的）
+     - 非阻塞：`$`表特殊ID，表示以当前Stream已经存储的最大的ID作为最后一个ID，当前Stream中不存在大于当前最大ID的消息，因此此时返回nil。`$`一般用在阻塞流中。0-0（0、00/000也都是可以的）代表从最小的ID开始获取Stream中的消息，当不指定count，将会返回Stream中的所有消息
      - 阻塞：类似Java里面的阻塞队列
 
      ```shell
@@ -1688,8 +1708,9 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
    - xgroup create key group id|$：用于创建消费组
 
      - 创建消费组的时候必须指定ID
-     - $表示从Stream尾部开始消费
-     - 0表示从Stream头部开始消费
+     - 不能在不同的 Stream 中创建同一个消费者组，更不能在相同的 Stream 中创建同一个消费者组
+     - $表示从Stream尾部开始往后消费
+     - 0表示从Stream头部开始往后消费
 
      ```shell
      127.0.0.1:6379> xgroup create stream1 group1 0
@@ -1709,7 +1730,7 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
 
      - 消费者的目的是让组内的多个消费者共同分担读取消息，所以，我们通常会让每个消费者读取部分消息，从而实现消息读取负载在多个消费者间是均衡分部的
 
-     - 基于 Stream 实现的消息队列，保证消费者在发生故障或宕机再次重启后，仍然可以读取未处理完的消息的原理：Streams 会自动使用内部队列（也称为 PENDING List）留存消费组里每个消费者读取的消息保底措施，直到消费者使用 XACK 命令通知 Streams"消息已经处理完成”。消费确认增加了消息的可靠性，一般在业务处理完成之后，需要执行 XACK 命令确认消息已经被消费完成
+     - 基于 Stream 实现的消息队列，保证消费者在发生故障或宕机再次重启后，仍然可以读取未处理完的消息的原理是 Streams 会自动使用内部队列（也称为 PENDING List）留存消费组里每个消费者读取的消息保底措施，直到消费者使用 XACK 命令通知 Streams"消息已经处理完成”。消费确认增加了消息的可靠性，一般在业务处理完成之后，需要执行 XACK 命令确认消息已经被消费完成
 
        ![](../../../TyporaImage/97.%E6%B6%88%E6%81%AFack.png)
 
