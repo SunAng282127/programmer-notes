@@ -1919,7 +1919,7 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
 
      ![](../../../TyporaImage/5.RDB6.0.16%E5%8F%8A%E4%BB%A5%E4%B8%8B%E9%85%8D%E7%BD%AE2.jpg.jpg)
 
-   - Redis6.2以及Redis-7.0.0
+   - Redis6.2以及Redis-7.0.0：默认的时间发生了改变
 
      ![](../../../TyporaImage/6.RDB7%E9%85%8D%E7%BD%AE.jpg)
 
@@ -1933,7 +1933,7 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
 
        ![](../../../TyporaImage/8.5s%E5%86%85%E4%BF%AE%E6%94%B92%E6%AC%A1.png)
 
-     - 修改dump文件保存路径
+     - 修改dump文件保存路径，使用命令`config get dir 端口号|目录等`可以获取redis配置文件里面配置的端口号、目录等配置有关信息
 
        ![](../../../TyporaImage/9.dump%E6%96%87%E4%BB%B6%E8%B7%AF%E5%BE%84.png)
 
@@ -1956,23 +1956,35 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
      - 自动触发恢复的方法
 
        - 将备份文件（dump.rdb）移动到 Redis 安装目录并启动服务即可
-       - 测试恢复的方法：物理恢复，一定要将服务产生的RDB文件备份一份，然后分机隔离，避免生产上物理损坏后备份文件也挂了。备份成功后故意用flushdb清空redis，看看是否可以恢复数据
-       - 执行flushall/flushdb命令也会产生dump.rdb文件，但里面是空的，无意义
+       - 测试恢复的方法：物理恢复，一定要将服务产生的RDB文件备份一份，然后分机隔离，避免生产上物理损坏后备份文件也挂了。备份成功后故意用flushdb清空redis，然后将备份表重新移动到redis dir目录中，表名恢复到与配置的文件名称一致即可，看看是否可以恢复数据
+       - 执行flushall/flushdb、shutdown命令也会产生dump.rdb文件，但里面是空的，无意义
 
    - 手动触发：使用save或者bgsave命令
 
      ![](../../../TyporaImage/13.RDB%E6%89%8B%E5%8A%A8%E4%BF%9D%E5%AD%98.png)
 
+     ![image-20240618152329235](../../../TyporaImage/image-20240618152329235.png)
+
+     ![image-20240618152926546](../../../TyporaImage/image-20240618152926546.png)
+
+     ```shell
+127.0.0.1:6379> save
+     OK
+
+     127.0.0.1:6379> bgsave
+OK
+     ```
+     
      - save：在主程序中执行会**阻塞**当前redis服务器，直到持久化工作完成执行save命令期间，Redis不能处理其他命令，**线上禁止使用**
-
+     
      - bgsave（默认）：redis会在后台异步进行快照操作，**不阻塞**快照同时还可以相应客户端请求，该触发方式会fork一个子进程由子进程复制持久化过程
-
+     
        - Redis会使用bgsave对当前内存中的所有数据做快照，这个操作是子进程在后台完成的，这就允许主进程同时可以修改数据
-
+     
        - fork：在Linux程序中，fork()会产生一个和父进程完全相同的子进程，但子进程在此后会exec系统调用，处于效率考虑，尽量避免膨胀
-
+     
        - LASTSAVE：可以通过lastsave命令获取最后一次成功执行快照的时间
-
+     
          ![](../../../TyporaImage/15.lastsave%E5%91%BD%E4%BB%A4.png)
 
 ### 三、RDB优劣
@@ -1987,7 +1999,7 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
 
 2. 劣势
 
-   - 如果您需要在 Redis 停止工作时（例如断电后）将数据丢失的可能性降到最低，那么RDB 并不好。您可以配置生成 RDB 的不同保存点（例如，在对数据集至少5分钟和100次写入之后，您可以有多个保存点)。但是，您通常会每五分钟或更长时间创建一次 RDB快照，因此，如果 Redis 由于任何原因在没有正确关闭的情况下停止工作，您应该准备好丢失最新分钟的数据
+   - 如果您需要在 Redis 停止工作时（例如断电后）将数据丢失的可能性降到最低，那么RDB 并不好。您可以配置生成 RDB 的不同保存点（例如，在对数据集至少5分钟和100次写入之后，您可以有多个保存点）。但是，您通常会每五分钟或更长时间创建一次 RDB 快照，因此，如果 Redis 由于任何原因在没有正确关闭的情况下停止工作，您应该准备好丢失最新分钟的数据
    - RDB 需要经常fork()以便使用子进程在磁盘上持久化。如果数据集很大，fork()可能会很耗时，并且如果数据集很大而且 CPU 性能不是很好，可能会导致 Redis 停止为客户端服务几毫秒甚至一秒钟。AOF 也需要fork()但频率较低，您可以调整要重写日志的频率，而不需要对持久性进行任何权衡
 
 3. 优劣势总结
@@ -2012,7 +2024,7 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
 
    - 配置文件中默认的快照配置
    - 手动save/bgsave命令
-   - 执行flushdb/fulshall命令也会产生dump.rdb文件，但是也会将命令记录到dump.rdb文件中，恢复后依旧是空，无意义
+   - 执行flushdb/fulshall、shutdown命令也会产生dump.rdb文件，但是也会将命令记录到dump.rdb文件中，恢复后依旧是空，无意义
    - 执行shutdown且没有设置开启AOF持久化
    - 主从复制时，主节点自动触发
 
@@ -2099,7 +2111,7 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
 
        ![](../../../TyporaImage/31.AOF%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6%E8%B7%AF%E5%BE%84(Redis6%E5%8F%8A%E4%BB%A5%E5%89%8D).jpg)
 
-     - redis7最新
+     - redis7最新：圈起来的部分加起来就是AOF的保存的目录
 
        ![](../../../TyporaImage/32.AOF%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6%E8%B7%AF%E5%BE%84(Redis7).jpg)
 
@@ -2122,22 +2134,17 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
      - MP-AOF概述：顾名思义，MP-AOF 就是将原来的单个 AOF 文件拆分成多个 AOF 文件。在MP-AOF中，AOF 分为三种类型
 
        - BASE：表示基础 AOF，它一般由子进程通过重写产生，该文件最多只有一个
-
-
        - INCR：表示增量 AOF，它一般会在 AOFRW 开始执行时被创建，该文件可能存在多个
-
-
-       - HISTORY：表示历史 AOF，它由 BASE 和 INCR AOF 变化而来，每次 AOFRW 成功完成时，本次 AOFRW 之前对应的 BASE 和 INCR AOF 都将变为HISTORY，HISTORY 类型的 AOF 会被 Redis 自动删除
-
-     - 为了管理这些AOF文件，我们引入了一个manifest（清单）文件来跟踪、管理这些AOF。同时，为了便于 AOF 备份和拷贝，我们将所有的 AOF 文件和manifest文件放入一个单独的文件目录中，目录名由appenddirname配置（Redis 7.0新增配置项）决定
-
-     - Redis7.0config 中对应的配置项
-
-       ![](../../../TyporaImage/36.redis7AOF%E9%85%8D%E7%BD%AE%E9%A1%B9.jpg)
+       - HISTORY：表示历史 AOF，它由 BASE 和 INCR AOF 变化而来，每次 AOFRW 成功完成时，本次 AOFRW 之前对应的 BASE 和 INCR AOF 都将变为HISTORY，HISTORY 类型的 AOF 会被 Redis 自动删除。也就是MANIFEST清单文件，MANIFEST清单文件负责管理 BASE 和 INCR AOF 文件
+     - 为了管理这些 AOF 文件，我们引入了一个manifest（清单）文件来跟踪、管理这些 AOF。同时，为了便于 AOF 备份和拷贝，我们将所有的 AOF 文件和manifest文件放入一个单独的文件目录中，目录名由appenddirname配置（Redis 7.0新增配置项）决定
+     
+   - 总结一下Redis7.0 config中对应的配置项
+   
+      ![](../../../TyporaImage/36.redis7AOF%E9%85%8D%E7%BD%AE%E9%A1%B9.jpg)
 
 2. 正常恢复
 
-   - 修改默认的appendonly no，改为yes
+   - 正常恢复的前提是已经修改过默认的appendonly no，改为yes
    - 写操作继续，生成 AOF 文件到指定目录（然后将appendonly文件备份，使用flushdb+shutdown服务器来模拟 Redis 宕机数据丢失，删除生成的新 AOF 文件，将备份文件恢复）
      ![](../../../TyporaImage/37.aof%E7%94%9F%E6%88%90%E6%96%87%E4%BB%B6.jpg)
    - 恢复：重启 Redis 然后重新加载，结果OK，将数据重新写入到了 Redis
@@ -2151,7 +2158,7 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
    - 重启Redis之后就会进行AOF文件的载入
      ![](../../../TyporaImage/39.aof%E5%BC%82%E5%B8%B8%E6%9C%8D%E5%8A%A1%E5%90%AF%E5%8A%A8%E5%A4%B1%E8%B4%A5.jpg)
 
-   - 异常修复命令：redis-check-aof --fix进行修复
+   - 异常修复命令：`redis-check-aof --fix`进行修复
      ![](../../../TyporaImage/40.aof%E6%96%87%E4%BB%B6%E4%BF%AE%E5%A4%8D.jpg)
 
    - 启动后OK
@@ -2172,5 +2179,125 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
 
 ### 六、AOF重写机制
 
+1. AOF 重写机制概述：
 
+   - 由于 AOF 持久化是 Redis 不断将写命令记录到 AOF 文件中，随着 Redis 不断的进行，AOF 的文件会越来越大，占用服务器内存越大以及 AOF 恢复要求时间越长
+   - 为了解决这个问题，Redis 新增了重写机制，当 AOF 文件的大小超过所设定的峰值时，Redis 就会自动启动 AOF 文件的内容压缩，只保留可以恢复数据的最小指令集或者可以手动使用命令bgrewriteaof
+   - AOF 重写机制也就是启动AOF文件的内容压缩，只保留可以恢复数据的最小指令集
+   - AOF 重写不仅降低了文件的占用空间，同时更小的 AOF 也可以更快地被 Redis 加载
 
+2. 触发机制
+
+   - 官网默认配置
+
+     ![](../../../TyporaImage/44.AOF%E9%87%8D%E5%86%99%E5%AE%98%E7%BD%91%E9%BB%98%E8%AE%A4%E9%85%8D%E7%BD%AE.png)
+
+   - 自动触发：满足配置文件中的选项后，Redis 会记录上次重写时的 AOF 大小，默认配置是当 AOF 文件大小是上次rewrite后大小的一倍且文件大于64M时
+
+   - 手动触发：客户端向服务器发送bgrewriteaof命令
+
+3. AOF重写机制的操作示例
+
+   - 需求说明：启动 AOF 文件的内容压缩，只保留可以恢复数据的最小指令集
+
+     ```tex
+     比如有个key
+     1、set k1 v1
+     2、set k1 v2
+     3、set k1 v3
+     如果不重写，那么这3条语句都在aof文件中，内容占空间不说，启动的时候都要执行一遍，
+     共计3条命令，但是，我们实际效果只需要set k1 v3这一条，
+     所以，开启重写后，只需要保存set k1 3就可以了只需要保留最后一次修改值，相当于给aof文件瘦身减肥，性能更好
+     ```
+
+   - 触发配置前置准备
+
+     - 开启aof，appendonly yes，设置aof持久化开启
+
+     - 重写峰值修改为1k
+
+       ![](../../../TyporaImage/45.aof%E9%87%8D%E5%86%99%E5%B3%B0%E5%80%BC%E4%BF%AE%E6%94%B9.jpg)
+
+     - 关闭混合，设置为no
+
+       ![](../../../TyporaImage/46.aof-rdb%E6%B7%B7%E5%90%88%E5%85%B3%E9%97%AD.jpg)
+
+     - 删除之前的全部aof和rdb，清除干扰项
+
+   - 自动触发案例步骤：
+
+     - 完成上述正确配置，重启redis服务器，执行`set k1 v1`查看aof文件是否正常
+
+     - 查看aof三大配置文件，appendonly.aof.1.base.aof；appendonly.aof.1.incr.aof；appendonly.aof.manifest
+
+     - k1不停的更新值
+
+       ![](../../../TyporaImage/48.aof%E9%87%8D%E5%86%99%E5%90%8E%E6%96%87%E4%BB%B6.jpg)
+
+     - 自动触发案例步骤四：重写触发，文件名称都变了
+
+       ![](../../../TyporaImage/49.aof%E9%87%8D%E5%86%99%E5%90%8E%E7%9A%84base%E6%96%87%E4%BB%B6.jpg)
+
+       ![image-20240618173403830](../../../TyporaImage/image-20240618173403830.png)
+
+   - 自动触发结论：
+
+     - 也就是说 AOF 文件重写并不是对原文件进行重新整理，而是直接读取服务器现有的键值对，然后用一条命令去代替之前记录这个键值对的多条命令，生成一个新的文件后去替换原来的 AOF 文件
+     - AOF 文件重写触发机制：通过redis.conf配置文件中的auto-aof-rewrite-percentage默认值为100，以及auto-aof-rewrite-min-size:值64mb配置，也就是说默认 Redis 会记录上次重写时的 AOF 大小，默认配置是当 AOF 文件大小是上次rewrite后大小的一倍且文件大于64M时触发
+
+   - 手动触发案例步骤：客户端向服务器发送bgrewriteaof命令
+
+     ![](../../../TyporaImage/50.aof%E9%87%8D%E5%86%99%E6%89%8B%E5%8A%A8%E8%A7%A6%E5%8F%91.jpg)
+
+4. 重写原理
+
+   - 在重写开始前，Redis会创建一个“重写子进程”，这个子进程会读取现有的AOF文件，并将其包含的指令进行分析压缩并写入到一个临时文件中
+   - 与此同时，主进程会将新接收到的写指令一边累积到内存缓冲区中，一边继续写入到原有的AOF文件中，这样做是保证原有的AOF文件的可用性，避免在重写过程中出现意外
+   - 当“重写子进程”完成重写工作后，它会给父进程发一个信号，父进程收到信号后就会将内存中缓存的写指令追加到新AOF文件中
+   - 当追加结束后，Redis就会用新AOF文件来代替旧AOF文件，之后再有新的写指令，就都会追加到新的AOF文件中
+   - 重写AOF文件的操作，并没有读取旧的AOF文件，而是将整个内存中的数据库内容用命令的方式重写了一个新的AOF文件，这点和快照有点类似
+
+### 七、AOF优化配置项详解
+
+- 配置文件 APPEND ONLY MODE模块
+
+  ![](../../../TyporaImage/51.%20APPEND%20ONLY%20MODE%E6%A8%A1%E5%9D%97.jpg)
+
+### 八、AOF小总结
+
+![](../../../TyporaImage/52.AOF%E5%B0%8F%E6%80%BB%E7%BB%93.jpg)
+
+## 四、RDB-AOF混合持久化
+
+1. RDB 和 AOF 共存时会优先加载 AOF 文件
+
+2. 数据恢复顺序和加载流程
+
+   ![](../../../TyporaImage/55.%E6%B7%B7%E5%90%88%E6%8C%81%E4%B9%85%E5%8C%96%E5%8A%A0%E8%BD%BD%E9%A1%BA%E5%BA%8F.jpg)
+
+3. RDB VS AOF
+
+   - RDB 持久化方式能够在指定的时间间隔对你的数据进行快照存储
+   - AOF 持久化方式记录每次对服务器写的操作，当服务器重启的时候会重新执行这些命令来恢复原始的数据，AOF 命令以 Redis 协议追加保存每次写的操作到文件末尾
+
+4. 同时开启两种持久化方式
+
+   - 在这种情况下，当 Redis 重启的时候会优先载入 AOF 文件来恢复原始的数据，因为在通常情况下 AOF 文件保存的数据集要比 RDB 文件保存的数据集要完整
+   - RDB 的数据不实时，同时使用两者时服务器重启也只会找 AOF 文件。但是也不建议只使用AOF方式备份，因为 RDB 更适合用于备份数据库（AOF在不断的变化不好备份），留着 RDB 作为一个万一的手段
+
+5. 推荐方式：RDB+AOF混合方式
+
+   - 开启混合方式设置：设置aof-use-rdb-preamble的值为yes， yes表示开启，设置为no表示禁用
+
+   - RDB+AOF 的混合方式结论：RDB 镜像做全量持久化，AOF 做增量持久化
+
+     - 先使用 RDB 进行快照存储，然后使用 AOF 持久化记录所有的写操作，当重写策略满足或手动触发重写的时候，将最新的数据存储为新的 RDB 记录。这样的话，重启服务的时候会从 RDB 和 AOF 两部分恢复数据，既保证了数据完整性，又提高了恢复数据的性能
+     - 简单来说，混合持久化方式产生的文件一部分是 RDB 格式，一部分是 AOF 格式。即 AOF 包括了 RDB 头部 + AOF 混写
+
+     ![](../../../TyporaImage/56.%E6%B7%B7%E5%90%88%E6%8C%81%E4%B9%85%E5%8C%96.jpg)
+
+## 五、纯缓存模式
+
+- 同时关闭 RDB+AOF，专心做缓存
+  - save ""：禁用RDB。禁用 RDB 持久化模式下，我们仍然可以使用命令save、bgsave生成RDB文件
+  - appendonly no：禁用AOF。禁用AOF持久化模式下，我们仍然可以使用命令bgrewriteaof生成AOF文件
