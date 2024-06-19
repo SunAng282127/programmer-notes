@@ -1,5 +1,3 @@
-
-
 #  一、Redis入门概述
 
 ## 一、Redis概述
@@ -1931,7 +1929,7 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
 
    - 自动触发
 
-     - Redis7版本，按照redis.conf里配置的 save \<seconds> \<changes>。例如5秒内有2两个key发生了变化
+     - Redis7版本，按照redis.conf里配置的`save \<seconds> \<changes>`。例如5秒内有2两个key发生了变化
 
        ![](../../../TyporaImage/8.5s%E5%86%85%E4%BF%AE%E6%94%B92%E6%AC%A1.png)
 
@@ -2641,7 +2639,7 @@ QUEUED
 
    - 指定端口，port
 
-   - 指定当前工作目录，dir
+   - 指定当前工作目录，dir。此处可以使用绝对路径
 
      ![](../../../TyporaImage/6.%E9%85%8D%E7%BD%AEdir.jpg)
 
@@ -2681,11 +2679,34 @@ QUEUED
 
 3. 先master后两台slave依次启动
 
-   ![](../../../TyporaImage/14.%E4%B8%BB%E4%BB%8E%E9%A1%BA%E5%BA%8F%E5%90%AF%E5%8A%A8.jpg)
+   - 启动master
 
-   ![](../../../TyporaImage/15%E4%B8%BB%E4%BB%8E%E5%AE%A2%E6%88%B7%E7%AB%AF%E8%BF%9E%E6%8E%A5.jpg)
+     ```shell
+     redis-server /opt/redis-7.0.5/redis6379.conf
+     ```
 
-4. 主从关系查看
+   - 分别启动两台slave
+
+     ```shell
+     redis-server /opt/redis-7.0.5/redis6380.conf
+     redis-server /opt/redis-7.0.5/redis6381.conf
+     ```
+
+   - 连接master redis：连接master时可以不设置端口
+
+     ```shell
+     redis-cli -a 282127
+     ```
+
+   - 连接slave redis：连接slave时必须写上配置的端口，并且连接的密码不是master的密码，而是slave自己的密码，master的密码在slave的配置文件中，slave会自己去解析连接
+
+     ```shell
+     redis-cli -a 282127 -p 6380
+     
+     redis-cli -a 282127 -p 6381
+     ```
+
+4. 主从关系查看：下方的截图均来自网上
 
    - 主机日志
 
@@ -2701,11 +2722,11 @@ QUEUED
 
 5. 主从问题总结
 
-   - 从机不可以执行写命令
+   - slave不可以执行写命令
    - slave是从头开始复制还是从切入点开始复制：首次复制直接一锅端复制，后续跟随，master写，slave跟
-   - 主机shutdown后，从机不会上位：从机不动，原地待命，从机数据可以正常使用，等待主机重启归来
-   - 主机shutdown后，重启后主从关系还在，从机还能顺利复制
-   - 某台从机down后，master继续，从机重启后可以跟上大部队
+   - master shutdown后，slave不会上位：slave不动，原地待命，从机数据可以正常使用，等待master重启归来
+   - master shutdown后，重启后主从关系还在，slave还能顺利复制
+   - 某台slave down后，master继续，slave重启后可以跟上大部队
 
 #### 二、方案二：命令操作手动主从关系指令
 
@@ -2717,19 +2738,18 @@ QUEUED
 
    ![](../../../TyporaImage/23.3%E5%8F%B0master.png)
 
-3. 预设的从机上执行命令：`salveof 主库IP 主库端口`
+3. 预设的slave上执行命令：`salveof 主库IP 主库端口`
 
    ![](../../../TyporaImage/24.slaveof%E6%95%88%E6%9E%9C.png)
 
-4. 用命令使用的话，2台从机重启后，主从关系不复存在了
+4. 用命令使用的话，2台slave重启后，主从关系不复存在了
 
-5. 方案一与方案二的区别：配置，持久稳定永久生效；命令，当成生效
+5. 方案一与方案二的区别：配置，持久稳定永久生效；命令，当即生效，但不持久，重启或关机之后主从关系将不复存在
 
 ### 三、薪火相传
 
-1. 上一个slave可以是下一个slave的master，slave同样可以接收其他slaves的连接和同步请求，那么该slave作为了链条中下一个的master,可以有效减轻主master的写压力
-2. 中途变更转向:会清除之前的数据，重新建立主从关系并拷贝最新的
-3. `slaveof 新主库IP 新主库端口`
+1. 上一个slave可以是下一个slave的master，slave同样可以接收其他slaves的连接和同步请求，那么该slave作为了链条中下一个的master，可以有效减轻主master的写压力，但是这个链条中间的slave仍然是slave,=，仍不能执行写操作
+2. 中途变更转向：会清除之前的数据，重新建立主从关系并拷贝最新的。命令为：`slaveof 新主库IP 新主库端口`
 
 ### 四、反客为主
 
@@ -2763,7 +2783,7 @@ QUEUED
 
 6. 复制的缺点
 
-   - 复制延时，信号衰减：由于所有的写操作都是先在Master上操作，然后同步更新到Slave上，所以从Master同步到Slave机器有一定的延迟，当系统很繁忙的时候，延迟问题会更加严重，Slave机器数量的增加也会使这个问题更加严重
+   - 复制延时，信号衰减：由于所有的写操作都是先在master上操作，然后同步更新到slave上，所以从master同步到slave机器有一定的延迟，当系统很繁忙的时候，延迟问题会更加严重，slave机器数量的增加也会使这个问题更加严重
 
      ![](../../../TyporaImage/26.%E4%B8%BB%E4%BB%8E%E5%90%8C%E6%AD%A5%E5%BB%B6%E8%BF%9F.png)
 
