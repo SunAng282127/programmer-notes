@@ -1,3 +1,5 @@
+
+
 #  一、Redis入门概述
 
 ## 一、Redis概述
@@ -2485,3 +2487,286 @@ QUEUED
 3. 使用pipeline注意事项
    - pipeline缓冲的指令只是会依次执行，不保证原子性，如果执行中指令发生异常，将会继续执行后续的指令
    - 使用pipeline组装的命令个数不能太多，不然数量过大客户端阻塞的时间可能过久，同时服务端此时也被迫回复一个队列答复，占用很多内存。如果命令太多，可以将命令分成不同的文件，进行批处理管道，比如100条命令是一个文件
+
+# 七、Redis发布订阅
+
+## 一、Redis发布订阅介绍
+
+1. Redis发布订阅定义：一种消息通信模式：发送者(PUBLISH)发送消息，订阅者(SUBSCRIBE)接收消息，可以实现进程间的消息传递
+
+2. [官方解释](https://redis.io/docs/manual/pubsub/)
+
+3. 简而言之，Redis可以实现消息中间件MQ的功能，通过发布订阅实现消息的引导和分流。但是目前不推荐使用该功能，专业的事情交给专业的中间件处理，Redis就做好分布式缓存功能即可
+
+4. Redis发布订阅功能的概述
+
+   - Redis客户端可以订阅任意数量的频道，类似我们微信关注多个公众号
+
+     ![](../../../TyporaImage/1.Redis%E8%AE%A2%E9%98%85.jpg)
+
+   - 当有新消息通过publish命令发送给频道channel1时，订阅客户端都会收到消息
+
+     ![](../../../TyporaImage/2.Redis%E5%8F%91%E5%B8%83.jpg)
+
+5. Redis发布订阅其实是一个轻量的队列
+
+   ![](../../../TyporaImage/3.%E5%8F%91%E5%B8%83%E8%AE%A2%E9%98%85%E5%B0%8F%E6%80%BB%E7%BB%93.jpg)
+
+## 二、Redis发布订阅常用命令
+
+![](../../../TyporaImage/4.%E5%8F%91%E5%B8%83%E8%AE%A2%E9%98%85%E5%B8%B8%E7%94%A8%E5%91%BD%E4%BB%A4.jpg)
+
+1. `SUBSCRIBE channel [channel ...]`：订阅给定的一个或多个频道的信息。推荐先执行订阅然后在发布，订阅成功之前发布的消息是收不到的。订阅的客户端每次可以收到一个3个参数的消息
+
+   - 消息种类
+   - 始发频道的名称
+   - 实际的消息内容
+
+   ![](../../../TyporaImage/5.%E6%B6%88%E6%81%AF%E6%8E%A5%E6%94%B6%E5%8F%82%E6%95%B0.jpg)
+
+2. `PUBLISH channel message`：发布消息到指定的频道
+
+3. `PSUBSCRIBE pattern [pattern ...]`：按照模式批量订阅，订阅一个或多个符合给定模式（支持`*`、`?`之类的）的频道
+
+4. `PUBSUB subcommand [argument [argument ...]]`：查看订阅与发布系统
+
+   - `PUBSUB CHANNELS`：由活跃频道组成的列表
+
+     ```shell
+     127.0.0.1:6379> PUBSUB CHANNELS
+     "C1"
+     ```
+
+   - `PUBSUB NUMSUB [channel [channel ...]]`：某个频道有几个订阅者
+
+     ```shell
+     127.0.0.1:6379> PUBSUB NUMSUB
+     "C1"
+     (integer)2
+     ```
+
+   - `PUBSUB NUMPAT`：只统计使用PSUBSCRIBE命令执行的返回客户端订阅的唯一模式的数量
+
+     ![](../../../TyporaImage/9.%E6%A8%A1%E5%BC%8F%E8%AE%A2%E9%98%85.jpg)
+
+5. `UNSUBSCRIBE [channel [channel ...]]`：退订给定的频道
+
+6. `PUNSUBSCRIBE [pattern [pattern ...]]`：退订所有给定模式的频道
+
+## 三、Redis发布订阅实操
+
+1. 开启3个客户端，演示客户端A、B订阅消息，客户端C发布消息
+
+   ![](../../../TyporaImage/8.%E8%AE%A2%E9%98%85%E6%BC%94%E7%A4%BA.jpg)
+
+2. 演示批量订阅和发布
+
+   ![](../../../TyporaImage/10.%E6%89%B9%E9%87%8F%E8%AE%A2%E9%98%85%E5%92%8C%E5%8F%91%E5%B8%83.jpg)
+
+3. 取消订阅
+
+   ![](../../../TyporaImage/11.%E5%8F%96%E6%B6%88%E8%AE%A2%E9%98%85.jpg)
+
+## 四、Redis发布订阅总结
+
+1. Redis发布订阅可以实现消息中间件MQ的功能，通过发布订阅实现消息的引导和分流。但是不推荐使用该功能，专业的事情交给专业的中间件处理，Redis就做好分布式缓存功能
+2. PUB/SUB缺点
+   - 发布的消息在Redis系统中不能持久化，因此，必须先执行订阅，在等待消息发布。如果先发布了消息，那么该消息由于没有订阅者，消息将被直接丢弃
+   - 消息只管发送，对于发布者而言消息是即发即失，不管接受，也没有ACK机制，无法保证消息的消费成功
+   - 以上的缺点导致Redis的Pub/Sub模式就像个小玩具，在生产环境中几乎无用武之地，为此Redis5.0版本新增了Stream数据结构，不但支持多播，还支持数据持久化，相比Pub/Sub更加的强大
+
+# 八、Redis复制
+
+## 一、Redis复制概述
+
+1. Redis复制概述
+
+   - [官方解释](https://redis.io/docs/management/replication/)
+
+     ![](../../../TyporaImage/1.%E6%95%B0%E6%8D%AE%E5%A4%8D%E5%88%B6.jpg)
+
+   - 就是主从复制，master以写为主，slave以读为主，当master数据变化的时候，自动将新的数据异步同步到其他的slave数据库
+
+2. Redis复制的作用
+
+   - 读写分离
+   - 容灾恢复
+   - 数据备份
+   - 水平扩容支撑高并发
+
+3. Redis复制的操作
+
+   - 配从（库）不配主（库）
+
+   - **权限细节**，master如果配置了requirepass参数，需要密码登录 ，那么slave就要配置masterauth来设置校验密码，否则的话master会拒绝slave的访问请求
+
+     ![](../../../TyporaImage/2.%E4%BB%8E%E6%9C%BA%E9%85%8D%E7%BD%AE%E4%B8%BB%E6%9C%BA%E5%AF%86%E7%A0%81.jpg)
+
+   - 基本操作命令
+
+     - `info replication`：可以查看复制结点的主从关系和配置信息
+     - `replicaof 主库IP 主库端口`：一般写入进Redis.conf配置文件内，重启后依然生效
+     - `slaveof 主库IP 主库端口`：每次与master断开之后，都需要重新连接，除非你配置进了redis.conf文件；在运行期间修改slave节点的信息，如果该数据库已经是某个主数据库的从数据库，那么会停止和原主数据库的同步关系。转而和新的主数据库同步，重新拜码头
+     - `slaveof no one`：使当前数据库停止与其他数据库的同步，转成主数据库，自立为王
+
+## 二、Redis复制实操
+
+### 一、配置文件修改
+
+1. 架构说明
+
+   - 一个Master两个Slave，三台虚拟机，每台都安装redis
+   - 拷贝多个redis.conf文件，分别为redis6379.conf、redis6380.conf、redis6381.conf
+
+2. 三台虚拟机需要能相互ping通且需要注意防火墙配置
+
+3. 主从复制三大命令
+
+   - 主从复制：`replicaof 主库IP 主库端口`，配从（库）不配主（库）
+   - 改换门庭：`slaveof 新主库IP 新主库端口`
+
+   - 自立为王：`slaveof no one`
+
+4. 修改配置文件细节操作：从机需要配置，主机不用。以redis6379.conf为例，步骤如下：
+
+   - 开启daemonize yes
+
+     ![](../../../TyporaImage/4.%E9%85%8D%E7%BD%AEdaemonize%20.jpg)
+
+   - 注释掉bind 127.0.0.1
+
+   - protected-mode no
+
+     ![](../../../TyporaImage/5.%E9%85%8D%E7%BD%AEprotected-mode.jpg)
+
+   - 指定端口
+
+   - 指定当前工作目录，dir
+
+     ![](../../../TyporaImage/6.%E9%85%8D%E7%BD%AEdir.jpg)
+
+   - pid文件名字，pidfile
+
+     ![](../../../TyporaImage/7.%E9%85%8D%E7%BD%AEpidfile.jpg)
+
+   - log文件名字，logfile。如果日志文件和启动文件同级，这里可以配置为./6379.log，否则这里一定要写绝对路径，是个巨坑！！！
+
+     ![](../../../TyporaImage/8.%E9%85%8D%E7%BD%AElogfile.jpg)
+
+   - requiredpass 
+
+     ![](../../../TyporaImage/9.%E9%85%8D%E7%BD%AErequiredpass%20.jpg)
+
+   - dump.rdb名字
+
+     ![](../../../TyporaImage/10%E9%85%8D%E7%BD%AEdump.rdb%E5%90%8D%E5%AD%97.jpg)
+
+   - aof文件，appendfilename
+
+     ![](../../../TyporaImage/11.%E9%85%8D%E7%BD%AEappendfilename.jpg)
+
+   - 从机访问主机的通行密码masterauth，必须配置
+
+     ![](../../../TyporaImage/12.%E4%BB%8E%E6%9C%BA%E9%85%8D%E7%BD%AE%E4%B8%BB%E6%9C%BA%E5%AF%86%E7%A0%81.jpg)
+
+### 二、一主二仆
+
+#### 一、方案一：配置文件固定写死主从关系
+
+1. 配置文件执行命令为：`replicaof 主库IP 主库端口`
+
+2. 配从（库）不配（主）库：配置从机
+
+   ![](../../../TyporaImage/13.%E4%BB%8E%E6%9C%BA%E9%85%8D%E7%BD%AE.jpg)
+
+3. 先master后两台slave依次启动
+
+   ![](../../../TyporaImage/14.%E4%B8%BB%E4%BB%8E%E9%A1%BA%E5%BA%8F%E5%90%AF%E5%8A%A8.jpg)
+
+   ![](../../../TyporaImage/15%E4%B8%BB%E4%BB%8E%E5%AE%A2%E6%88%B7%E7%AB%AF%E8%BF%9E%E6%8E%A5.jpg)
+
+4. 主从关系查看
+
+   - 主机日志
+
+     ![](../../../TyporaImage/16.%E4%B8%BB%E6%9C%BA%E6%97%A5%E5%BF%97.jpg)
+
+   - 从机日志
+
+     ![](../../../TyporaImage/17.%E4%BB%8E%E6%9C%BA%E6%97%A5%E5%BF%97.jpg)
+
+   - 命令：info replication命令查看
+
+     ![](../../../TyporaImage/18.%E5%91%BD%E4%BB%A4%E6%9F%A5%E7%9C%8B%E4%B8%BB%E4%BB%8E%E5%85%B3%E7%B3%BB.jpg)
+
+5. 主从问题总结
+
+   - 从机不可以执行写命令
+   - slave是从头开始复制还是从切入点开始复制：首次复制直接一锅端复制，后续跟随，master写，slave跟
+   - 主机shutdown后，从机不会上位：从机不动，原地待命，从机数据可以正常使用，等待主机重启归来
+   - 主机shutdown后，重启后主从关系还在，从机还能顺利复制
+   - 某台从机down后，master继续，从机重启后可以跟上大部队
+
+#### 二、方案二：命令操作手动主从关系指令
+
+1. 从机停机去掉配置文件中的配置项，3台目前都是主机状态，各不从属
+
+   ![](../../../TyporaImage/22.%E5%8E%BB%E6%8E%89%E4%BB%8E%E6%9C%BA%E9%85%8D%E7%BD%AE.png)
+
+2. 3台master
+
+   ![](../../../TyporaImage/23.3%E5%8F%B0master.png)
+
+3. 预设的从机上执行命令：`salveof 主库IP 主库端口`
+
+   ![](../../../TyporaImage/24.slaveof%E6%95%88%E6%9E%9C.png)
+
+4. 用命令使用的话，2台从机重启后，主从关系不复存在了
+
+5. 方案一与方案二的区别：配置，持久稳定永久生效；命令，当成生效
+
+### 三、薪火相传
+
+1. 上一个slave可以是下一个slave的master，slave同样可以接收其他slaves的连接和同步请求，那么该slave作为了链条中下一个的master,可以有效减轻主master的写压力
+2. 中途变更转向:会清除之前的数据，重新建立主从关系并拷贝最新的
+3. `slaveof 新主库IP 新主库端口`
+
+### 四、反客为主
+
+- `slaveof no one`：使当前数据库停止与其他数据库的同步关系
+
+## 三、Redis复制原理和工作流程
+
+1. slave启动，同步初请
+
+   - slave启动成功链接到master后会发送一个sync命令
+   - slave首次全新连接master，一次完全同步（全量复制）将被自动执行，slave自身原有数据会被master数据覆盖清除
+
+2. 首次连接，全量复制
+
+   - master节点收到sync命令后会开始在后台保存快照（即RDB持久化，主从复制时会触发RDB），同时收集所有接收到的用于修改数据集的命令并缓存起来，master节点执行RDB持久化完后，master将RDB快照文件和所有缓存的命令发送到所有slave，以完成一次完全同步
+   - 而slave服务在接收到数据库文件数据后，将其存盘并加载到内存中，从而完成复制初始化
+
+3. 心跳持续，保持通信
+
+   - repl-ping-replica-period 10
+
+     ![](../../../TyporaImage/25.%E5%BF%83%E8%B7%B3.png)
+
+4. 进入平稳，增量复制
+
+   - master继续将新的所有收集到的修改命令自动依次传送给slave，完成同步
+
+5. 从机下线，重连续传
+
+   - master会检查backlog里面的offset，master和slave都会保存一个复制的offset还有一个masterId，offset是保存在backlog中的。master只会把已经缓存的offset后面的数据复制给slave，类似断点续传
+
+6. 复制的缺点
+
+   - 复制延时，信号衰减：由于所有的写操作都是先在Master上操作，然后同步更新到Slave上，所以从Master同步到Slave机器有一定的延迟，当系统很繁忙的时候，延迟问题会更加严重，Slave机器数量的增加也会使这个问题更加严重
+
+     ![](../../../TyporaImage/26.%E4%B8%BB%E4%BB%8E%E5%90%8C%E6%AD%A5%E5%BB%B6%E8%BF%9F.png)
+
+   - master挂了后的情况：默认情况下，不会在slave节点中自动选一个master
+
+     
