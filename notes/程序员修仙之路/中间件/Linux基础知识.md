@@ -536,7 +536,7 @@
 		#子网掩码默认255.255.255.0
 		```
 
-	- 直接修改配置文件来指定IP，并可以连接到外网，编辑：vim /etc/sysconfig/network-scripts/ifcfg-ens160（centos7是ifcfg-ens33）
+	- 直接修改配置文件来指定IP，并可以连接到外网，编辑：vim /etc/sysconfig/network-scripts/ifcfg-ens33
 
 		![image-20220815204909611](../../../TyporaImage/a414c7903674fcdaf58a3f3e8ab13725f9a4b2ae.png)
 

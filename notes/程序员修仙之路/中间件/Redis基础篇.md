@@ -2605,9 +2605,9 @@ QUEUED
    - 基本操作命令
 
      - `info replication`：可以查看复制结点的主从关系和配置信息
-     - `replicaof 主库IP 主库端口`：一般写入进Redis.conf配置文件内，重启后依然生效
-     - `slaveof 主库IP 主库端口`：每次与master断开之后，都需要重新连接，除非你配置进了redis.conf文件；在运行期间修改slave节点的信息，如果该数据库已经是某个主数据库的从数据库，那么会停止和原主数据库的同步关系。转而和新的主数据库同步，重新拜码头
-     - `slaveof no one`：使当前数据库停止与其他数据库的同步，转成主数据库，自立为王
+     - `replicaof 主库IP 主库端口`：一般写入进Redis.conf配置文件内，重启后依然生效。也就是通过修改配置文件使从库与主库建立连接
+     - `slaveof 主库IP 主库端口`：每次与master断开之后，都需要重新连接，除非你配置进了redis.conf文件；在运行期间修改slave节点的信息，如果该数据库已经是某个主数据库的从数据库，那么会停止和原主数据库的同步关系。转而和新的主数据库同步，重新拜码头。也就是通过手动敲命令使从库与主库建立连接
+     - `slaveof no one`：使当前数据库停止与其他数据库的同步，转成主数据库，自己做自己的王
 
 ## 二、Redis复制实操
 
@@ -2639,7 +2639,7 @@ QUEUED
 
      ![](../../../TyporaImage/5.%E9%85%8D%E7%BD%AEprotected-mode.jpg)
 
-   - 指定端口
+   - 指定端口，port
 
    - 指定当前工作目录，dir
 
@@ -2649,11 +2649,11 @@ QUEUED
 
      ![](../../../TyporaImage/7.%E9%85%8D%E7%BD%AEpidfile.jpg)
 
-   - log文件名字，logfile。如果日志文件和启动文件同级，这里可以配置为./6379.log，否则这里一定要写绝对路径，是个巨坑！！！
+   - log文件名字，logfile。如果日志文件和启动文件同级，这里可以配置为`./6379.log`，否则这里一定要写绝对路径
 
      ![](../../../TyporaImage/8.%E9%85%8D%E7%BD%AElogfile.jpg)
 
-   - requiredpass 
+   - requiredpass：本机访问密码
 
      ![](../../../TyporaImage/9.%E9%85%8D%E7%BD%AErequiredpass%20.jpg)
 
