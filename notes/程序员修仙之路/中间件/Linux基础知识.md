@@ -411,47 +411,47 @@
 
 3. NAT（地址转换模式）
 
-  - 地址转换模式是虚拟机和主机构建一个专用网络，并且通过虚拟网络地址转换（NAT）设备对IP进行转换。虚拟机通过共享IP可以访问外部网络，但是外部网络无法访问虚拟机
+   - 地址转换模式是虚拟机和主机构建一个专用网络，并且通过虚拟网络地址转换（NAT）设备对IP进行转换。虚拟机通过共享IP可以访问外部网络，但是外部网络无法访问虚拟机
 
-  - 如果网络ip资源紧缺，但是又希望你的虚拟机能够联网，这时候NAT模式是最好的选择。NAT模式借助虚拟NAT设备和虚拟DHCP服务器，使得虚拟机可以联网。虚拟设备中主机就相当于NAT服务器和DHCP服务器。其网络结构如下图所示：
+   - 如果网络ip资源紧缺，但是又希望你的虚拟机能够联网，这时候NAT模式是最好的选择。NAT模式借助虚拟NAT设备和虚拟DHCP服务器，使得虚拟机可以联网。虚拟设备中主机就相当于NAT服务器和DHCP服务器。其网络结构如下图所示：
 
-      	![image-20220815200210830](../../../TyporaImage/e9688aa206ae1003042fe5256a25497b91c05c05.png)
+     ![image-20220815200210830](../../../TyporaImage/e9688aa206ae1003042fe5256a25497b91c05c05.png)
 
-  - 在NAT模式中，主机网卡直接与虚拟NAT设备相连，然后虚拟NAT设备与虚拟DHCP服务器一起连接在虚拟交换机VMnet8上，这样就实现了虚拟机联网。VMware Network Adapter VMnet8虚拟网卡主要是为了实现主机与虚拟机之间的通信
+   - 在NAT模式中，主机网卡直接与虚拟NAT设备相连，然后虚拟NAT设备与虚拟DHCP服务器一起连接在虚拟交换机VMnet8上，这样就实现了虚拟机联网。VMware Network Adapter VMnet8虚拟网卡主要是为了实现主机与虚拟机之间的通信
 
-  - 首先，设置虚拟机中NAT模式的选项，打开vmware，点击“编辑”下的“虚拟网络编辑器”，设置NAT参数及DHCP参数
+   - 首先，设置虚拟机中NAT模式的选项，打开vmware，点击“编辑”下的“虚拟网络编辑器”，设置NAT参数及DHCP参数
 
-  	![image-20220815200228608](../../../TyporaImage/d62e2bb3d5a15dc2dbca6d594b875cd1b62bd5e0.png)
+       ![image-20220815200228608](../../../TyporaImage/d62e2bb3d5a15dc2dbca6d594b875cd1b62bd5e0.png)
 
-  	![image-20220815200238861](../../../TyporaImage/19e5972a9d9e6f888cf7f7997add7ecb5c989d22.png)
+     	![image-20220815200238861](../../../TyporaImage/19e5972a9d9e6f888cf7f7997add7ecb5c989d22.png)
 
-  	![image-20220815200259125](../../../TyporaImage/a9468789e50fe61d80e12ee4a1cb73855533c1fc.png)
+    	![image-20220815200259125](../../../TyporaImage/a9468789e50fe61d80e12ee4a1cb73855533c1fc.png)
 
-  - 将虚拟机的网络连接模式修改成NAT模式。首先点击“网络适配器”，选择“NAT模式”
+   - 将虚拟机的网络连接模式修改成NAT模式。首先点击“网络适配器”，选择“NAT模式”
 
-  	![image-20220815200327743](../../../TyporaImage/980fb0a5071db9d1bf88cb672f7cd7d414423d98.png)
+     ![image-20220815200327743](../../../TyporaImage/980fb0a5071db9d1bf88cb672f7cd7d414423d98.png)
 
-  - 然后开机启动系统，编辑网卡配置文件，在终端输入命令`vim /etc/sysconfig/network-scripts/ifcfg-eth0`。具体配置如下：
+   - 然后开机启动系统，编辑网卡配置文件，在终端输入命令`vim /etc/sysconfig/network-scripts/ifcfg-eth0`。具体配置如下：
 
-![image-20220815200401415](../../../TyporaImage/72bd28d00d8b752da7078c509706c890d3d6d859.png)
+     ![image-20220815200401415](../../../TyporaImage/72bd28d00d8b752da7078c509706c890d3d6d859.png)
 
-  - 编辑完成，保存退出，然后重启虚拟机网卡，动态获取ip地址，使用ping命令ping外网ip，测试能否联网
+   - 编辑完成，保存退出，然后重启虚拟机网卡，动态获取ip地址，使用ping命令ping外网ip，测试能否联网
 
-  	![image-20220815200410949](../../../TyporaImage/5ae0c3d927dc8b5ad61e6ae06483f728f295c7a9.png)
+     ![image-20220815200410949](../../../TyporaImage/5ae0c3d927dc8b5ad61e6ae06483f728f295c7a9.png)
 
-  - 之前，我们说过VMware Network Adapter VMnet8虚拟网卡的作用，那我们现在就来测试一下
+   - 之前，我们说过VMware Network Adapter VMnet8虚拟网卡的作用，那我们现在就来测试一下
 
-  	![image-20220815200426008](../../../TyporaImage/b9b4a398da088d5ae0f99344ab197a184b9e4b97.png)
+     ![image-20220815200426008](../../../TyporaImage/b9b4a398da088d5ae0f99344ab197a184b9e4b97.png)
 
-  	![image-20220815200435870](../../../TyporaImage/c4d4d256a74d094167a1605c5c506950b864920e.png)
+     ![image-20220815200435870](../../../TyporaImage/c4d4d256a74d094167a1605c5c506950b864920e.png)
 
-  - 如此看来，虚拟机能联通外网，确实不是通过VMware Network Adapter VMnet8虚拟网卡，那么为什么要有这块虚拟网卡呢？之前我们就说VMware Network Adapter VMnet8的作用是主机与虚拟机之间的通信，接下来，我们就用远程连接工具来测试一下发现连接失败
+   - 如此看来，虚拟机能联通外网，确实不是通过VMware Network Adapter VMnet8虚拟网卡，那么为什么要有这块虚拟网卡呢？之前我们就说VMware Network Adapter VMnet8的作用是主机与虚拟机之间的通信，接下来，我们就用远程连接工具来测试一下发现连接失败
 
-  	![image-20220815200451232](../../../TyporaImage/f9c0ef7cd879419b3f4147040ee600336aa4d59d.png)
+     ![image-20220815200451232](../../../TyporaImage/f9c0ef7cd879419b3f4147040ee600336aa4d59d.png)
 
-  - 然后，将VMware Network Adapter VMnet8启用之后，发现远程工具可以连接上虚拟机了
+   - 然后，将VMware Network Adapter VMnet8启用之后，发现远程工具可以连接上虚拟机了
 
-  - 那么，这就是NAT模式，利用虚拟的NAT设备以及虚拟DHCP服务器来使虚拟机连接外网，而VMware Network Adapter VMnet8虚拟网卡是用来与虚拟机通信的
+   - 那么，这就是NAT模式，利用虚拟的NAT设备以及虚拟DHCP服务器来使虚拟机连接外网，而VMware Network Adapter VMnet8虚拟网卡是用来与虚拟机通信的
 
 4. Host-Only（仅主机模式）
 
@@ -602,6 +602,20 @@
 
 	- 使用SSH进行连接登录，命令为`ssh 虚拟机用户名称@虚拟机主机名称`，使用`exit`退出连接
 	- [使用WindTerm进行远程连接](https://blog.51cto.com/yunskj/9941019)
+
+## 四、关于防火墙问题
+
+```shell
+关闭防火墙
+systemctl stop firewalld.service
+禁止防火墙开机启动
+systemctl disable firewalld.service
+放行端口和http
+firewall-cmd --add-service=http --permanent 
+firewall-cmd --zone=public --add-port=80/tcp --permanent
+重启防火墙
+firewall-cmd --reload
+```
 
 # 五、系统管理
 

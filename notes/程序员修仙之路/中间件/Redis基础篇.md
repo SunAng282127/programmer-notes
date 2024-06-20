@@ -3271,7 +3271,7 @@ QUEUED
 
    ![](../../../TyporaImage/26.cluster%20keyslot%20%E9%94%AE%E5%90%8D%E7%A7%B0.jpg)
 
-## 六、主从荣作切换迁移
+## 六、主从容错切换迁移
 
 1. 容错切换迁移
 
@@ -3309,5 +3309,512 @@ QUEUED
 
      ![](../../../TyporaImage/31.6391%E4%B8%8A%E4%BD%8D%E5%91%BD%E4%BB%A4.png)
 
+## 七、主从扩容案例
 
+1. 新建6387、6388两个服务实例配置文件+新建后启动
 
+   - IP：192.168.11.174+端口6387/端口6388
+
+   - vim /myredis/cluster/redisCluster6387.conf
+
+     ![](../../../TyporaImage/32.6387%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6.png)
+
+   - vim /myredis/cluster/redisCluster6388.conf
+
+2. 启动87/88两个新的节点实例，此时他们自己都是master
+
+   - redis-server /myredis/cluster/redisCluster6387.conf
+   - redis-server /myredis/cluster/redisCluster6388.conf
+
+3. 将新增的6387节点（空槽位）作为master节点加入集群
+
+   - 将新增的6387作为master节点加入原有集群，命令为：`redis-cli -a 密码 --cluster add-node 自己实际IP地址:6387 自己实际IP地址:6381`
+
+   - 6387就是将要作为master新增节点
+
+   - 6381就是原来集群节点里面的领路人，相当于6387拜6381的码头从而找到组织加入集群`redis-cli -a 123456 --cluster add-node 192.168.111.174:6387 192.168.111.175:6381`
+
+     ![](../../../TyporaImage/33.%E6%96%B0%E8%8A%82%E7%82%B9%E5%8A%A0%E5%85%A5%E9%9B%86%E7%BE%A4master.png)
+
+4. 检查集群情况第一次，命令为：`redis-cli -a 密码 --cluster check 真实ip地址:6381`
+
+   ![](../../../TyporaImage/34.%E5%8A%A0%E5%85%A5%E5%90%8E%E9%9B%86%E7%BE%A4%E6%83%85%E5%86%B5.png)
+
+5. 重新分派槽位，命令为：`redis-cli -a 密码 --cluster reshard IP地址:端口号`
+
+   ![](../../../TyporaImage/35.%E5%88%86%E9%85%8D%E6%A7%BD%E4%BD%8D1.png)
+
+   ![](../../../TyporaImage/36.%E5%88%86%E9%85%8D%E6%A7%BD%E4%BD%8D2.png)
+
+6. 检查集群情况第二次，命令为：`redis-cli --cluster check 真实IP地址：6381`
+
+   ![](../../../TyporaImage/37.%E9%9B%86%E7%BE%A4%E6%83%85%E5%86%B5%E6%9F%A5%E7%9C%8B.png)
+
+7. 槽位分派说明
+
+   - 为什么6387是3个新的区间，以前的还是连续？
+
+   - 重新分配成本太高，所以前3家各自匀出来一部分，从6381/6383/6385三个旧节点分别匀出1367个坑位给信节点6387
+
+     ![](../../../TyporaImage/38.%E6%A7%BD%E5%8F%B7%E5%88%86%E9%85%8D%E8%AF%B4%E6%98%8E.png)
+
+8. 为主节点6387分配从节点6388
+
+   - 命令为：`redis-cli -a 密码 --cluster add-node ip:新slave端口 IP :新master端口 --cluster-slave --cluster-master-id 新主机节ID`
+
+   - 例如`redis-cli -a 111111 --cluster add-node 192.168.111.174:6388 192.168.111.174:6387 --cluster-slave
+     --cluster-master-id 4feb6a7ee0ed2b39f86474cf4189ab2a554a40f`。其中cluster-master-id是6387的编号，按照自己的实际情况来
+
+     ![](../../../TyporaImage/38.%E4%B8%BA%E4%B8%BB%E6%9C%BA%E5%88%86%E9%85%8D%E4%BB%8E%E8%8A%82%E7%82%B9.png)
+
+9. 检查集群情况第三次，命令为：`redis-cli --cluster check 真实IP地址：6381`
+
+   ![](../../../TyporaImage/40.%E9%9B%86%E7%BE%A4%E6%83%85%E5%86%B5%E7%AC%AC%E4%B8%89%E6%AC%A1%E6%9F%A5%E7%9C%8B.png)
+
+## 八、主从缩容案例
+
+1. 目的：6387和6388下线
+
+2. 检查集群情况第一次，先获得从节点6388的节点ID，例如命令`redis-cli -a 123456 --cluster check 192.168.111.174:6388`
+
+   ![](../../../TyporaImage/41.%E8%8E%B7%E5%8F%96%E7%BC%A9%E5%AE%B9%E7%BB%93%E7%82%B9.png)
+
+3. 从集群中将4号结点6388删除，例如命令`redis-cli -a 123456 --cluster del-node 192.168.111.174:6388 218e7b8b4f81be54ff173e4776b4f4faaf7c13da`
+
+   ![](../../../TyporaImage/42.%E5%88%A0%E9%99%A4%E4%BB%8E%E8%8A%82%E7%82%B9.png)
+
+4. 将6387的槽号清空，重新分配，本例将清出来的槽号都给6381，例如命令`redis-cli -a 123456 --cluster reshard 192.168.111.175:6381`
+
+   ![](../../../TyporaImage/43.%E6%9F%A5%E8%AF%A2%E8%8A%82%E7%82%B9ID.png)
+
+   ![](../../../TyporaImage/44.%E5%88%A0%E9%99%A4%E8%8A%82%E7%82%B9%E6%A7%BD%E4%BD%8D%E5%88%86%E9%85%8D.png)
+
+5. 检查集群情况第二次，例如命令：`redis-cli -a 123456 --cluster check 192.168.111.175:6381`。4096个槽位都指给6381，它变成了8192个槽位，相当于全部都给6381了，不然要输入三次 Source node
+
+   ![](../../../TyporaImage/45.%E9%9B%86%E7%BE%A4%E7%BC%A9%E5%AE%B9%E7%AC%AC%E4%BA%8C%E6%AC%A1%E6%A3%80%E6%9F%A5.png)
+
+6. 将6387删除，例如命令：`redis-cli -a 123456 --cluster del-node 192.168.111.174:6387 307a5f6617a6eeb4949f3cb9124ed04c6962c348`
+
+   ![](../../../TyporaImage/46.%E4%BB%8E%E8%8A%82%E7%82%B9%E5%88%A0%E9%99%A4.png)
+
+7. 检查集群情况第三次 6387/6388被彻底删除，例如命令：`redis-cli -a 123456 --cluster check 192.168.111.174:6381`
+
+   ![](../../../TyporaImage/47.%E9%9B%86%E7%BE%A4%E7%BC%A9%E5%AE%B9%E5%BD%BB%E5%BA%95%E5%88%A0%E9%99%A4.png)
+
+## 九、CRC16算法分析
+
+1. 不在同一个slot槽位下的多键操作支持不好，通识占位符登场
+
+   <img src="../../../TyporaImage/48.%E9%9B%86%E7%BE%A4%E5%8F%96%E5%80%BC%E5%A4%B1%E8%B4%A5.jpg" style="zoom:150%;" />
+
+2. 不在同一个slot槽位下的键值无法使用mset、mget等多键操作
+
+3. 可以通过{}来定义同一个组的概念，使key中{}内相同内容的键值对放到一个slot槽位去，对照下图类似k1k2k3都映射为x，自然槽位一样
+
+   <img src="../../../TyporaImage/49.%E9%9B%86%E7%BE%A4%E9%80%9A%E9%85%8D%E7%AC%A6%E8%8E%B7%E5%8F%96.jpg" style="zoom:150%;" />
+
+4. Redis集群有16384个哈希槽，每个key通过CRC16校验后对16384取模来决定放置哪个槽。集群的每个节点负责一部分hash槽
+
+5. CRC16源码浅谈：cluster.c源码分析
+
+   ![](../../../TyporaImage/50.crc16%E6%BA%90%E7%A0%81%E6%B5%85%E8%B0%88.jpg)
+
+## 十、集群常用操作命令
+
+1. 查看集群是否完整才能对外提供服务
+
+   ![](../../../TyporaImage/51.%E9%9B%86%E7%BE%A4%E6%98%AF%E5%90%A6%E5%AE%8C%E6%95%B4%E6%89%8D%E8%83%BD%E5%AF%B9%E5%A4%96%E6%8F%90%E4%BE%9B%E6%9C%8D%E5%8A%A1..jpg)
+
+   - cluster-require-full-coverage
+   - 默认YES，现在集群架构是3主3从的redis cluster由3个master平分16384个slot，每个master的小集群负责1/3的slot，对应一部分数据。cluster-require-full-coverage：默认值yes，即需要集群完整性，方可对外提供服务通常情况，如果这3个小集群中，任何一个(1主1从）挂了，你这个集群对外可提供的数据只有2/3了，整个集群是不完整的，redis默认在这种情况下，是不会对外提供服务的
+   - 如果你的诉求是，集群不完整的话也需要对外提供服务，需要将该参数设置为no，这样的话你挂了的那个小集群是不行了，但是其他的小集群仍然可以对外提供服务
+
+2. `CLUSTER COUNTKEYSINSLOT 槽位数字编号`。例如`CLUSTER COUNTKEYSINSLOT 12706`。返回结果：
+
+   - 1表示该槽位被占用
+   - 0表示该槽位没有被占用
+
+3. `CLUSTER KEYSLOT 键名称`。例如`CLUSTER KEYSLOT k1`。返回对应key的槽位数据，key不存在则返回0
+
+# 十一、SpringBoot集成Redis
+
+## 一、SpringBoot集成Redis简介
+
+1. 本地Java连接Redis常见问题
+
+   - bind配置请注释掉
+   - 保护模式设置为no
+   - Linux系统的防火墙设置
+   - Redis服务器的IP地址和密码是否正确
+   - 忘记写访问redis的服务端口号和auth密码
+
+2. 集成Jedis
+
+   - Jedis概述：Jedis Client是Redis官网推荐的一个面向Java客户端，库文件实现了对各类API进行封装调用
+
+   - 创建Maven
+
+   - 修改pom
+
+     ```xml
+     <properties>
+         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+         <maven.compiler.source>1.8</maven.compiler.source>
+         <maven.compiler.target>1.8</maven.compiler.target>
+         <junit.version>4.12</junit.version>
+         <log4j.version>1.2.17</log4j.version>
+         <lombok.version>1.16.18</lombok.version>
+     </properties>
+     
+     <dependencies>
+         <!--SpringBoot 通用依赖模块-->
+         <dependency>
+             <groupId>org.springframework.boot</groupId>
+             <artifactId>spring-boot-starter-web</artifactId>
+         </dependency>
+         <!-- jedis -->
+         <dependency>
+             <groupId>redis.clients</groupId>
+             <artifactId>jedis</artifactId>
+             <version>4.3.1</version>
+         </dependency>
+         <!-- 通用基础配置 -->
+         <dependency>
+             <groupId>junit</groupId>
+             <artifactId>junit</artifactId>
+             <version>${junit.version}</version>
+         </dependency>
+         <dependency>
+             <groupId>log4j</groupId>
+             <artifactId>log4j</artifactId>
+             <version>${log4j.version}</version>
+         </dependency>
+         <dependency>
+             <groupId>org.projectlombok</groupId>
+             <artifactId>lombok</artifactId>
+             <version>${lombok.version}</version>
+         </dependency>
+     
+         <dependency>
+             <groupId>org.springframework.boot</groupId>
+             <artifactId>spring-boot-starter-test</artifactId>
+             <scope>test</scope>
+         </dependency>
+     </dependencies>
+     <build>
+         <plugins>
+             <plugin>
+                 <groupId>org.springframework.boot</groupId>
+                 <artifactId>spring-boot-maven-plugin</artifactId>
+             </plugin>
+         </plugins>
+     </build>
+     ```
+
+   - 写入yaml
+
+     ```properties
+     server.port=7777
+     spring.application.name=redis7_study
+     ```
+
+   - 创建主启动
+
+   - 业务类
+
+3. 集成letter
+
+   - letter概述：Lettuce是一个Redis的Java驱动包，Lettuce翻译为生菜
+
+4. lettuce VS Jedis
+
+   ![](../../../TyporaImage/2.lettuce%20VS%20Jedis.jpg)
+
+## 二、RedisTemplate
+
+### 一、连接单机
+
+1. 创建Maven
+
+2. 修改pom
+
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <project xmlns="http://maven.apache.org/POM/4.0.0"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+       <modelVersion>4.0.0</modelVersion>
+   
+       <parent>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-starter-parent</artifactId>
+           <version>3.2.2</version>
+       </parent>
+   
+       <groupId>com.sunsh.redis</groupId>
+       <artifactId>redis-stand-alone</artifactId>
+       <version>1.0-SNAPSHOT</version>
+   
+       <properties>
+           <maven.compiler.source>21</maven.compiler.source>
+           <maven.compiler.target>21</maven.compiler.target>
+           <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+       </properties>
+   
+       <dependencies>
+           <dependency>
+               <groupId>org.springframework.boot</groupId>
+               <artifactId>spring-boot-starter-web</artifactId>
+           </dependency>
+           <!-- SpringBoot 与Redis整合依赖 -->
+           <dependency>
+               <groupId>org.springframework.boot</groupId>
+               <artifactId>spring-boot-starter-data-redis</artifactId>
+           </dependency>
+           <dependency>
+               <groupId>org.apache.commons</groupId>
+               <artifactId>commons-pool2</artifactId>
+           </dependency>
+           <dependency>
+               <groupId>org.projectlombok</groupId>
+               <artifactId>lombok</artifactId>
+           </dependency>
+       </dependencies>
+   </project>
+   ```
+
+3. 写入yaml
+
+   ```properties
+   server:
+       port: 7777
+   spring:
+       application:
+           name: redis7_study
+       mvc:
+           pathmatch:
+               matching-strategy: ant_path_matcher
+       data:
+           redis: # Redis连接配置
+               host: 192.168.35.202  # Redis主机地址
+               port: 6379  # Redis端口号
+               password: 123456  # 访问Redis所需密码
+               database: 0  # 使用的数据库编号
+               lettuce: #Lettuce客户端配置
+                   pool: # 连接池配置
+                       max-active: 8  # 最大活跃连接数
+                       max-wait: -1  # 最大等待时间（-1表示无限等待）
+                       max-idle: 8  # 最大空闲连接数
+                       min-idle: 0  # 最小空闲连接数
+   ```
+
+4. 创建主启动
+
+   ```java
+   package com.sunsh.alone;
+   
+   import org.springframework.boot.SpringApplication;
+   import org.springframework.boot.autoconfigure.SpringBootApplication;
+   
+   @SpringBootApplication
+   public class Main {
+       public static void main(String[] args) {
+           SpringApplication.run(Main.class,args);
+       }
+   }
+   
+   ```
+
+5. 业务类
+
+   - 配置类
+
+     ```java
+     package com.luojia.redis7_study.config;
+     
+     import org.springframework.context.annotation.Bean;
+     import org.springframework.context.annotation.Configuration;
+     import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+     import org.springframework.data.redis.core.RedisTemplate;
+     import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
+     import org.springframework.data.redis.serializer.StringRedisSerializer;
+     
+     @Configuration
+         public class RedisConfig {
+     
+         /**
+          * *redis序列化的工具定置类，下面这个请一定开启配置
+          * *127.0.0.1:6379> keys *
+          * *1) “ord:102” 序列化过
+          * *2)“\xaclxedlxeelx05tixeelaord:102” 野生，没有序列化过
+          * *this.redisTemplate.opsForValue(); //提供了操作string类型的所有方法
+          * *this.redisTemplate.opsForList();// 提供了操作List类型的所有方法
+          * *this.redisTemplate.opsForset(); //提供了操作set类型的所有方法
+          * *this.redisTemplate.opsForHash(); //提供了操作hash类型的所有方认
+          * *this.redisTemplate.opsForZSet(); //提供了操作zset类型的所有方法
+          * param LettuceConnectionFactory
+          * return
+          */
+         @Bean
+         public RedisTemplate<String, Object> redisTemplate(LettuceConnectionFactory lettuceConnectionFactory) {
+             RedisTemplate<String,Object> redisTemplate = new RedisTemplate<>();
+             redisTemplate.setConnectionFactory(lettuceConnectionFactory);
+             // 设置key序列化方式string
+             redisTemplate.setKeySerializer(new StringRedisSerializer());
+             // 设置value的序列化方式json，使用GenericJackson2JsonRedisSerializer替换默认序列化
+             redisTemplate.setValueSerializer(new GenericJackson2JsonRedisSerializer());
+     
+             redisTemplate.setHashKeySerializer(new StringRedisSerializer());
+             redisTemplate.setHashValueSerializer(new GenericJackson2JsonRedisSerializer());
+             redisTemplate.afterPropertiesSet();
+             return redisTemplate;
+         }
+     }
+     ```
+
+   - service
+
+     ```java
+     package com.luojia.redis7_study.service;
+     
+     import lombok.extern.slf4j.Slf4j;
+     import org.springframework.beans.factory.annotation.Autowired;
+     import org.springframework.data.redis.core.RedisTemplate;
+     import org.springframework.stereotype.Service;
+     
+     import java.util.UUID;
+     import java.util.concurrent.ThreadLocalRandom;
+     
+     @Service
+     @Slf4j
+     public class OrderService {
+     
+         @Autowired
+         private RedisTemplate redisTemplate;
+     
+         public static final String ORDER_KEY="ord:";
+     
+         public void addOrder() {
+             int keyId = ThreadLocalRandom.current().nextInt(1000) + 1;
+             String serialNo = UUID.randomUUID().toString();
+             String key = ORDER_KEY+keyId;
+             String value = "JD" + serialNo;
+             redisTemplate.opsForValue().set(key, value);
+             log.info("***key:{}", key);
+             log.info("***value:{}", value);
+     
+         }
+     
+         public String getOrderById(Integer keyId) {
+             return (String)redisTemplate.opsForValue().get(ORDER_KEY+keyId);
+         }
+     }
+     ```
+
+   - controller
+
+     ```java
+     package com.luojia.redis7_study.controller;
+     
+     import com.luojia.redis7_study.service.OrderService;
+     import io.swagger.annotations.Api;
+     import io.swagger.annotations.ApiOperation;
+     import io.swagger.models.auth.In;
+     import lombok.extern.slf4j.Slf4j;
+     import org.springframework.beans.factory.annotation.Autowired;
+     import org.springframework.web.bind.annotation.GetMapping;
+     import org.springframework.web.bind.annotation.PostMapping;
+     import org.springframework.web.bind.annotation.RestController;
+     
+     @RestController
+     @Slf4j
+     @Api(tags="订单接口")
+     public class OrderController {
+     
+         @Autowired
+         private OrderService orderService;
+     
+         @ApiOperation("新增订单")
+         @PostMapping("/order/add")
+         public void addOrder() {
+             orderService.addOrder();
+         }
+     
+         @ApiOperation("根据keyId查询订单")
+         @GetMapping("/order/query")
+         public String queryOrder(Integer keyId) {
+             return orderService.getOrderById(keyId);
+         }
+     
+     }
+     ```
+
+   - 项目启动，使用postman测试结果如下
+
+     ![image-20240620224327516](../../../TyporaImage/image-20240620224327516.png)
+
+     ![image-20240620224401351](../../../TyporaImage/image-20240620224401351.png)
+
+   - 如果出现序列化问题，则显示如下
+
+     ![](../../../TyporaImage/3.%E5%BA%8F%E5%88%97%E5%8C%96%E9%97%AE%E9%A2%98.jpg)
+
+   - 出现的原因是因为RedisTemplate使用的是JDK序列化方式（默认）
+
+     ![](../../../TyporaImage/4.RedisTemplate%20%E5%BA%8F%E5%88%97%E5%8C%96.png)
+
+     ![](../../../TyporaImage/5.jdk%E5%BA%8F%E5%88%97%E5%8C%96%E6%96%B9%E5%BC%8F.png)
+
+### 二、连接集群
+
+1. 启动Redis集群6台实例
+
+2. 第一次改写YML
+
+   ```properties
+   # ===========================redis集群===========================
+   spring.redis.password=123456
+   # 获取失败 最大重定向次数
+   spring.redis.cluster.max-redirects=3
+   spring.redis.lettuce.pool.max-active=8
+   spring.redis.1ettuce.pool.max-wait=-1ms
+   spring.redis.1ettuce.pool.max-idle=8
+   spring.redis.lettuce.pool.min-idle=0
+   spring.redis.cluster.nodes=192.168.111.175:6381,192.168.111.175:6382,192.168.111.176:6383,192.168.111.176:6384
+   ```
+
+3. 直接通过地址访问Redis集群。http://localhost:7777/swagger-ui.html
+
+4. 人为模拟，master-6381机器意外宕机，手动shutdown
+
+   - 先对redis集群用命令的方式，手动验证各种读写命令，看看6384是否上位
+
+   - Redis Cluster集群能自动感知并自动完成主备切换，对应的slave6384会被选举为新的master节点
+
+   - 通过redis客户端连接6384可以正常进行读写操作
+
+     - 客户端再次读写访问试试
+
+     - SpringBoot客户端没有动态感知RedisCluster的最新集群信息
+
+     - Redis Cluster集群部署采用了3主3从拓扑结构，数据读写访问master节点，slave节点负责备份。当master宕机主从切换成功，redis手动OK，but 2个经典故障
+
+       ![](../../../TyporaImage/6.Java%E8%BF%9E%E6%8E%A5Redis%E7%BB%8F%E5%85%B8%E6%95%85%E9%9A%9C.png)
+
+     - 导致原因：SpringBoot 2.X版本，Redis默认的连接池采用Lettuce，当Redis集群节点发生变化后，Letture默认是不会刷新节点拓扑
+
+5. 解决方案一：排除lettuce采用Jedis（不推荐）
+
+   ![](../../../TyporaImage/7.%E5%B0%86Lettuce%E4%BA%8C%E6%96%B9%E5%8C%85%E4%BB%B2%E8%A3%81%E6%8E%89.png)
+
+6. 解决方案二：重写连接工厂实例（不推荐）
+
+   ![](../../../TyporaImage/8.%E5%88%B7%E6%96%B0%E8%8A%82%E7%82%B9%E9%9B%86%E7%BE%A4%E6%8B%93%E6%89%91%E5%8A%A8%E6%80%81%E6%84%9F%E5%BA%94%E5%AE%98%E7%BD%91%E8%AF%B4%E6%98%8E.png)
+
+7. 解决方案三：刷新节点集群拓扑动态感应
+
+   ![](../../../TyporaImage/8.%E5%88%B7%E6%96%B0%E8%8A%82%E7%82%B9%E9%9B%86%E7%BE%A4%E6%8B%93%E6%89%91%E5%8A%A8%E6%80%81%E6%84%9F%E5%BA%94%E5%AE%98%E7%BD%91%E8%AF%B4%E6%98%8E-1718890464652.png)
+
+   - 调用 RedisClusterClient.reloadPartitions
+   - 后台基于时间间隔的周期刷新
+   - 后台基于持续的断开和移动、重定向的自适应更新
