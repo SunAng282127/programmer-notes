@@ -564,7 +564,7 @@ Redis GEO主要用于存储地理位置信息，并对存储的信息进行操�
 
      ![](../../../TyporaImage/24.redis-List%E7%BB%93%E6%9E%84.jpg)
 
-   - 如果键不存在，创建新的链表；如果键已存在，新增内容；如果值全移除，对应的键也就消失了
+   - 如果键不存在，创建新的链表；**如果键已存在，追加内容**；如果值全移除，对应的键也就消失了
 
    - 如果是同一个列表从左边插入的数据，则第一个插入的数据排头往中间走；如果是同一个列表从右边插入的数据，则第一个插入的数据也排头往中间走
 
@@ -2759,12 +2759,12 @@ QUEUED
 
 1. slave启动，同步初请
 
-   - slave启动成功链接到master后会发送一个sync命令
+   - slave启动成功连接到master后会发送一个sync命令
    - slave首次全新连接master，一次完全同步（全量复制）将被自动执行，slave自身原有数据会被master数据覆盖清除
 
 2. 首次连接，全量复制
 
-   - master节点收到sync命令后会开始在后台保存快照（即RDB持久化，主从复制时会触发RDB），同时收集所有接收到的用于修改数据集的命令并缓存起来，master节点执行RDB持久化完后，master将RDB快照文件和所有缓存的命令发送到所有slave，以完成一次完全同步
+   - master节点收到sync命令后会开始在后台保存快照（即RDB持久化，主从复制时会触发RDB），同时收集所有接收到的用于修改数据集的命令并缓存起来，master节点执行RDB持久化完后，master将RDB快照文件和所有缓存的命令发送到所有slave，即完成一次完全同步
    - 而slave服务在接收到数据库文件数据后，将其存盘并加载到内存中，从而完成复制初始化
 
 3. 心跳持续，保持通信
@@ -2787,6 +2787,527 @@ QUEUED
 
      ![](../../../TyporaImage/26.%E4%B8%BB%E4%BB%8E%E5%90%8C%E6%AD%A5%E5%BB%B6%E8%BF%9F.png)
 
-   - master挂了后的情况：默认情况下，不会在slave节点中自动选一个master
+   - master挂了后的情况：默认情况下，不会在slave节点中自动选一个master，所以就需要使用到哨兵和集群
 
+# 九、Redis哨兵
+
+## 一、Redis哨兵介绍
+
+1. Redis哨兵概述：吹哨人巡查监控后台master主机是否故障，如果故障了根据投票数自动将某一个从库转换为新主库，继续对外服务。俗称无人值守运维
+
+2. Redis哨兵作用
+
+   - 监控master和slave的运行状态
+   - 当master宕机后，能自动将slave切换成新master
+
+   ![](../../../TyporaImage/1.%E5%93%A8%E5%85%B5%E4%BD%9C%E7%94%A8.png)
+
+3. Redis哨兵的四大功能
+
+   - 主从监控：监控主从redis库运行是否正常
+   - 消息通知：哨兵可以将故障转移的结果发送给客户端
+   - 故障转移：如果master异常，则会进行主从切换，将其中一个slave作为新master
+   - 配置中心：客户端通过连接哨兵来获得当前Redis服务的主节点地址
+
+## 二、Redis哨兵配置参数说明
+
+### 一、Redis Sentinel架构，前提说明
+
+1. 3个哨兵：自动监控和维护集群，不存放数据，只是吹哨人
+
+2. 1主2从：用于数据读取和存放
+
+   ![](../../../TyporaImage/3.%E5%93%A8%E5%85%B5%E6%9E%B6%E6%9E%84.png)
+
+### 二、操作步骤
+
+1. myredis目录下新建或者拷贝sentinel.conf文件，名字绝对不能错
+
+2. 先查看Redis默认的sentinel.conf文件内容
+
+3. 重要参数项说明
+
+   - bind：服务监听地址，用于客户端连接，默认本机地址
+
+   - daemonize：是否以后台daemon方式运行
+
+   - protected-model：安全保护模式
+
+   - port：端口
+
+   - logfile：日志文件路径
+
+   - pidfile：pid文件路径
+
+   - dir：工作目录
+
+   - `sentinel monitor <master-name> <ip> <redis-port> <quorum>`：设置要监控的master服务器。quorum表示最少有几个哨兵认可客观下线，同意故障迁移的法定票数
+
+     ![](../../../TyporaImage/5.quorum%E7%A5%A8%E6%95%B0%E8%A7%A3%E9%87%8A.png)
+
+     网络是不可靠的有时候一个sentinel会因为网络堵塞而误以为master redis已经死掉，在sentinel集群环境下需要多个sentinel互相沟通来确认某个master是否真的死掉了，quorum这个参数是进行客观下线的一个依据，意思是至少有quorum个sentinel认为这个master有故障，才会对这个master进行下线以及故障转移。因为有的时候，某个sentinel节点可能因为自身网络原因，导致无法连接master，而此时master并没有出现故障，所以，这就需要多个sentinel都一致认为改master有问题，才可以进行下一步操作，这就保证了公平性和高可用
+
+   - `sentinel auth-pass <master-name> <password>`：master设置了密码，连接master服务的密码
+
+4. 其他参数
+
+   | 参数                                                         | 说明                                                         |
+   | ------------------------------------------------------------ | ------------------------------------------------------------ |
+   | sentinel down-after-milliseconds <master-name>  <milliseconds> | 指定多少毫秒之后，主节点没有应答哨兵，此时哨兵主观上认为主节点下线 |
+   | sentinel parallel-syncs <master-name> <nums>                 | 表示允许并行同步的slave个数，当master挂了后，哨兵会选出新的master，此时，剩余的slave会向新的master发起同步数据 |
+   | sentinel failover-timeout <master-name> <milliseconds>       | 故障转移的超时时间，进行故障转移时，如果超过设置的毫秒，表示故障转移失败 |
+   | sentinel notification-script <master-name> <script-path>     | 配置当某一事件发生时所需要执行的脚本                         |
+   | sentinel client-reconfig-script <master-name> <script-path>  | 客户端重新配置主节点参数脚本                                 |
+
+## 三、Redis Sentinel通用配置及主从配置
+
+1. sentinel26379.conf、sentinel26380.conf、sentinel26381.conf文件配置
+
+   ![](../../../TyporaImage/6.sentinel%E9%85%8D%E7%BD%AE.png)
+
+2. 最终配置
+
+   ![](../../../TyporaImage/7.sentinel%E9%9B%86%E7%BE%A4%E9%85%8D%E7%BD%AE.png)
+
+3. master主机配置文件说明：理论上sentinel配置文件应该部署在不同的服务器上，做成集群，但是本次演示将其放到一台机器上
+
+   ![](../../../TyporaImage/8.sentinel%E9%83%A8%E7%BD%B2.png)
+
+4. 先启动一主二从3个redis实例，测试正常的主从复制
+
+   - 架构说明
+
+     ![](../../../TyporaImage/9.%E6%9E%B6%E6%9E%84%E8%AF%B4%E6%98%8E.png)
+
+   - 主机6379配置修改：6379后续可能会变成从机，需要设置访问新主机的密码，所以此处会设置masterauth，不然后续可能会报错 master_link_status:down
+
+     ![](../../../TyporaImage/10.%E4%B8%BB%E6%9C%BA%E9%85%8D%E7%BD%AEmaster%E8%AE%BF%E9%97%AE%E5%AF%86%E7%A0%81.png)
+
+   - 3台不同的虚拟机实例，启动三台真是机器实例并连接
+
+     ```shell
+     redis-server redis6379.conf
      
+     redis-server redis6380.conf
+     
+     redis-server redis6381.conf
+     
+     redis-cli -a 123456 -p 6379
+     
+     redis-cli -a 123456 -p 6380
+     
+     redis-cli -a 123456 -p 6381
+     ```
+
+   - sentinel的两种启动方式
+
+     ![](../../../TyporaImage/11.sentinel%E5%90%AF%E5%8A%A8%E6%96%B9%E5%BC%8F.png)
+
+   - 再启动3个哨兵监控后再测试一次主从复制
+
+     ```shell
+     redis-server sentinel26379.conf --sentinel
+     
+     redis-server sentinel26380.conf --sentinel
+     
+     redis-server sentinel26381.conf --sentinel
+     ```
+
+     ![](../../../TyporaImage/12.sentinel%E5%90%AF%E5%8A%A8%E7%BB%93%E6%9E%9C%E6%9F%A5%E8%AF%A2.png)
+
+   - 启动后我们会发现sentinel配置文件会自动在配置文件中加上部分配置
+
+     ![](../../../TyporaImage/13.sentinel%E6%96%87%E4%BB%B6%E9%87%8D%E5%86%99.png)
+
+## 四、主节点异常情况
+
+1. 手动关闭6379服务器，模拟master挂了
+
+2. 引出的问题即答案
+
+   - master挂掉之后，所有的slave数据都是好的
+
+     ![](../../../TyporaImage/14.Broken%20Pipe.png)
+
+   - master挂掉之后，会投票选出新的master主机
+
+     ![](../../../TyporaImage/15.sentinel%E9%80%89%E4%B8%BE.png)
+
+   - master挂掉之后重启，不会出现双master，旧的master会降级为slave
+
+3. 对比配置文件
+
+   - 老master的redis6379.conf文件
+
+     ![](../../../TyporaImage/16.%E6%97%A7master%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6%E9%87%8D%E5%86%99.jpg)
+
+   - 新master的redis6381.conf文件
+
+     ![](../../../TyporaImage/17.slave%E5%8D%87master%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6%E9%87%8D%E5%86%99.jpg)
+
+4. 主节点异常之后的结论
+
+   - 文件的内容，在运行期间会被sentinel动态进行更改
+   - Master-Slave切换后，master_redis.conf、slave_redis.conf、sentinel.conf的内容都会发生改变，即master_redis.conf中会多一行slaveof的配置，而升级为master的主机会去掉原来的slaveof配置，sentinel.conf的监控目标会随之调换
+
+5. 其他备注
+
+   - 生产上都是不同机房不同服务器，很少出现3个哨兵全部挂掉的情况
+
+   - 可以同时监听多个master，一行一个
+
+     ![](../../../TyporaImage/18.%E5%A4%9Amaster%E7%9B%91%E6%8E%A7.jpg)
+
+## 五、哨兵运行流程和选举原理
+
+- 当一个主从配置中master失效后，sentinel可以选举出一个新的master用于自动接替原master的工作，主从配置中的其他redis服务器自动指向新的master同步数据，一般建议sentinel采取奇数台，防止某一台sentinel无法连接到master导致误切换
+
+### 一、运行流程，故障切换
+
+1. 三个哨兵监控一主二从，正常运行中
+
+   ![](../../../TyporaImage/3.%E5%93%A8%E5%85%B5%E6%9E%B6%E6%9E%84-1718871324548.png)
+
+2. SDown主观下线（Subjectively Down）
+
+   - SDOWN（主观不可用）是单个sentinel自己主观上检测到的关于master的状态，从sentinel的角度来看，如果发送了PING心跳后，在一定时间内没有收到合法的回复，就达到了SDOWN的条件
+
+   - sentinel配置文件中的down-after-milliseconds设置了判断主观下线的时间长度
+
+   - 说明
+
+     ![](../../../TyporaImage/19.%E4%B8%BB%E8%A7%82%E4%B8%8B%E7%BA%BF%E8%AF%B4%E6%98%8E.jpg)
+
+3. ODown客观下线（Objectively Down）
+
+   - ODOWN需要一定数量的sentinel，多个哨兵达成一致意见才能认为一个master客观上已经宕机
+
+   - 说明
+
+     ![](../../../TyporaImage/20.ODown%E5%AE%A2%E8%A7%82%E4%B8%8B%E7%BA%BF%E8%AF%B4%E6%98%8E.jpg)
+
+     quorum这个参数是进行客观下线的一个依据，法定人数/法定票数
+
+4. 选举出领导者哨兵（哨兵中选出兵王）
+
+   ![](../../../TyporaImage/21.%E4%B8%BB%E5%93%A8%E5%85%B5%E8%A7%A3%E9%87%8A.jpg)
+
+   - 当主节点被判断客观下线后，各个哨兵节点会进行协商，先选举出一个领导者哨兵节点（兵王）并由该领导者也即被选举出的兵王进行failover（故障转移）。哨兵日志文件解读分析
+
+     ![](../../../TyporaImage/22.%E5%93%A8%E5%85%B5%E5%85%B5%E7%8E%8B%E9%80%89%E4%B8%BE.jpg)
+
+   - 哨兵领导者，兵王选择算法为Raft算法
+
+     ![](../../../TyporaImage/23.Raft%E7%AE%97%E6%B3%95.jpg)
+
+     监视该主节点的所有哨兵都有可能被选为领导者，选举使用的算法是Raft算法。Raft算法的基本思路是先到先得，即在一轮选举中，哨兵A向B发送成为领导者的申请、如果B没有同意过其他哨兵，则会同意A成为领导者
+
+5. 由兵王开始推动故障切换流程并选出新的master
+
+   - 新王登基
+
+     - 某个slave被选中成为新master
+
+     - 选出新master的规则，剩余slave节点健康前提下，会按下图规则进行选举
+
+       ![](../../../TyporaImage/24.%E6%96%B0master%E9%80%89%E4%B8%BE.jpg)
+
+     - redis.conf文件中，优先级slave-priority或者replica-priority最高的从节点（数字越小优先级越高）
+
+     - 复制偏移位置offset最大的从节点（也就是在master还没有宕机时，复制到数据比其他slave要多）
+
+     - 最小Run ID的从节点，字典顺序，ASCII码
+
+   - 群臣俯首
+
+     - 一朝天子一朝臣，换个码头重新拜
+     - 执行slaveof no one命令让选出来的从节点成为新的主节点，并通过slaveof命令让其他节点成为其从节点
+     - sentinel leader会对选举出的新master执行slaveof on one操作，将其提升为master节点
+     - sentinel leader向其他slave发送命令，让剩余的slave成为新的master节点的slave
+
+   - 旧主拜服
+
+     - 老master回来也认怂，会被降级为slave
+     - 老master重新上线后，会将它设置为新选出的master的从节点
+     - sentinel leader会让原来的master降级为slave并恢复正常工作
+
+   - 兵王选举的master总结：failover操作均由sentinel自己独自完成，完全不需要人工干预
+
+     ![](../../../TyporaImage/26.%E9%80%89%E4%B8%BE%E6%96%B0master%E6%80%BB%E7%BB%93.jpg)
+
+### 二、哨兵使用建议
+
+1. 哨兵节点的数量应为多个，哨兵本身应该集群，保证高可用
+2. 哨兵节点的数量应该是奇数
+3. 各个哨兵节点的配置应一致
+4. 如果哨兵节点部署在Docker等容器里面，尤其要注意端口的正确映射
+5. 哨兵集群+主从复制，并不能保证数据零丢失，所以需要使用集群
+
+# 十、Redis集群
+
+## 一、Redis集群介绍
+
+1. Redis集群概述：由于数据量过大，单个master复制集难以承担。因此需要对多个复制集进行集群，形成水平扩展每个复制集只负责存储整个数据集的一部分，这就是Redis的集群，其作用是提供在多个Redis节点间共享数据的程序集
+
+2. Redis集群是一个提供在多个Redis节点间共享数据的程序集，Redis集群可以支持多个master
+
+   ![](../../../TyporaImage/2.redis%E9%9B%86%E7%BE%A4%E5%9B%BE.jpg)
+
+3. Redis集群作用
+   - Redis集群支持多个master，每个master又可以挂载多个slave
+     - 读写分离
+     - 支持数据的高可用
+     - 支持海量数据的读写存储操作
+   - 由于Cluster自带Sentinel的故障转移机制，内置了高可用的支持，无需再去使用哨兵功能
+   - 客户端与Redis的节点连接，不再需要连接集群中所有的节点，只需要任意连接集群中的一个可用节点即可
+   - 槽位slot负责分配到各个物理服务节点，由对应的集群来负责维护节点、插槽和数据之间的关系
+
+## 二、集群算法-分片-槽位slot
+
+1. Redis集群的槽位slot
+
+   - Redis集群的数据分片
+
+   - Redis集群没有使用一致性hash，而是引入了哈希槽的概念
+
+   - Redis集群有16384个哈希槽，每个key通过CRC16校验后对16384取模来决定放置哪个槽，集群的每个节点负责一部分hash槽，举个例子，比如当前集群有3个节点，那么：
+
+     ![](../../../TyporaImage/5.%E6%A7%BD%E4%BD%8D%E7%A4%BA%E4%BE%8B.jpg)
+
+2. Redis集群的分片
+
+   - Redis集群分片概述：使用Redis集群时我们会将存储的数据分散到多台Redis机器上，这称为分片。简言之，集群中的每个Redis实例都被认为是整个数据的一个分片
+   - 快速找到给定key分片的方法：为了找到给定key的分片，我们对key进行CRC16（key）算法处理并通过对总分片数量取模。然后，使用确定性哈希函数，这意味着给定的key将多次始终映射到同一个分片，我们可以推断将来读取特定key的位置
+
+3. 分片和槽位的优势
+
+   - 最大优势，方便扩缩容和数据分派查找
+
+   - 这种结构很容易添加或者删除节点，比如如果我想添加个节点D，我需要从节点A，B，C中得部分槽位到D上。如果我想一出节点A，需要将A中的槽移动到B和C节点上，然后将没有任何槽的节点从集群中移除即可。由于一个结点将哈希槽移动到另一个节点不会停止服务，所以无论添加删除或者改变某个节点的哈希槽的数量都不会造成集群不可用的状态
+
+     ![](../../../TyporaImage/5.%E6%A7%BD%E4%BD%8D%E7%A4%BA%E4%BE%8B-1718872304600.jpg)
+
+## 三、slot槽位映射方案
+
+### 一、哈希取余分区
+
+![6.哈希取余分区.jpg](../../../TyporaImage/6.%E5%93%88%E5%B8%8C%E5%8F%96%E4%BD%99%E5%88%86%E5%8C%BA.jpg)
+
+1. 2亿条记录就是2亿个k,v，我们单机不行必须要分布式多机，假设有3台机器构成一个集群，用户每次读写操作都是根据公式：hash(key) % N个机器台数，计算出哈希值，用来决定数据映射到哪一个节点上
+2. 优点：简单粗暴，直接有效，只需要预估好数据规划好节点，例如3台、8台、10台，就能保证一段时间的数据支撑。使用Hash算法让固定的一部分请求落到同一台服务器上，这样每台服务器固定处理一部分请求（并维护这些请求的信息）， 起到负载均衡+分而治之的作用
+3. 缺点：原来规划好的节点，进行扩容或者缩容就比较麻烦了，不管扩缩，每次数据变动导致节点有变动，映射关系需要重新进行计算，在服务器个数固定不变时没有问题，如果需要弹性扩容或故障停机的情况下，原来的取模公式就会发生变化：Hash(key)/3会变成Hash(key) /?。此时地址经过取余运算的结果将发生很大变化，根据公式获取的服务器也会变得不可控。某个redis机器宕机了，由于台数数量变化，会导致hash取余全部数据重新洗牌
+4. 此方案适用于小厂
+
+### 二、一致性哈希算法分区
+
+1. 一致性哈希算法分区概述：设计目标是为了解决分布式缓存数据变动和映射问题，某个机器宕机了，分母数量改变了，自然取余数不行了
+
+2. 一致性哈希算法作用：提出一致性Hash解决方案。目的是当服务器个数发生变动时，尽量减少影响客户端到服务器的映射关系
+
+3. 三大步骤
+
+   - 算法构建一致性哈希环：一致性哈希算法必然有个hash函数并按照算法产生hash值，这个算法的所有可能哈希值会构成一个全量集，这个集合可以成为一个hash空间[0,2^32^-1]，这个是一个线性空间，但是在算法中，我们通过适当的逻辑控制将它首尾相连(O= 2^32^),这样让它逻辑上形成了一个环形空间。它也是按照使用取模的方法，节点取模法是对节点（服务器）的数量进行取模。而一致性Hash算法是对2^32^ 取模，简单来说，一致性Hash算法将整个哈希值空间组织成一个虚拟的圆环，如假设某哈希函数H的值空间为0-2^32^-1(即哈希值是一个32位无符号整形），整个哈希环如下图：整个空间按顺时针方向组织，圆环的正上方的点代表0，0点右侧的第一个点代表1，以此类推，2、3、4、……直到2^32^-1，也就是说0点左侧的第一个点代表2^32^-1，0和2个^32^-1在零点中方向重合，我们把这个由2^32^个点组成的圆环称为Hash环
+
+     ![](../../../TyporaImage/7.Hash%E7%8E%AF.jpg)
+
+   - 服务器IP节点映射：将集群中各个IP节点映射到环上的某一个位置。将各个服务器使用Hash进行一个哈希，具体可以选择服务器的IP或主机名作为关键字进行哈希，这样每台机器就能确定其在哈希环上的位置。假如4个节点NodeA、B、C、D，经过IP地址的哈希函数计算（hash(ip)），使用IP地址哈希后在环空间的位置如下：
+
+     ![](../../../TyporaImage/8.%E5%AF%B9%E8%8A%82%E7%82%B9%E5%8F%96Hash%E5%80%BC.jpg)
+
+   - key落到服务器的落键规则：当我们需要存储一个kv键值对时，首先计算key的hash值，hash(key)，将这个key使用相同的函数Hash计算出哈希值并确定此数据在环上的位置，从此位置沿环顺时针“行走”，第一台遇到的服务器就是其应该定位到的服务器，并将该键值对存储在该节点上。如我们有Object A、 Object B、 Object C. object D四个数据对象，经过哈希计算后，在环空间上的位置如下:根据一致性Hash算法，数据A会被定为到Node A上，B被定为到Node B上，C被定为到Node C上，D被定为到Node D上
+
+     ![](../../../TyporaImage/9.key%E7%9A%84%E8%90%BD%E9%94%AE%E8%A7%84%E5%88%99.jpg)
+
+4. 优点
+
+   - 一致性哈希算法的容错性：假设Node C宕机，可以看到此时对象A、B、D不会受到影响。一般的，在一致性Hash算法中，如果一台服务器不可用，则受影响的数据仅仅是此服务器到其环空间中前一台服务悉〈即沿着逆时针方向行走遇到的第一台服务器）之间数据，其它不会受到影响。简单说，就是C挂了，受到影响的只是B、C之间的数据且这些数据会转移到D进行存储
+
+     ![](../../../TyporaImage/10.%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E5%AE%B9%E9%94%99%E6%80%A7.jpg)
+
+   - 一致性哈希算法的扩展性：数据量增加了，需要增加一台节点NodeX，X的位置在A和B之间，那收到影响的也就是A到X之间的数据，重新把A到X的数据录入到X上即可，不会导致hash取余全部数据重新洗牌
+
+     ![](../../../TyporaImage/11.%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E6%89%A9%E5%B1%95%E6%80%A7.jpg)
+
+5. 缺点
+
+   - 一致性哈希算法的数据倾斜问题
+
+   - 一致性Hash算法在服务节点太少时，容易因为节点分布不均匀而造成数据倾斜（被缓存的对象大部分集中缓存在某一台服务器上）问题，例如系统中只有两台服务器：
+
+     ![](../../../TyporaImage/12.%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E7%BC%BA%E7%82%B9.jpg)
+
+6. 一致性哈希算法分区总结
+
+   - 为了在节点数目发生改变时尽可能少的迁移数据
+   - 将所有的存储节点排列在收尾相接的Hash环上，每个key在计算Hash后会顺时针找到临近的存储节点存放。而当有节点加入或退出时仅影响该节点在Hash环上顺时针相邻的后续节点
+   - 优点：加入和删除节点只影响哈希环中顺时针方向的相邻的节点，对其他节点无影响
+   - 缺点：数据的分布和节点的位置有关，因为这些节点不是均匀的分布在哈希环上的，所以数据在进行存储时达不到均匀分布的效果
+
+7. 此方案适用于中厂
+
+### 三、哈希槽分区
+
+1. 哈希槽分区概述：HASH_SLOT = CRC16(key) mod 16384。哈希槽实质就是一个数组，数组[0, 2^14^ - 1]形成hash slot空间
+
+2. 哈希槽分区的作用：解决均匀分配的问题，在数据和节点之间又加入了一层，把这层称为哈希槽(slot)，用于管理数据和节点之间的关系，现在就相当于节点上放的是槽，槽里面放的是数据。槽解决的是粒度问题，相当于把粒度变大了，这样便于数据移动。哈希解决的是映射问题，使用key的哈希值来计算所在的槽，便于数据分配
+
+3. 哈希槽分区hash的数量：一个集群只能有16384个槽，编号0-16383(0-2^14^-1)。这些槽会分配给集群中的所有主节点，分配策略没有要求。集群会记录节点和槽的对应关系，解决了节点和槽的关系后，接下来就需要对key求哈希值，然后对16384取模，余数是几key就落入对应的槽里。HASH_SLOT = CRC16(key) mod 16384。以槽为单位移动数据，因为槽的数目是固定的，处理起来比较容易，这样数据移动问题就解决了
+
+4. 哈希槽计算：Redis集群中内置了16384个哈希槽，redis 会根据节点数量大致均等的将哈希槽映射到不同的节点。当需要在Redis集群中放置一个key-valuel时，redis先对key使用crc16算法算出一个结果然后用结果对16384求余数[ CRC16(key) % 16384]，这样每个key都会对应一个编号在0-16383之间的哈希槽，也就是映射到某个节点上。如下代码，key之A、B在Node2， key之C落在Node3上
+
+   ![](../../../TyporaImage/14.hash%E6%A7%BD%E8%AE%A1%E7%AE%97.jpg)
+
+5. 此方案适用于大厂
+
+### 四、Redis集群不保证强一致性
+
+- redis集群不保证强一致性，这意味着在特定的条件下，Redis集群可能会丢掉一些被系统收到的写入请求命令
+
+## 四、三主三从Redis集群配置
+
+1. 找3台真实虚拟机，各自新建。`mkdir -p /myredis/cluster`
+
+2. 新建6个独立的Redis实例服务
+
+   - IP：192.168.0.100 + 端口6381/6382
+
+   - vim /myredis/cluster/redisCluster6381.conf
+
+     ```shell
+     bind 0.0.0.0
+     daemonize yes
+     protected-mode no
+     port 6381
+     logfile "/myredis/cluster/cluster6381.log"
+     pidfile /myredis/cluster6381.pid
+     dir /myredis/cluster
+     dbfilename dump6381.rdb
+     appendonly yes
+     appendfilename "appendonly6381.aof"
+     requirepass 123456
+     masterauth 123456
+     
+     cluster-enabled yes
+     cluster-config-file nodes-6381.conf
+     cluster-node-timeout 5000
+     ```
+
+   - vim /myredis/cluster/redisCluster6382.conf
+
+   - IP：192.168.0.100 + 端口6383/6384
+
+   - vim /myredis/cluster/redisCluster6383.conf
+
+   - vim /myredis/cluster/redisCluster6384.conf
+
+   - IP：192.168.0.100 + 端口6385/6386
+
+   - vim /myredis/cluster/redisCluster6385.conf
+
+   - vim /myredis/cluster/redisCluster6386.conf
+
+   - 启动6台主机实例
+
+     ```shell
+     redis-server /myredis/cluster/redisCluster6381.conf
+     ...
+     redis-server /myredis/cluster/redisCluster6386.conf
+     ```
+
+   - 
+
+3. 通过redis-cli 命令为6台机器构建集群关系
+
+   ```shell
+   // 一定要注意，此处要修改自己的IP为真实IP
+   redis-cli -a 123456 --cluster create --cluster-replicas 1 192.168.111.175:6381 192.168.111.175:6382 192:168.111.172:6383 192.168.111.172:6384 192.168.111.174:6385 192.168.111.174:6386
+   ```
+
+   - --cluster- replicas 1 表示为每个master创建一一个slave节点
+
+   ![](../../../TyporaImage/17.%E5%90%AF%E5%8A%A83%E4%B8%BB3%E4%BB%8E.jpg)
+
+   - 一切OK的话，3主3从搞定
+
+   ![](../../../TyporaImage/18.3%E4%B8%BB3%E4%BB%8E.jpg)
+
+4. 6381作为切入点，查看并检验集群状态
+
+   - 连接进6381作为切入点，查看节点状态
+
+     ![](../../../TyporaImage/19.%E9%9B%86%E7%BE%A4%E8%8A%82%E7%82%B9%E7%8A%B6%E6%80%81.jpg)
+
+   - cluster nodes
+
+     ![](../../../TyporaImage/20.%E9%9B%86%E7%BE%A4%E8%8A%82%E7%82%B9%E7%8A%B6%E6%80%81%E6%9F%A5%E7%9C%8B.jpg)
+
+   - CLUSTER INFO
+
+     ![](../../../TyporaImage/21.cluster%20info.jpg)
+
+## 五、三主三从Redis集群读写
+
+1. 对6381新增连个key，看看效果如何
+
+   ![](../../../TyporaImage/22.%E9%9B%86%E7%BE%A4%E7%8E%AF%E5%A2%83%E5%AF%B96381%E6%96%B0%E5%A2%9E%E4%B8%A4%E4%B8%AAkey.jpg)
+
+2. 报错原因
+
+   ![](../../../TyporaImage/23.%E4%B8%BA%E4%BB%80%E4%B9%88%E6%8A%A5%E9%94%99.jpg)
+
+3. 解决方案
+
+   - 防止路由失效加参数-c并新增两个key：`redis-cli -a 123456 -p 6381 -c`
+
+   ![](../../../TyporaImage/24.%E9%9B%86%E7%BE%A4%E9%87%8D%E5%AE%9A%E5%90%91.jpg)
+
+4. 服务加上-c后查看集群信息
+
+   - 信息无变化
+
+   ![](../../../TyporaImage/25.%E6%9F%A5%E7%9C%8B%E9%9B%86%E7%BE%A4%E4%BF%A1%E6%81%AF.jpg)
+
+5. 查看某个key该属于对应的槽位值 cluster keyslot 键名称
+
+   ![](../../../TyporaImage/26.cluster%20keyslot%20%E9%94%AE%E5%90%8D%E7%A7%B0.jpg)
+
+## 六、主从荣作切换迁移
+
+1. 容错切换迁移
+
+   - 主6381和从机切换，先停止主机6381；6381主机停了，对应的真实从机上位；6381作为1号主机分配的从机以实际情况为准，具体是几号机器就是几号机器
+
+   - 再次查看集群信息，本次6381主6384从
+
+     ![](../../../TyporaImage/28.%E9%9B%86%E7%BE%A4%E4%B8%BB%E4%BB%8E%E6%9F%A5%E7%9C%8B.png)
+
+   - 停止主机6381，再次查看集群信息
+
+     ![](../../../TyporaImage/27.%E4%BB%8E%E6%9C%BA%E4%B8%8A%E4%BD%8D.png)
+
+   - 随后，6381原来的主机回来了， 6381不会上位并以从节点形式回归
+
+     恢复前
+
+     ![](../../../TyporaImage/29.%E9%9B%86%E7%BE%A4%E4%B8%BB%E8%8A%82%E7%82%B9%E6%81%A2%E5%A4%8D%E5%89%8D.png)
+
+     恢复后
+
+     ![](../../../TyporaImage/30.%E9%9B%86%E7%BE%A4%E4%B8%BB%E8%8A%82%E7%82%B9%E6%81%A2%E5%A4%8D%E5%90%8E.png)
+
+2. 集群不保证数据一致性100%OK，是会有数据丢失的情况
+
+   - Redis集群不保证强一致性这意味着在特定的条件下，Redis集群可能会丢掉一些被系统收到的写入请求命令
+
+3. 手动故障转移or节点从属调整该处理方案
+
+   - 上面6381宕机后，6381和6384主从对调了，和原始设计图不一样了,该如何调换主从位置呢
+
+   - 重新登录6381机器 
+
+   - 常用命令：cluster failover
+
+     ![](../../../TyporaImage/31.6391%E4%B8%8A%E4%BD%8D%E5%91%BD%E4%BB%A4.png)
+
+
+
