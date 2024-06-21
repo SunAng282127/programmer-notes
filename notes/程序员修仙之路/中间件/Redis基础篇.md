@@ -2825,7 +2825,7 @@ QUEUED
 
 2. 先查看Redis默认的sentinel.conf文件内容
 
-3. 重要参数项说明
+3. 默认的sentinel.conf文件重要参数项说明
 
    - bind：服务监听地址，用于客户端连接，默认本机地址
 
@@ -2845,7 +2845,7 @@ QUEUED
 
      ![](../../../TyporaImage/5.quorum%E7%A5%A8%E6%95%B0%E8%A7%A3%E9%87%8A.png)
 
-     网络是不可靠的有时候一个sentinel会因为网络堵塞而误以为master redis已经死掉，在sentinel集群环境下需要多个sentinel互相沟通来确认某个master是否真的死掉了，quorum这个参数是进行客观下线的一个依据，意思是至少有quorum个sentinel认为这个master有故障，才会对这个master进行下线以及故障转移。因为有的时候，某个sentinel节点可能因为自身网络原因，导致无法连接master，而此时master并没有出现故障，所以，这就需要多个sentinel都一致认为改master有问题，才可以进行下一步操作，这就保证了公平性和高可用
+     网络是不可靠的，有时候一个sentinel会因为网络堵塞而误以为master redis已经死掉，在sentinel集群环境下需要多个sentinel互相沟通来确认某个master是否真的死掉了，quorum这个参数是进行客观下线的一个依据，意思是至少有quorum个sentinel认为这个master有故障，才会对这个master进行下线以及故障转移。因为有的时候，某个sentinel节点可能因为自身网络原因，导致无法连接master，而此时master并没有出现故障，所以，这就需要多个sentinel都一致认为改master有问题，才可以进行下一步操作，这就保证了公平性和高可用
 
    - `sentinel auth-pass <master-name> <password>`：master设置了密码，连接master服务的密码
 
@@ -2861,21 +2861,23 @@ QUEUED
 
 ## 三、Redis Sentinel通用配置及主从配置
 
-1. sentinel26379.conf、sentinel26380.conf、sentinel26381.conf文件配置
+1. 新建三台虚拟机
+
+2. sentinel6382.conf、sentinel6383.conf、sentinel63824.conf文件配置
 
    ![](../../../TyporaImage/6.sentinel%E9%85%8D%E7%BD%AE.png)
 
-2. 最终配置
+3. 最终配置
 
    ![](../../../TyporaImage/7.sentinel%E9%9B%86%E7%BE%A4%E9%85%8D%E7%BD%AE.png)
 
-3. master主机配置文件说明：理论上sentinel配置文件应该部署在不同的服务器上，做成集群，但是本次演示将其放到一台机器上
+4. master主机配置文件说明：理论上sentinel配置文件应该部署在不同的服务器上，做成集群，内存够大，虚拟机可以开六台，内存不够大，虚拟机三台足以
 
    ![](../../../TyporaImage/8.sentinel%E9%83%A8%E7%BD%B2.png)
 
-4. 先启动一主二从3个redis实例，测试正常的主从复制
+5. 先启动一主二从3个redis实例，测试正常的主从复制
 
-   - 架构说明
+   - 架构说明， 在这种情况下，所有哨兵实例都监听相同的Redis主/从服务器
 
      ![](../../../TyporaImage/9.%E6%9E%B6%E6%9E%84%E8%AF%B4%E6%98%8E.png)
 
@@ -2923,7 +2925,7 @@ QUEUED
 
 1. 手动关闭6379服务器，模拟master挂了
 
-2. 引出的问题即答案
+2. 引出的问题及答案
 
    - master挂掉之后，所有的slave数据都是好的
 
@@ -2962,7 +2964,7 @@ QUEUED
 
 - 当一个主从配置中master失效后，sentinel可以选举出一个新的master用于自动接替原master的工作，主从配置中的其他redis服务器自动指向新的master同步数据，一般建议sentinel采取奇数台，防止某一台sentinel无法连接到master导致误切换
 
-### 一、运行流程，故障切换
+### 一、运行流程，故障切换，选举步骤
 
 1. 三个哨兵监控一主二从，正常运行中
 
@@ -2972,9 +2974,7 @@ QUEUED
 
    - SDOWN（主观不可用）是单个sentinel自己主观上检测到的关于master的状态，从sentinel的角度来看，如果发送了PING心跳后，在一定时间内没有收到合法的回复，就达到了SDOWN的条件
 
-   - sentinel配置文件中的down-after-milliseconds设置了判断主观下线的时间长度
-
-   - 说明
+   - sentinel配置文件中的down-after-milliseconds设置了判断主观下线的时间长度，默认30秒
 
      ![](../../../TyporaImage/19.%E4%B8%BB%E8%A7%82%E4%B8%8B%E7%BA%BF%E8%AF%B4%E6%98%8E.jpg)
 
@@ -2982,17 +2982,15 @@ QUEUED
 
    - ODOWN需要一定数量的sentinel，多个哨兵达成一致意见才能认为一个master客观上已经宕机
 
-   - 说明
-
      ![](../../../TyporaImage/20.ODown%E5%AE%A2%E8%A7%82%E4%B8%8B%E7%BA%BF%E8%AF%B4%E6%98%8E.jpg)
 
-     quorum这个参数是进行客观下线的一个依据，法定人数/法定票数
+   - quorum这个参数是进行客观下线的一个依据，法定人数/法定票数
 
 4. 选举出领导者哨兵（哨兵中选出兵王）
 
    ![](../../../TyporaImage/21.%E4%B8%BB%E5%93%A8%E5%85%B5%E8%A7%A3%E9%87%8A.jpg)
 
-   - 当主节点被判断客观下线后，各个哨兵节点会进行协商，先选举出一个领导者哨兵节点（兵王）并由该领导者也即被选举出的兵王进行failover（故障转移）。哨兵日志文件解读分析
+   - 当主节点被判断客观下线后，各个哨兵节点会进行协商，先选举出一个领导者哨兵节点（兵王）并由该领导者也即被选举出的兵王进行failover（故障转移）。由兵王选择出新的master。哨兵日志文件解读分析
 
      ![](../../../TyporaImage/22.%E5%93%A8%E5%85%B5%E5%85%B5%E7%8E%8B%E9%80%89%E4%B8%BE.jpg)
 
@@ -3014,16 +3012,16 @@ QUEUED
 
      - redis.conf文件中，优先级slave-priority或者replica-priority最高的从节点（数字越小优先级越高）
 
-     - 复制偏移位置offset最大的从节点（也就是在master还没有宕机时，复制到数据比其他slave要多）
+     - 复制偏移位置offset最大的从节点（也就是在master还没有宕机时，复制到的数据比其他slave要多）
 
      - 最小Run ID的从节点，字典顺序，ASCII码
 
    - 群臣俯首
 
      - 一朝天子一朝臣，换个码头重新拜
-     - 执行slaveof no one命令让选出来的从节点成为新的主节点，并通过slaveof命令让其他节点成为其从节点
-     - sentinel leader会对选举出的新master执行slaveof on one操作，将其提升为master节点
-     - sentinel leader向其他slave发送命令，让剩余的slave成为新的master节点的slave
+     - 执行`slaveof no one`命令让选出来的从节点成为新的主节点，并通过slaveof命令让其他节点成为其从节点
+     - sentinel leader会对选举出的新master执行`slaveof on one`操作，将其提升为master节点
+     - sentinel leader向其他slave发送命令`slaveof 主库IP 主库端口`，让剩余的slave成为新的master节点的slave
 
    - 旧主拜服
 
@@ -3049,11 +3047,13 @@ QUEUED
 
 1. Redis集群概述：由于数据量过大，单个master复制集难以承担。因此需要对多个复制集进行集群，形成水平扩展每个复制集只负责存储整个数据集的一部分，这就是Redis的集群，其作用是提供在多个Redis节点间共享数据的程序集
 
-2. Redis集群是一个提供在多个Redis节点间共享数据的程序集，Redis集群可以支持多个master
+2. 集群的密钥空间被分成16384个槽，有效地设置了16384个主节点的集群大小上限（但是，建议的最大节点大小约为1000个节点）。集群中的每个主节点处理16384个哈希槽的一个子集。当没有集群重新配置正在进行时（即哈希槽从一个节点移动到另一个节点），集群是稳定的。当集群稳定时，单个哈希槽将由单个节点提供服务（但是，服务节点可以有一个或多个副本，在网络分裂或故障的情况下替换它，并且可以用于扩展读取陈旧数据是可接受的操作）
+
+3. Redis集群是一个提供在多个Redis节点间共享数据的程序集，Redis集群可以支持多个master
 
    ![](../../../TyporaImage/2.redis%E9%9B%86%E7%BE%A4%E5%9B%BE.jpg)
 
-3. Redis集群作用
+4. Redis集群作用
    - Redis集群支持多个master，每个master又可以挂载多个slave
      - 读写分离
      - 支持数据的高可用
