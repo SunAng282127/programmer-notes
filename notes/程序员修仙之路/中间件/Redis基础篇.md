@@ -2695,15 +2695,15 @@ QUEUED
    - 连接master redis：连接master时可以不设置端口
 
      ```shell
-     redis-cli -a 282127
+     redis-cli -a ******
      ```
 
    - 连接slave redis：连接slave时必须写上配置的端口，并且连接的密码不是master的密码，而是slave自己的密码，master的密码在slave的配置文件中，slave会自己去解析连接
 
      ```shell
-     redis-cli -a 282127 -p 6380
+     redis-cli -a ****** -p 6380
      
-     redis-cli -a 282127 -p 6381
+     redis-cli -a ****** -p 6381
      ```
 
 4. 主从关系查看：下方的截图均来自网上
@@ -2863,7 +2863,7 @@ QUEUED
 
 1. 新建三台虚拟机
 
-2. sentinel6382.conf、sentinel6383.conf、sentinel63824.conf文件配置
+2. sentinel6382.conf、sentinel6383.conf、sentinel63824.conf文件配置。一定要将这三个文件中指定的端口号在各自服务器的防火墙中放开并重新启动防火墙，否则三台哨兵Redis服务器无法互相通信
 
    ![](../../../TyporaImage/6.sentinel%E9%85%8D%E7%BD%AE.png)
 
@@ -3083,7 +3083,7 @@ QUEUED
 
    - 最大优势，方便扩缩容和数据分派查找
 
-   - 这种结构很容易添加或者删除节点，比如如果我想添加个节点D，我需要从节点A，B，C中得部分槽位到D上。如果我想一出节点A，需要将A中的槽移动到B和C节点上，然后将没有任何槽的节点从集群中移除即可。由于一个结点将哈希槽移动到另一个节点不会停止服务，所以无论添加删除或者改变某个节点的哈希槽的数量都不会造成集群不可用的状态
+   - 这种结构很容易添加或者删除节点，比如如果我想添加个节点D，我需要从节点A，B，C中得部分槽位到D上。如果我想移除节点A，需要将A中的槽移动到B和C节点上，然后将没有任何槽的节点从集群中移除即可。由于一个结点将哈希槽移动到另一个节点不会停止服务，所以无论添加删除或者改变某个节点的哈希槽的数量都不会造成集群不可用的状态
 
      ![](../../../TyporaImage/5.%E6%A7%BD%E4%BD%8D%E7%A4%BA%E4%BE%8B-1718872304600.jpg)
 
@@ -3106,7 +3106,7 @@ QUEUED
 
 3. 三大步骤
 
-   - 算法构建一致性哈希环：一致性哈希算法必然有个hash函数并按照算法产生hash值，这个算法的所有可能哈希值会构成一个全量集，这个集合可以成为一个hash空间[0,2^32^-1]，这个是一个线性空间，但是在算法中，我们通过适当的逻辑控制将它首尾相连(O= 2^32^),这样让它逻辑上形成了一个环形空间。它也是按照使用取模的方法，节点取模法是对节点（服务器）的数量进行取模。而一致性Hash算法是对2^32^ 取模，简单来说，一致性Hash算法将整个哈希值空间组织成一个虚拟的圆环，如假设某哈希函数H的值空间为0-2^32^-1(即哈希值是一个32位无符号整形），整个哈希环如下图：整个空间按顺时针方向组织，圆环的正上方的点代表0，0点右侧的第一个点代表1，以此类推，2、3、4、……直到2^32^-1，也就是说0点左侧的第一个点代表2^32^-1，0和2个^32^-1在零点中方向重合，我们把这个由2^32^个点组成的圆环称为Hash环
+   - 算法构建一致性哈希环：一致性哈希算法必然有个hash函数并按照算法产生hash值，这个算法的所有可能哈希值会构成一个全量集，这个集合可以成为一个hash空间[0,2^32^-1]，这个是一个线性空间，但是在算法中，我们通过适当的逻辑控制将它首尾相连（0= 2^32^）,这样让它逻辑上形成了一个环形空间。它也是按照使用取模的方法，节点取模法是对节点（服务器）的数量进行取模。而一致性Hash算法是对2^32^ 取模，简单来说，一致性Hash算法将整个哈希值空间组织成一个虚拟的圆环，如假设某哈希函数H的值空间为0-2^32^-1(即哈希值是一个32位无符号整形），整个哈希环如下图：整个空间按顺时针方向组织，圆环的正上方的点代表0，0点右侧的第一个点代表1，以此类推，1、2、3、4、……直到2^32^-1，也就是说0点左侧的第一个点代表2^32^-1，0和2个^32^-1在零点中方向重合，我们把这个由2^32^个点组成的圆环称为Hash环
 
      ![](../../../TyporaImage/7.Hash%E7%8E%AF.jpg)
 
@@ -3114,13 +3114,13 @@ QUEUED
 
      ![](../../../TyporaImage/8.%E5%AF%B9%E8%8A%82%E7%82%B9%E5%8F%96Hash%E5%80%BC.jpg)
 
-   - key落到服务器的落键规则：当我们需要存储一个kv键值对时，首先计算key的hash值，hash(key)，将这个key使用相同的函数Hash计算出哈希值并确定此数据在环上的位置，从此位置沿环顺时针“行走”，第一台遇到的服务器就是其应该定位到的服务器，并将该键值对存储在该节点上。如我们有Object A、 Object B、 Object C. object D四个数据对象，经过哈希计算后，在环空间上的位置如下:根据一致性Hash算法，数据A会被定为到Node A上，B被定为到Node B上，C被定为到Node C上，D被定为到Node D上
+   - key落到服务器的落键规则：当我们需要存储一个kv键值对时，首先计算key的hash值，hash(key)，将这个key使用相同的函数Hash计算出哈希值并确定此数据在环上的位置，从此位置沿环顺时针“行走”，第一台遇到的服务器就是其应该定位到的服务器，并将该键值对存储在该节点上。如我们有Object A、 Object B、 Object C. object D四个数据对象，经过哈希计算后，在环空间上的位置如下：根据一致性Hash算法，数据A会被定为到Node A上，B被定为到Node B上，C被定为到Node C上，D被定为到Node D上
 
      ![](../../../TyporaImage/9.key%E7%9A%84%E8%90%BD%E9%94%AE%E8%A7%84%E5%88%99.jpg)
 
 4. 优点
 
-   - 一致性哈希算法的容错性：假设Node C宕机，可以看到此时对象A、B、D不会受到影响。一般的，在一致性Hash算法中，如果一台服务器不可用，则受影响的数据仅仅是此服务器到其环空间中前一台服务悉〈即沿着逆时针方向行走遇到的第一台服务器）之间数据，其它不会受到影响。简单说，就是C挂了，受到影响的只是B、C之间的数据且这些数据会转移到D进行存储
+   - 一致性哈希算法的容错性：假设Node C宕机，可以看到此时对象A、B、D不会受到影响。一般的，在一致性Hash算法中，如果一台服务器不可用，则受影响的数据仅仅是此服务器到其环空间中前一台服务悉〈即沿着逆时针方向行走遇到的第一台服务器）之间数据，其它不会受到影响。简单说，就是C挂了，受到影响的只是B、C之间的数据且这些数据会转移到D进行存储，也就是C的数据还会顺时针继续“行走”，去寻找最近一个Node
 
      ![](../../../TyporaImage/10.%E4%B8%80%E8%87%B4%E6%80%A7%E5%93%88%E5%B8%8C%E7%AE%97%E6%B3%95%E5%AE%B9%E9%94%99%E6%80%A7.jpg)
 
@@ -3163,87 +3163,189 @@ QUEUED
 
 - redis集群不保证强一致性，这意味着在特定的条件下，Redis集群可能会丢掉一些被系统收到的写入请求命令
 
+### 五、哈希槽的大小是16384的原因
+
+1. Redis作者回答：CRC16算法产生的hash值有16bit，该算法可以产生2^16^=65536个值，
+   换句话说值是分布在0～65535之间，有更大的65536不用为什么只用16384（2^14^）就够了？
+
+   - 正常的心跳数据包带有节点的完整配置，可以用幂等方式用旧的节点替换旧节点，以便更新旧的配置
+   - 这意味着它们包含原始节点的插槽配置，该节点使用2k的空间和16k的插槽，但是会使用8k的空间（使用65k的插槽）。同时，由于其他设计折衷，Redis集群不太可能扩展到1000个以上的主节点
+   - 因此16k处于正确的范围内，以确保每个主机具有足够的插槽，最多可容纳1000个矩阵，但数量足够少，可以轻松地将插槽配置作为原始位图传播。请注意，在小型群集中，位图将难以压缩，因为当N较小时，位图将设置的slot / N位占设置位的很大百分比
+
+2. 翻译Redis作者的回答
+
+   - 如果槽位为65536，发送心跳信息的消息头达8k，发送的心跳包过于庞大：
+     - 在消息头中最占空间的是myslots[CLUSTER_SLOTS/8]。当槽位为65536时，这块的大小是:65536÷8÷1024=8kb
+     - 在消息头中最占空间的是myslots[CLUSTER_SLOTS/8]。当槽位为16384时，这块的大小是:16384÷8÷1024=2kb
+     - 因为每秒钟，redis节点需要发送一定数量的ping消息作为心跳包，如果槽位为65536，这个ping消息的消息头太大了，浪费带宽
+   - redis的集群主节点数量基本不可能超过1000个：集群节点越多，心跳包的消息体内携带的数据越多。如果节点过1000个，也会导致网络拥堵。因此Redis作者不建议Redis cluster节点数量超过1000个。那么，对于节点数在1000以内的Redis cluster集群，16384个槽位够用了。没有必要拓展到65536个
+   - 槽位越小，节点少的情况下，压缩比高，容易传输：Redis主节点的配置信息中它所负责的哈希槽是通过一张bitmap的形式来保存的，在传输过程中会对bitmap进行压缩，但是如果bitmap的填充率slots /N很高的话(N表示节点数)， bitmap的压缩率就很低。如果节点数很少，而哈希槽数量很多的话，bitmap的压缩率就很低
+
+3. 计算结论：Redis集群中内置了16384个哈希槽，Redis会根据节点数量大致均等的将哈希槽映射到不同的节点。当需要在Redis集群中放置一个key-value时，Redis先对key使用crc16算法算出一个结果然后用结果对16384求余数[ CRC16(key) % 16384]， 这样每个key都会对应一个编号在0-16383之间的哈希槽，也就是映射到某个节点上。如下代码，key之A、B在Node2， key之C落在Node3上
+
+   ![](../../../TyporaImage/14.hash%E6%A7%BD%E8%AE%A1%E7%AE%97-1719023371114.jpg)
+
 ## 四、三主三从Redis集群配置
 
-1. 找3台真实虚拟机，各自新建。`mkdir -p /myredis/cluster`
+1. 拓扑图
 
-2. 新建6个独立的Redis实例服务
+   ![](../../../TyporaImage/2.redis%E9%9B%86%E7%BE%A4%E5%9B%BE.jpg)
 
-   - IP：192.168.0.100 + 端口6381/6382
+2. 找6台真实虚拟机，各自新建。`mkdir -p /myredis/cluster`
 
-   - vim /myredis/cluster/redisCluster6381.conf
+3. 新建6个独立的Redis实例服务
+
+   - 每个Redis服务器的cluster目录下新增配置文件，示例编辑，vim redisCluster6380.conf
 
      ```shell
      bind 0.0.0.0
      daemonize yes
      protected-mode no
-     port 6381
-     logfile "/myredis/cluster/cluster6381.log"
-     pidfile /myredis/cluster6381.pid
-     dir /myredis/cluster
-     dbfilename dump6381.rdb
+     port 6380
+     logfile "/opt/redis-7.0.5/myredis/cluster/cluster6380.log"
+     pidfile /opt/redis-7.0.5/myredis/cluster6380.pid
+     dir /opt/redis-7.0.5/myredis/cluster
+     dbfilename dump6380.rdb
      appendonly yes
-     appendfilename "appendonly6381.aof"
-     requirepass 123456
-     masterauth 123456
+     appendfilename "appendonly6380.aof"
+     requirepass ******
+     masterauth ******
      
      cluster-enabled yes
-     cluster-config-file nodes-6381.conf
+     cluster-config-file nodes-6380.conf
      cluster-node-timeout 5000
      ```
-
-   - vim /myredis/cluster/redisCluster6382.conf
-
-   - IP：192.168.0.100 + 端口6383/6384
-
-   - vim /myredis/cluster/redisCluster6383.conf
-
-   - vim /myredis/cluster/redisCluster6384.conf
-
-   - IP：192.168.0.100 + 端口6385/6386
-
-   - vim /myredis/cluster/redisCluster6385.conf
-
-   - vim /myredis/cluster/redisCluster6386.conf
 
    - 启动6台主机实例
 
      ```shell
-     redis-server /myredis/cluster/redisCluster6381.conf
+     redis-server /myredis/cluster/redisCluster6379.conf
      ...
-     redis-server /myredis/cluster/redisCluster6386.conf
+     redis-server /myredis/cluster/redisCluster6384.conf
      ```
 
-   - 
-
-3. 通过redis-cli 命令为6台机器构建集群关系
+4. 通过redis-cli命令为6台机器构建集群关系
 
    ```shell
    // 一定要注意，此处要修改自己的IP为真实IP
-   redis-cli -a 123456 --cluster create --cluster-replicas 1 192.168.111.175:6381 192.168.111.175:6382 192:168.111.172:6383 192.168.111.172:6384 192.168.111.174:6385 192.168.111.174:6386
+   redis-cli -a ****** --cluster create --cluster-replicas 1 192.168.35.202:6379 192.168.35.203:6380 192.168.35.204:6381 192.168.35.205:6382 192.168.35.206:6383 192.168.35.207:6384
    ```
 
-   - --cluster- replicas 1 表示为每个master创建一一个slave节点
+   - --cluster- replicas 1 表示为每个master创建一一个slave节点，每个master对应的slave是随机的，人为不能干预
 
-   ![](../../../TyporaImage/17.%E5%90%AF%E5%8A%A83%E4%B8%BB3%E4%BB%8E.jpg)
+     ```shell
+     >>> Performing hash slots allocation on 6 nodes...
+     Master[0] -> Slots 0 - 5460
+     Master[1] -> Slots 5461 - 10922
+     Master[2] -> Slots 10923 - 16383
+     Adding replica 192.168.35.206:6383 to 192.168.35.202:6379
+     Adding replica 192.168.35.207:6384 to 192.168.35.203:6380
+     Adding replica 192.168.35.205:6382 to 192.168.35.204:6381
+     M: 679871422e955c4f29b2c99de8a56387d96c642e 192.168.35.202:6379
+        slots:[0-5460] (5461 slots) master
+     M: d45ac0b64d2382a22559db4f335a98ab8c02c826 192.168.35.203:6380
+        slots:[5461-10922] (5462 slots) master
+     M: 052f5a09311f12727f0a8538c782919a3f19484c 192.168.35.204:6381
+        slots:[10923-16383] (5461 slots) master
+     S: 8e7c51cb39b0ccefac929dfcf94c56189945a033 192.168.35.205:6382
+        replicates 052f5a09311f12727f0a8538c782919a3f19484c
+     S: 912bbba749d1a7e2adc726720a2a297593dd30ac 192.168.35.206:6383
+        replicates 679871422e955c4f29b2c99de8a56387d96c642e
+     S: 2eac94460f2e2a8346bddcce0a146e42902aaa0c 192.168.35.207:6384
+        replicates d45ac0b64d2382a22559db4f335a98ab8c02c826
+     Can I set the above configuration? (type 'yes' to accept): yes
+     ```
 
    - 一切OK的话，3主3从搞定
 
-   ![](../../../TyporaImage/18.3%E4%B8%BB3%E4%BB%8E.jpg)
+     ```shell
+     >>> Nodes configuration updated
+     >>> Assign a different config epoch to each node
+     >>> Sending CLUSTER MEET messages to join the cluster
+     Waiting for the cluster to join
+     .
+     >>> Performing Cluster Check (using node 192.168.35.202:6379)
+     M: 679871422e955c4f29b2c99de8a56387d96c642e 192.168.35.202:6379
+        slots:[0-5460] (5461 slots) master
+        1 additional replica(s)
+     S: 2eac94460f2e2a8346bddcce0a146e42902aaa0c 192.168.35.207:6384
+        slots: (0 slots) slave
+        replicates d45ac0b64d2382a22559db4f335a98ab8c02c826
+     S: 912bbba749d1a7e2adc726720a2a297593dd30ac 192.168.35.206:6383
+        slots: (0 slots) slave
+        replicates 679871422e955c4f29b2c99de8a56387d96c642e
+     S: 8e7c51cb39b0ccefac929dfcf94c56189945a033 192.168.35.205:6382
+        slots: (0 slots) slave
+        replicates 052f5a09311f12727f0a8538c782919a3f19484c
+     M: 052f5a09311f12727f0a8538c782919a3f19484c 192.168.35.204:6381
+        slots:[10923-16383] (5461 slots) master
+        1 additional replica(s)
+     M: d45ac0b64d2382a22559db4f335a98ab8c02c826 192.168.35.203:6380
+        slots:[5461-10922] (5462 slots) master
+        1 additional replica(s)
+     [OK] All nodes agree about slots configuration.
+     >>> Check for open slots...
+     >>> Check slots coverage...
+     [OK] All 16384 slots covered.
+     ```
 
-4. 6381作为切入点，查看并检验集群状态
+   - 如果一致处于`Waiting for the cluster to join`将这6台Redis服务器对应的6个Rredis集群总线端口（ 集群总线端口是Redis客户端连接的端口+10000）在各自服务器的防火墙中放开并重新启动防火墙
 
-   - 连接进6381作为切入点，查看节点状态
+5. 6379作为切入点，查看并检验集群状态
 
-     ![](../../../TyporaImage/19.%E9%9B%86%E7%BE%A4%E8%8A%82%E7%82%B9%E7%8A%B6%E6%80%81.jpg)
+   - 连接进6379作为切入点，查看节点状态，info replication
+
+     ```shell
+     127.0.0.1:6379> info replication
+     # Replication
+     role:master
+     connected_slaves:1
+     slave0:ip=192.168.35.206,port=6383,state=online,offset=434,lag=0
+     master_failover_state:no-failover
+     master_replid:9eecec3d9eb235cda97f3d1d89728026d1d93043
+     master_replid2:0000000000000000000000000000000000000000
+     master_repl_offset:434
+     second_repl_offset:-1
+     repl_backlog_active:1
+     repl_backlog_size:1048576
+     repl_backlog_first_byte_offset:1
+     repl_backlog_histlen:434
+     ```
 
    - cluster nodes
 
-     ![](../../../TyporaImage/20.%E9%9B%86%E7%BE%A4%E8%8A%82%E7%82%B9%E7%8A%B6%E6%80%81%E6%9F%A5%E7%9C%8B.jpg)
+     ```shell
+     127.0.0.1:6379> cluster nodes
+     679871422e955c4f29b2c99de8a56387d96c642e 192.168.35.202:6379@16379 myself,master - 0 1719027547000 1 connected 0-5460
+     2eac94460f2e2a8346bddcce0a146e42902aaa0c 192.168.35.207:6384@16384 slave d45ac0b64d2382a22559db4f335a98ab8c02c826 0 1719027549100 2 connected
+     912bbba749d1a7e2adc726720a2a297593dd30ac 192.168.35.206:6383@16383 slave 679871422e955c4f29b2c99de8a56387d96c642e 0 1719027547359 1 connected
+     8e7c51cb39b0ccefac929dfcf94c56189945a033 192.168.35.205:6382@16382 slave 052f5a09311f12727f0a8538c782919a3f19484c 0 1719027548384 3 connected
+     052f5a09311f12727f0a8538c782919a3f19484c 192.168.35.204:6381@16381 master - 0 1719027549404 3 connected 10923-16383
+     d45ac0b64d2382a22559db4f335a98ab8c02c826 192.168.35.203:6380@16380 master - 0 1719027548078 2 connected 5461-10922
+     ```
 
-   - CLUSTER INFO
+   - cluster info
 
-     ![](../../../TyporaImage/21.cluster%20info.jpg)
+     ```shell
+     127.0.0.1:6379> CLUSTER INFO
+     cluster_state:ok
+     cluster_slots_assigned:16384
+     cluster_slots_ok:16384
+     cluster_slots_pfail:0
+     cluster_slots_fail:0
+     cluster_known_nodes:6
+     cluster_size:3
+     cluster_current_epoch:6
+     cluster_my_epoch:1
+     cluster_stats_messages_ping_sent:845
+     cluster_stats_messages_pong_sent:854
+     cluster_stats_messages_sent:1699
+     cluster_stats_messages_ping_received:849
+     cluster_stats_messages_pong_received:845
+     cluster_stats_messages_meet_received:5
+     cluster_stats_messages_received:1699
+     total_cluster_links_buffer_limit_exceeded:0
+     ```
 
 ## 五、三主三从Redis集群读写
 
@@ -3255,21 +3357,21 @@ QUEUED
 
    ![](../../../TyporaImage/23.%E4%B8%BA%E4%BB%80%E4%B9%88%E6%8A%A5%E9%94%99.jpg)
 
-3. 解决方案
-
-   - 防止路由失效加参数-c并新增两个key：`redis-cli -a 123456 -p 6381 -c`
+3. 解决方案，防止路由失效加参数-c并新增两个key：`redis-cli -a ****** -p 6381 -c`
 
    ![](../../../TyporaImage/24.%E9%9B%86%E7%BE%A4%E9%87%8D%E5%AE%9A%E5%90%91.jpg)
 
-4. 服务加上-c后查看集群信息
-
-   - 信息无变化
+4. 服务加上-c后查看集群信息，信息无变化
 
    ![](../../../TyporaImage/25.%E6%9F%A5%E7%9C%8B%E9%9B%86%E7%BE%A4%E4%BF%A1%E6%81%AF.jpg)
 
 5. 查看某个key该属于对应的槽位值 cluster keyslot 键名称
 
    ![](../../../TyporaImage/26.cluster%20keyslot%20%E9%94%AE%E5%90%8D%E7%A7%B0.jpg)
+   
+6. 当在同一个Redis命令端口敲命令时，由于哈希槽位的不同，会自动重定向Redis服务器
+
+   ![image-20240622122905738](../../../TyporaImage/image-20240622122905738.png)
 
 ## 六、主从容错切换迁移
 
@@ -3285,7 +3387,7 @@ QUEUED
 
      ![](../../../TyporaImage/27.%E4%BB%8E%E6%9C%BA%E4%B8%8A%E4%BD%8D.png)
 
-   - 随后，6381原来的主机回来了， 6381不会上位并以从节点形式回归
+   - 随后，6381原来的主机回来了， 6381不会上位并以slave形式回归
 
      恢复前
 
@@ -3299,13 +3401,13 @@ QUEUED
 
    - Redis集群不保证强一致性这意味着在特定的条件下，Redis集群可能会丢掉一些被系统收到的写入请求命令
 
-3. 手动故障转移or节点从属调整该处理方案
+3. 手动故障转移or节点从属调整处理方案
 
-   - 上面6381宕机后，6381和6384主从对调了，和原始设计图不一样了,该如何调换主从位置呢
+   - 上面6381宕机后，6381和6384主从对调了，和原始设计图不一样了，恢复最初主从位置的方式
 
    - 重新登录6381机器 
 
-   - 常用命令：cluster failover
+   - 节点从属调换常用命令：cluster failover
 
      ![](../../../TyporaImage/31.6391%E4%B8%8A%E4%BD%8D%E5%91%BD%E4%BB%A4.png)
 
@@ -3313,13 +3415,7 @@ QUEUED
 
 1. 新建6387、6388两个服务实例配置文件+新建后启动
 
-   - IP：192.168.11.174+端口6387/端口6388
-
-   - vim /myredis/cluster/redisCluster6387.conf
-
-     ![](../../../TyporaImage/32.6387%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6.png)
-
-   - vim /myredis/cluster/redisCluster6388.conf
+   - 配置文件和redisCluster6380.conf类似
 
 2. 启动87/88两个新的节点实例，此时他们自己都是master
 
@@ -3332,7 +3428,7 @@ QUEUED
 
    - 6387就是将要作为master新增节点
 
-   - 6381就是原来集群节点里面的领路人，相当于6387拜6381的码头从而找到组织加入集群`redis-cli -a 123456 --cluster add-node 192.168.111.174:6387 192.168.111.175:6381`
+   - 6381就是原来集群节点里面的领路人，相当于6387拜6381的码头从而找到组织加入集群`redis-cli -a ****** --cluster add-node 192.168.111.174:6387 192.168.111.175:6381`
 
      ![](../../../TyporaImage/33.%E6%96%B0%E8%8A%82%E7%82%B9%E5%8A%A0%E5%85%A5%E9%9B%86%E7%BE%A4master.png)
 
@@ -3360,7 +3456,7 @@ QUEUED
 
 8. 为主节点6387分配从节点6388
 
-   - 命令为：`redis-cli -a 密码 --cluster add-node ip:新slave端口 IP :新master端口 --cluster-slave --cluster-master-id 新主机节ID`
+   - 命令为：`redis-cli -a 密码 --cluster add-node 新slaveIP:新slave端口 新masterIP:新master端口 --cluster-slave --cluster-master-id 新主机节ID`
 
    - 例如`redis-cli -a 111111 --cluster add-node 192.168.111.174:6388 192.168.111.174:6387 --cluster-slave
      --cluster-master-id 4feb6a7ee0ed2b39f86474cf4189ab2a554a40f`。其中cluster-master-id是6387的编号，按照自己的实际情况来
@@ -3769,18 +3865,39 @@ QUEUED
 
 1. 启动Redis集群6台实例
 
-2. 第一次改写YML
+2. 第一次改写YML。其他的内容和连接单机的配置一致
 
-   ```properties
-   # ===========================redis集群===========================
-   spring.redis.password=123456
-   # 获取失败 最大重定向次数
-   spring.redis.cluster.max-redirects=3
-   spring.redis.lettuce.pool.max-active=8
-   spring.redis.1ettuce.pool.max-wait=-1ms
-   spring.redis.1ettuce.pool.max-idle=8
-   spring.redis.lettuce.pool.min-idle=0
-   spring.redis.cluster.nodes=192.168.111.175:6381,192.168.111.175:6382,192.168.111.176:6383,192.168.111.176:6384
+   ```yaml
+   server:
+       port: 7777
+   spring:
+       application:
+           name: redis7_study
+       mvc:
+           pathmatch:
+               matching-strategy: ant_path_matcher
+       data:
+           # Redis连接配置
+           redis:
+               #Lettuce客户端配置
+               lettuce:
+                   # 连接池配置
+                   pool:
+                       # 最大活跃连接数
+                       max-active: 8
+                       # 最大等待时间（-1表示无限等待）
+                       max-wait: -1
+                       # 最大空闲连接数
+                       max-idle: 8
+                       # 最小空闲连接数
+                       min-idle: 0
+               # 密码
+               password: ******
+               cluster:
+                   # 集群节点
+                   nodes: 192.168.35.202:6379, 192.168.35.203:6380, 192.168.35.204:6381, 192.168.35.205:6382, 192.168.35.206:6383, 192.168.35.207:6384
+                   # 最大重定向次数
+                   max-redirects: 5
    ```
 
 3. 直接通过地址访问Redis集群。http://localhost:7777/swagger-ui.html
@@ -3801,7 +3918,7 @@ QUEUED
 
        ![](../../../TyporaImage/6.Java%E8%BF%9E%E6%8E%A5Redis%E7%BB%8F%E5%85%B8%E6%95%85%E9%9A%9C.png)
 
-     - 导致原因：SpringBoot 2.X版本，Redis默认的连接池采用Lettuce，当Redis集群节点发生变化后，Letture默认是不会刷新节点拓扑
+     - 导致原因：SpringBoot 2.X版本，Redis默认的连接池采用Lettuce，当Redis集群节点发生变化后，Letture默认是不会刷新节点拓扑。重启项目确实可以重新获取到value，但是不能某个Redis挂掉之后，重启项目吧
 
 5. 解决方案一：排除lettuce采用Jedis（不推荐）
 
@@ -3818,3 +3935,47 @@ QUEUED
    - 调用 RedisClusterClient.reloadPartitions
    - 后台基于时间间隔的周期刷新
    - 后台基于持续的断开和移动、重定向的自适应更新
+   - 修改YML文件，加入集群动态刷新。当使用接口正在请求某个key时，某台存储此key的主机宕机后，即使配置了集群动态刷新也不能在当前请求中立即获取到对应的数据，还是要重新请求接口才能拿到数据
+   
+   ```yml
+   server:
+       port: 7777
+   spring:
+       application:
+           name: redis7_study
+       mvc:
+           pathmatch:
+               matching-strategy: ant_path_matcher
+       data:
+           # Redis连接配置
+           redis:
+               #Lettuce客户端配置
+               lettuce:
+                   # 连接池配置
+                   pool:
+                       # 最大活跃连接数
+                       max-active: 8
+                       # 最大等待时间（-1表示无限等待）
+                       max-wait: -1
+                       # 最大空闲连接数
+                       max-idle: 8
+                       # 最小空闲连接数
+                       min-idle: 0
+                   cluster:
+                     refresh:
+                         # 支持集群拓扑动态刷新，
+                         # 自适应拓扑刷新是否使用所有可用的更新，默认false关闭
+                         adaptive: true
+                         # 定时刷新间隔
+                         period: 2000
+               # 密码
+               password: ******
+               cluster:
+                   # 集群节点
+                   nodes: 192.168.35.202:6379, 192.168.35.203:6380, 192.168.35.204:6381, 192.168.35.205:6382, 192.168.35.206:6383, 192.168.35.207:6384
+                   # 最大重定向次数
+                   max-redirects: 5
+   
+   ```
+   
+   
