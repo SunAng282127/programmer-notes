@@ -3736,7 +3736,7 @@ QUEUED
      import org.springframework.data.redis.serializer.StringRedisSerializer;
      
      @Configuration
-         public class RedisConfig {
+     public class RedisConfig {
      
          /**
           * *redis序列化的工具定置类，下面这个请一定开启配置
@@ -3824,19 +3824,16 @@ QUEUED
      
      @RestController
      @Slf4j
-     @Api(tags="订单接口")
      public class OrderController {
      
          @Autowired
          private OrderService orderService;
      
-         @ApiOperation("新增订单")
          @PostMapping("/order/add")
          public void addOrder() {
              orderService.addOrder();
          }
      
-         @ApiOperation("根据keyId查询订单")
          @GetMapping("/order/query")
          public String queryOrder(Integer keyId) {
              return orderService.getOrderById(keyId);
@@ -3844,22 +3841,22 @@ QUEUED
      
      }
      ```
-
+     
    - 项目启动，使用postman测试结果如下
-
-     ![image-20240620224327516](../../../TyporaImage/image-20240620224327516.png)
-
-     ![image-20240620224401351](../../../TyporaImage/image-20240620224401351.png)
-
-   - 如果出现序列化问题，则显示如下
-
-     ![](../../../TyporaImage/3.%E5%BA%8F%E5%88%97%E5%8C%96%E9%97%AE%E9%A2%98.jpg)
-
-   - 出现的原因是因为RedisTemplate使用的是JDK序列化方式（默认）
-
-     ![](../../../TyporaImage/4.RedisTemplate%20%E5%BA%8F%E5%88%97%E5%8C%96.png)
-
-     ![](../../../TyporaImage/5.jdk%E5%BA%8F%E5%88%97%E5%8C%96%E6%96%B9%E5%BC%8F.png)
+   
+  ![image-20240620224327516](../../../TyporaImage/image-20240620224327516.png)
+   
+  ![image-20240620224401351](../../../TyporaImage/image-20240620224401351.png)
+   
+- 如果出现序列化问题，则显示如下
+   
+  ![](../../../TyporaImage/3.%E5%BA%8F%E5%88%97%E5%8C%96%E9%97%AE%E9%A2%98.jpg)
+   
+- 出现的原因是因为RedisTemplate使用的是JDK序列化方式（默认）
+   
+  ![](../../../TyporaImage/4.RedisTemplate%20%E5%BA%8F%E5%88%97%E5%8C%96.png)
+   
+  ![](../../../TyporaImage/5.jdk%E5%BA%8F%E5%88%97%E5%8C%96%E6%96%B9%E5%BC%8F.png)
 
 ### 二、连接集群
 

@@ -1824,7 +1824,559 @@
 
 ### 二、手写布隆过滤器
 
-1. 
+1. 结合bitmap类型手写一个简单的布隆过滤器，体会设计思想
+
+2. 整体架构
+
+   ![](../../../TyporaImage/9.%E6%89%8B%E5%86%99%E8%AE%BE%E8%AE%A1%E6%9E%B6%E6%9E%84.jpg)
+
+3. 步骤设计
+
+   - redis的setbit/getbit
+
+     ![](../../../TyporaImage/10.redis%E7%9A%84setbit%E5%92%8Cgetbit.jpg)
+
+   - setBit的构建过程
+
+     - @PostConstruct初始化白名单数据
+     - 计算元素的hash值
+     - 通过上一步hash值算出对应的二进制数据的坑位
+     - 将对应坑位的值修改为数字1，表示存在
+
+   - getbit查询是否存在
+
+     - 计算元素的hash值
+     - 通过上一步hash值算出对应的二进制数组的坑位
+     - 返回对应坑位的值，0表示无，1表示存在
+
+4. SpringBoot+Redis+mybatis案例基础与一键编码环境整合
+
+   - [MyBatis通用Mapper4]( https://github.com/abel533/Mapper)
+
+   - [mybatis-generator](http://mybatis.org/generator/)
+
+   - t_customer用户表SQL
+
+     ```sql
+     CREATE TABLE `t_customer` (
+       `id` int(20) NOT NULL AUTO_INCREMENT,
+       `cname` varchar(50) NOT NULL,
+       `age` int(10) NOT NULL,
+       `phone` varchar(20) NOT NULL,
+       `sex` tinyint(4) NOT NULL,
+       `birth` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+       PRIMARY KEY (`id`),
+       KEY `idx_cname` (`cname`)
+     ) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4;
+     ```
+
+   - 建SpringBoot的module  mybatis_generator
+
+   - 改pom
+
+     ```xml
+     <?xml version="1.0" encoding="UTF-8"?>
+     <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+     	<modelVersion>4.0.0</modelVersion>
+     	<parent>
+     		<groupId>org.springframework.boot</groupId>
+     		<artifactId>spring-boot-starter-parent</artifactId>
+     		<version>2.6.10</version>
+     		<relativePath/> <!-- lookup parent from repository -->
+     	</parent>
+     
+     	<groupId>com.luojia</groupId>
+     	<artifactId>mybatis_generator</artifactId>
+     	<version>0.0.1-SNAPSHOT</version>
+     	<name>mybatis_generator</name>
+     	<description>Demo project for Spring Boot</description>
+     
+     	<properties>
+     		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+     		<maven.compiler.source>1.8</maven.compiler.source>
+     		<maven.compiler.target>1.8</maven.compiler.target>
+     		<java.version>1.8</java.version>
+     		<hutool.version>5.5.8</hutool.version>
+     		<druid.version>1.1.18</druid.version>
+     		<mapper.version>4.1.5</mapper.version>
+     		<pagehelper.version>5.1.4</pagehelper.version>
+     		<mysql.version>5.1.39</mysql.version>
+     		<swagger2.version>2.9.2</swagger2.version>
+     		<swagger-ui.version>2.9.2</swagger-ui.version>
+     		<mybatis.spring.version>2.1.3</mybatis.spring.version>
+     	</properties>
+     
+     	<dependencies>
+             <!-- jedis -->
+             <dependency>
+                 <groupId>redis.clients</groupId>
+                 <artifactId>jedis</artifactId>
+                 <version>4.3.1</version>
+             </dependency>
+             <!-- SpringBoot 与Redis整合依赖 -->
+             <dependency>
+                 <groupId>org.springframework.boot</groupId>
+                 <artifactId>spring-boot-starter-data-redis</artifactId>
+             </dependency>
+             <dependency>
+                 <groupId>org.apache.commons</groupId>
+                 <artifactId>commons-pool2</artifactId>
+             </dependency>
+             <!-- Mysql 数据库驱动 -->
+             <dependency>
+                 <groupId>mysql</groupId>
+                 <artifactId>mysql-connector-java</artifactId>
+                 <version>${mysql.version}</version>
+             </dependency>
+             <!-- springboot集成druid连接池-->
+             <dependency>
+                 <groupId>com.alibaba</groupId>
+                 <artifactId>druid-spring-boot-starter</artifactId>
+                 <version>1.1.10</version>
+             </dependency>
+             <dependency>
+                 <groupId>com.alibaba</groupId>
+                 <artifactId>druid</artifactId>
+                 <version>${druid.version}</version>
+             </dependency>
+             <!-- mybatis和SpringBoot整合 -->
+             <dependency>
+                 <groupId>org.mybatis.spring.boot</groupId>
+                 <artifactId>mybatis-spring-boot-starter</artifactId>
+                 <version>${mybatis.spring.boot.version}</version>
+             </dependency>
+             <dependency>
+                 <groupId>cn.hutool</groupId>
+                 <artifactId>hutool-all</artifactId>
+                 <version>5.2.3</version>
+             </dependency>
+             <dependency>
+                 <groupId>org.springframework.boot</groupId>
+                 <artifactId>spring-boot-starter-jdbc</artifactId>
+             </dependency>
+             <!-- persistence -->
+             <dependency>
+                 <groupId>javax.persistence</groupId>
+                 <artifactId>persistence-api</artifactId>
+                 <version>1.0.2</version>
+             </dependency>
+             <!-- 通用Mapper -->
+             <dependency>
+                 <groupId>tk.mybatis</groupId>
+                 <artifactId>mapper</artifactId>
+                 <version>${mapper.version}</version>
+             </dependency>
+             <dependency>
+                 <groupId>org.springframework.boot</groupId>
+                 <artifactId>spring-boot-autoconfigure</artifactId>
+             </dependency>
+     
+             <!-- 通用基础配置 -->
+             <dependency>
+                 <groupId>junit</groupId>
+                 <artifactId>junit</artifactId>
+                 <version>${junit.version}</version>
+             </dependency>
+             <dependency>
+                 <groupId>log4j</groupId>
+                 <artifactId>log4j</artifactId>
+                 <version>${log4j.version}</version>
+             </dependency>
+             <dependency>
+                 <groupId>org.projectlombok</groupId>
+                 <artifactId>lombok</artifactId>
+                 <version>${lombok.version}</version>
+             </dependency>
+     		<!-- mybatis 通用mapper tk单独使用，自己到这版本号 -->
+     		<dependency>
+     			<groupId>org.mybatis</groupId>
+     			<artifactId>mybatis</artifactId>
+     			<version>3.4.6</version>
+     		</dependency>
+     		<!-- mybatis Generator -->
+     		<dependency>
+     			<groupId>org.mybatis.generator</groupId>
+     			<artifactId>mybatis-generator-core</artifactId>
+     			<version>1.4.0</version>
+     			<scope>compile</scope>
+     			<optional>true</optional>
+     		</dependency>
+     	</dependencies>
+     
+     	<build>
+     		<resources>
+     			<resource>
+     				<directory>${basedir}/src/main/java</directory>
+     				<includes>
+     					<include>**/*.xml</include>
+     				</includes>
+     			</resource>
+     			<resource>
+     				<directory>${basedir}/src/main/resources</directory>
+     			</resource>
+     		</resources>
+     		<plugins>
+     			<plugin>
+     				<groupId>org.springframework.boot</groupId>
+     				<artifactId>spring-boot-maven-plugin</artifactId>
+     				<configuration>
+     					<excludes>
+     						<exclude>
+     							<groupId>org.projectlombok</groupId>
+     							<artifactId>lombok</artifactId>
+     						</exclude>
+     					</excludes>
+     				</configuration>
+     			</plugin>
+     			<plugin>
+     				<groupId>org.mybatis.generator</groupId>
+     				<artifactId>mybatis-generator-maven-plugin</artifactId>
+     				<version>1.3.6</version>
+     				<configuration>
+     					<configurationFile>${basedir}/src/main/resources/generatorConfig.xml</configurationFile>
+     					<overwrite>true</overwrite>
+     					<verbose>true</verbose>
+     				</configuration>
+     				<dependencies>
+     					<dependency>
+     						<groupId>mysql</groupId>
+     						<artifactId>mysql-connector-java</artifactId>
+     						<version>${mysql.version}</version>
+     					</dependency>
+     					<dependency>
+     						<groupId>tk.mybatis</groupId>
+     						<artifactId>mapper</artifactId>
+     						<version>${mapper.version}</version>
+     					</dependency>
+     				</dependencies>
+     			</plugin>
+     		</plugins>
+     	</build>
+     </project>
+     ```
+
+   - 建YML
+
+     ```yaml
+     server:
+         port: 7777
+     spring:
+         application:
+             name: redis7_study
+         mvc:
+             pathmatch:
+                 matching-strategy: ant_path_matcher
+         data:
+             redis: # Redis连接配置
+                 host: 192.168.35.2021 # Redis主机地址
+                 port: 6379  # Redis端口号
+                 password: ******  # 访问Redis所需密码
+                 database: 0  # 使用的数据库编号
+                 lettuce: #Lettuce客户端配置
+                     pool: # 连接池配置
+                         max-active: 8  # 最大活跃连接数
+                         max-wait: -1  # 最大等待时间（-1表示无限等待）
+                         max-idle: 8  # 最大空闲连接数
+                         min-idle: 0  # 最小空闲连接数
+     ```
+
+   - mgb配置相关src/main/resource路径下新建generatorConfig.xml
+
+     ```xml
+     <?xml version="1.0" encoding="UTF-8"?>
+     <!DOCTYPE generatorConfiguration
+             PUBLIC "-//mybatis.org//DTD MyBatis Generator Configuration 1.0//EN"
+             "http://mybatis.org/dtd/mybatis-generator-config_1_0.dtd">
+     
+     <generatorConfiguration>
+         <properties resource="config.properties"/>
+     
+         <context id= "Mysql" targetRuntime="MyBatis3Simple" defaultModelType="flat" >
+             <property name="beginningDelimiter" value="`" />
+             <property name="endingDelimiter" value="`" />
+     
+             <plugin type="tk.mybatis.mapper.generator.MapperPlugin">
+                 <property name="mappers" value= "tk.mybatis.mapper.common.Mapper" />
+                 <property name="caseSensitive" value="true" />
+             </plugin>
+     
+             <jdbcConnection driverClass="${jdbc.driverClass}"
+                             connectionURL="${jdbc.url}"
+                             userId="${jdbc.user}"
+                             password="${jdbc.password}">
+             </jdbcConnection>
+     
+             <javaModelGenerator targetPackage="${package.name}.entities" targetProject="src/main/java" />
+             <sqlMapGenerator targetPackage="${package.name}.mapper" targetProject="src/main/java" />
+             <javaClientGenerator targetPackage="${package.name}.mapper" targetProject="src/main/java" type="XMLMAPPER" />
+     
+             <table tableName="t_customer" domainObjectName="Customer">
+                 <generatedKey column="id" sqlStatement="JDBC"/>
+             </table>
+         </context>
+     </generatorConfiguration>
+     ```
+
+   - 一键生成：双击插件mybatis- generator:generate，生成entity+mapper接口+xml实现SQL
+
+     ![](../../../TyporaImage/11.general%E6%96%87%E4%BB%B6%E7%94%9F%E6%88%90.jpg)
+
+   - 在src/main/resources/目录下新建mapper文件夹，并拷贝CustomerMapper.xml，并将实体类复制到entities目录中
+
+   - 主启动
+
+     ```java
+     package com.luojia.redis7_study;
+     
+     import org.springframework.boot.SpringApplication;
+     import org.springframework.boot.autoconfigure.SpringBootApplication;
+     import tk.mybatis.spring.annotation.MapperScan;
+     
+     @SpringBootApplication
+     @MapperScan("com.luojia.redis7_study.mapper")
+     public class Redis7StudyApplication {
+     
+         public static void main(String[] args) {
+             SpringApplication.run(Redis7StudyApplication.class, args);
+         }
+     }
+     ```
+
+   - 业务类：CustomerService
+
+     ```java
+     package com.luojia.redis7_study.service;
+     
+     import lombok.extern.slf4j.Slf4j;
+     import org.springframework.beans.factory.annotation.Autowired;
+     import org.springframework.data.redis.core.RedisTemplate;
+     import org.springframework.stereotype.Service;
+     
+     import javax.annotation.Resource;
+     import java.util.concurrent.TimeUnit;
+     
+     @Service
+     @Slf4j
+     public class CustomerService {
+     
+         public static final String CACHE_KEY_CUSTOMER = "customer:";
+     
+         @Resource
+         private CustomerMapper customerMapper;
+         @Autowired
+         private RedisTemplate redisTemplate;
+     
+         public void addCustomer(Customer customer) {
+             int i = customerMapper.insertSelective(customer);
+             if (i > 0) {
+                 // mysql插入成功，需要重新查询一次将数据捞出来，写进Redis
+                 Customer result = customerMapper.selectByPrimaryKey(customer.getId());
+                 // redis 缓存key
+                 String key = CACHE_KEY_CUSTOMER + result.getId();
+                 redisTemplate.opsForValue().set(key, result);
+             }
+         }
+     
+         public Customer findCustomerById(Integer customerId) {
+             Customer customer = null;
+             // 缓存redis的key名称
+             String key = CACHE_KEY_CUSTOMER + customerId;
+             // 查看redis是否存在
+             customer = (Customer) redisTemplate.opsForValue().get(key);
+     
+             // redis 不存在，取MySQL中查找
+             if (null == customer) {
+                 // 双端加锁策略
+                 synchronized (CustomerService.class) {
+                     customer = (Customer) redisTemplate.opsForValue().get(key);
+                     if (null == customer) {
+                         customer = customerMapper.selectByPrimaryKey(customerId);
+                         if (null == customer) {
+                             // 数据库没有放入redis设置缓存过期时间
+                             redisTemplate.opsForValue().set(key, customer, 60, TimeUnit.SECONDS);
+                         } else {
+                             redisTemplate.opsForValue().set(key, customer);
+                         }
+                     }
+                 }
+     
+             }
+     
+             return customer;
+         }
+     }
+     ```
+
+   - 控制类：CustomerController
+
+     ```java
+     package com.luojia.redis7_study.controller;
+     
+     import com.luojia.redis7_study.entities.Customer;
+     import com.luojia.redis7_study.service.CustomerService;
+     import io.swagger.annotations.Api;
+     import io.swagger.annotations.ApiOperation;
+     import lombok.extern.slf4j.Slf4j;
+     import org.springframework.beans.factory.annotation.Autowired;
+     import org.springframework.web.bind.annotation.PathVariable;
+     import org.springframework.web.bind.annotation.PostMapping;
+     import org.springframework.web.bind.annotation.RestController;
+     
+     import java.time.LocalDateTime;
+     import java.time.ZoneId;
+     import java.util.Date;
+     import java.util.Random;
+     
+     @Api(tags = "客户Customer接口+布隆过滤器讲解")
+     @RestController
+     @Slf4j
+     public class CustomerController {
+     
+         @Autowired
+         private CustomerService customerService;
+     
+         @ApiOperation("数据库初始化两条Customer记录")
+         @PostMapping(value = "/customer/add")
+         public void addCustomer() {
+             for (int i = 0; i < 2; i++) {
+                 Customer customer = new Customer();
+                 customer.setCname("customer" + i);
+                 customer.setAge(new Random().nextInt(30) + 1);
+                 customer.setPhone("139546556");
+                 customer.setSex((byte)new Random().nextInt(2));
+                 customer.setBirth(Date.from(LocalDateTime.now().atZone(ZoneId.systemDefault()).toInstant()));
+     
+                 customerService.addCustomer(customer);
+             }
+         }
+     
+         @ApiOperation("单个customer查询操作")
+         @PostMapping(value = "/customer/{id}")
+         public Customer findCustomerById(@PathVariable int id) {
+             return customerService.findCustomerById(id);
+         }
+     
+     }
+     
+     ```
+
+   - 新增布隆过滤器
+
+     - BloomFilterInit（白名单）：@PostConstruct初始化白名单数据
+
+       ```java
+       import lombok.extern.slf4j.Slf4j;
+       import org.springframework.beans.factory.annotation.Autowired;
+       import org.springframework.data.redis.core.RedisTemplate;
+       import org.springframework.stereotype.Component;
+       
+       import javax.annotation.PostConstruct;
+       
+       /**
+        * 布隆过滤器白名单初始化工具类，又开始就设置一部分数据为白名单所有
+        * 白名单业务默认规定：布隆过滤器有，Redis是极大可能有
+        * 白名单：whitelistCustomer
+        */
+       @Component
+       @Slf4j
+       public class BloomFilterInit {
+       
+           @Autowired
+           private RedisTemplate redisTemplate;
+       
+           @PostConstruct
+           public void init() {
+               // 1 白名单客户加载到布隆过滤器
+               String key = "customer:12";
+               // 2 计算hashvalue，由于存在计算出来负数的可能，需要取绝对值
+               int hashValue = Math.abs(key.hashCode());
+               // 3 通过hashValue和2^32取余，获得对应的下标坑位
+               long index = (long) (hashValue % Math.pow(2, 32));
+               log.info(key + "对应的坑位index：{}", index);
+               // 4 设置Redis 里面的bitmap对应白名单类型的坑位，并设置为1
+               redisTemplate.opsForValue().setBit("whitelistCustomer", index, true);
+           }
+       }
+       ```
+
+     - CheckUtils
+
+       ```java
+       @Component
+       @Slf4j
+       public class CheckUtils {
+       
+           @Autowired
+           private RedisTemplate redisTemplate;
+           
+           public boolean checkWithBloomFilter(String checkItem, String key) {
+               int hashValue = Math.abs(key.hashCode());
+               long index = (long) (hashValue % Math.pow(2, 32));
+               Boolean exitOk = redisTemplate.opsForValue().getBit(checkItem, index);
+               log.info("---> key：{}对应坑位下标index：{}是否存在：{}", key, index, exitOk);
+               return exitOk;
+           }
+       }
+       ```
+
+     - CustomerController
+
+       ```java
+       @ApiOperation("BloomFilter, 单个customer查询操作")
+       @PostMapping(value = "/customerBloomFilter/{id}")
+       public Customer findCustomerByIdWithBloomFilter(@PathVariable int id) {
+           return customerService.findCustomerByIdWithBloomFilter(id);
+       }
+       ```
+
+     - CustomerService
+
+       ```java
+       /**
+            * BloomFilter -> redis -> mysql
+            * @param customerId
+            * @return
+            */
+       public Customer findCustomerByIdWithBloomFilter(Integer customerId) {
+           Customer customer = null;
+           // 缓存redis的key名称
+           String key = CACHE_KEY_CUSTOMER + customerId;
+       
+           // 布隆过滤器check
+           if (!checkUtils.checkWithBloomFilter("whitelistCustomer", key)) {
+               log.info("白名单无此顾客，不可以访问，{}", key);
+               return null;
+           }
+       
+           // 查看redis是否存在
+           customer = (Customer) redisTemplate.opsForValue().get(key);
+           // redis 不存在，取MySQL中查找
+           if (null == customer) {
+               // 双端加锁策略
+               synchronized (CustomerService.class) {
+                   customer = (Customer) redisTemplate.opsForValue().get(key);
+                   if (null == customer) {
+                       customer = customerMapper.selectByPrimaryKey(customerId);
+                       if (null == customer) {
+                           // 数据库没有放入redis设置缓存过期时间
+                           redisTemplate.opsForValue().set(key, customer, 60, TimeUnit.SECONDS);
+                       } else {
+                           redisTemplate.opsForValue().set(key, customer);
+                       }
+                   }
+               }
+       
+           }
+           return customer;
+       }
+       ```
+
+5. 测试说明
+
+   - 布隆过滤器有，Redis有，一切都能正常访问
+   - 布隆过滤器有，Redis无，可以正常访问并会写Redis
+   - 布隆过滤器无，直接返回数据，不再继续走下去
 
 ## 七、布隆过滤器优缺点
 
