@@ -2185,7 +2185,7 @@
              // 查看redis是否存在
              customer = (Customer) redisTemplate.opsForValue().get(key);
      
-             // redis 不存在，取MySQL中查找
+             // redis 不存在，去MySQL中查找
              if (null == customer) {
                  // 双端加锁策略
                  synchronized (CustomerService.class) {
@@ -2391,3 +2391,878 @@
 1. 解决缓存穿透的问题，和redis结合bitmap使用
 2. 黑名单校验，识别垃圾邮件
 
+# 七、Redis缓存预热雪崩击穿穿透
+
+## 一、Redis缓存预热
+
+- 将热点数据提前加载到Redis缓存中，可以通过@PostConstruct提前运行某个程序，将其加载到Redis中
+
+## 二、Redis缓存雪崩
+
+1. 缓存雪崩发生前提
+
+   - Redis主机挂了，Redis全盘崩溃，偏硬件运维
+   - Redis中有大量key同时过期大面积失效，偏软件开发
+
+2. 预防 + 解决方式
+
+   - Redis中key设置为永不过期或者过期时间为指定时间+随机时间，错开同时过期的概率
+
+   - Redis缓存集群实现高可用
+
+     - 主从+哨兵
+
+
+     - Redis Cluster
+
+
+     - 开启Redis持久化机制AOF/RDB，尽快恢复缓存集群
+
+   - 多缓存结合预防雪崩
+
+     - ehcache本地缓存 + Redis缓存
+
+   - 服务降级
+
+     - Hystrix或者阿里sentinel限流&降级
+
+   - 加互斥锁
+
+     - 当热点key过期后，大量的请求涌入时，只有第一个请求能获取锁并阻塞，此时该请求查询数据库，并将查询结果写入redis后释放锁。后续的请求直接走缓存 
+
+   - 人民币玩家
+
+     - 阿里云-云数据库Redis版：https://www.aliyun.com/product/kvstore?spm=5176.54432.J_3207526240.15.2a3818a5iG191E
+
+## 三、Redis缓存穿透
+
+1. 缓存穿透概述
+
+   - 请求去查询一条记录，先查Redis无，后查mysql无，都查询不到该条记录但是请求每次都会打到数据库上面去，导致后台数据库压力暴增，这种现象我们称为缓存穿透，这个Redis变成了一个摆设
+   - 简单说就是本来无一物，两库都没有，既不在Redis缓存库，也不在mysql，数据库存在被多次暴击风险
+
+2. 解决方式
+
+   - 空对象缓存
+
+   - 使用布隆过滤器
+
+     ![](../../../TyporaImage/1.Redis+%E5%B8%83%E9%9A%86%E8%BF%87%E6%BB%A4%E5%99%A8.png)
+
+3. 解决方式一：空对象缓存或者缺省值
+
+   - 正常情况下
+
+     ```tex
+     使用空对象缓存或者缺省值这种解决方案，回写增强
+     
+     如果发生了缓存穿透，我们可以针对要查询的数据，在Redis里存一个和业务部门商量后确定的缺省值(比如,零、负数、defaultNull等)
+     比如，键uid;abcdxxx，值defaultNull作为案例的key和value
+     先去redis查键uid:abcdxxx没有，再去mysql查没有获得，这就发生了一次穿透现象
+     mysql也查不到的话也让redis存入刚刚查不到的key并保护mysql
+     
+     第一次来查询uid:abcdxxx，redis和mysql都没有，返回nul给调用者
+     但是增强回写后第二次来查uid:abcdxxx，此时redis就有值了
+     可以直接从redis中读取default缺省值返回给业务应用程序，避免了把大量请求发送给mysql处理，打爆mysql
+     
+     但是，此方法架不住黑客的恶意攻击，有缺陷......，只能解决key相同的情况
+     ```
+
+   - 有黑客或者恶意攻击的情况下
+
+     ```tex
+     黑客会对你的系统进行攻击，拿一个不存在的id去查询数据，会产生大量的请求到数据库去查询。可能会导致你的数据库由于压力过大而宕掉
+     
+     key相同打你系统：第一次打到mysql，空对象缓存后第二次就返回defaultNull缺省值，避免mysql被攻击，不用再到数据库中去走一圈了
+     
+     key不同打你系统：由于存在空对象缓存和缓存回写（看自己业务不限死），redis中的无关紧要的key也会越写越多（记得设置redis过期时间）
+     ```
+
+4. 解决方式二：Google布隆过滤器Guava解决缓存穿透
+
+   - Guava中布隆过滤器的实现算是比较权威的，所以实际项目中我们可以直接使用Guava布隆过滤器
+   - [Guava源码](https://github.com/google/guava/blob/master/guava/src/com/google/common/hash/BloomFilter.java)
+
+5. 使用Google布隆过滤器Guavas实现白名单过滤器
+
+   - 白名单架构说明
+
+     ![](../../../TyporaImage/2.%E7%99%BD%E5%90%8D%E5%8D%95%E6%9E%B6%E6%9E%84%E8%AF%B4%E6%98%8E.png)
+
+   - 误判问题，但是概率小可以接受，不能从布隆过滤器删除
+
+   - 全部合法的key都需要放入Guava版布隆过滤器+redis里面，不然数据就是返回null
+
+   - 创建建model
+
+   - 修改pom
+
+     ```xml
+     <!--guava Google 开源的 Guava 中带的布隆过德器-->
+     <dependency>
+         <groupId>com.google.guava</groupId>
+         <artifactId>guava</artifactId>
+         <version>23.0</version>
+     </dependency>
+     ```
+
+   - 主启动类
+
+   - 测试案例
+
+     ```java
+     @Test
+     public void testGuava() {
+       // 1 创建Guava 版本布隆过滤器
+         BloomFilter<Integer> bloomFilter = BloomFilter.create(Funnels.integerFunnel(), 100);
+         // 2 判断指定的元素是否存在
+         System.out.println(bloomFilter.mightContain(1));// false
+         System.out.println(bloomFilter.mightContain(2));// false
+         System.out.println();
+         // 3 将元素新增进入布隆过滤器
+         bloomFilter.put(1);
+         bloomFilter.put(2);
+         System.out.println(bloomFilter.mightContain(1));// true
+         System.out.println(bloomFilter.mightContain(2));// true
+     }
+     ```
+
+   - 新建Guava案例GuavaBloomFilterController
+
+     ```java
+     import lombok.extern.slf4j.Slf4j;
+     import org.springframework.beans.factory.annotation.Autowired;
+     import org.springframework.web.bind.annotation.GetMapping;
+     import org.springframework.web.bind.annotation.RestController;
+     
+     @RestController
+     @Slf4j
+     public class GuavaBloomFilterController {
+     
+         @Autowired
+         private GuavaBloomFilterService guavaBloomFilterService;
+     
+         @GetMapping("/guavafilter")
+         public void guavaBloomFIlterService() {
+             guavaBloomFilterService.guavaBloomFilterService();
+         }
+     }
+     ```
+
+   - 新建GuavaBloomFilterService
+
+     ```java
+     import com.google.common.hash.BloomFilter;
+     import com.google.common.hash.Funnels;
+     import lombok.extern.slf4j.Slf4j;
+     import org.springframework.stereotype.Service;
+     
+     import java.util.ArrayList;
+     
+     @Service
+     @Slf4j
+     public class GuavaBloomFilterService {
+     
+         public static final int _1w = 10000;
+         public static final int SIZE = 100 * _1w;
+         // 误判率，它越小误判的个数也就越少
+         public static double fpp = 0.03;
+         // 创建Guava 版本布隆过滤器
+         BloomFilter<Integer> bloomFilter = BloomFilter.create(Funnels.integerFunnel(), SIZE, fpp);
+     
+         public void guavaBloomFilterService() {
+             // 1 先让bloomFilter加入100w白名单数据
+             for (int i = 0; i < SIZE; i++) {
+                 bloomFilter.put(i);
+             }
+             // 2 故意去10w不在合法范围内的数据，来进行误判率演示
+             ArrayList<Integer> list = new ArrayList<>(10 * _1w);
+             // 3 验证
+             for (int i = SIZE; i < SIZE + (10 * _1w); i++) {
+                 if(bloomFilter.mightContain(i)) {
+                     log.info("被误判了：{}", i);
+                     list.add(i);
+                 }
+             }
+             log.info("误判的总数量：{}", list.size());
+         }
+     }
+     // 运行之后，结果为： 误判的总数量：3033
+     ```
+
+   - 运行结论
+
+     ```tex
+     现在总共有10万数据是不存在的，误判了3033次，
+     原始样本:100W
+     不存在数据:1000001---1100000
+     3033 / 100000 = 0.03033,和我们的误判率对得上
+     ```
+
+6. 布隆过滤器说明
+
+   ![](../../../TyporaImage/3.%E5%B8%83%E9%9A%86%E8%BF%87%E6%BB%A4%E5%99%A8%E8%AF%B4%E6%98%8E.png)
+
+## 四、Redis缓存击穿
+
+1. 缓存击穿概述
+
+   - 大量请求同时查询一个key时，此时这个key正好失效了，就会导致大量的请求都打到数据库。简单点就是热点key突然失效了，暴打MySQL
+   - 缓存穿透和缓存击穿是完全不同的东西。缓存穿透的key是数据库和redis库中都不存在的key；缓存击穿的key只是redis库中不存在，但在数据库中存在
+
+2. 缓存击穿危害：会造成某一时刻数据库请求量过大，压力剧增；一般技术部门需要知道热点key是哪些，做到心里有数防止击穿
+
+3. 热点key失效：时间到了自然清除但还是被访问到，delete掉的key，刚好又被访问到
+
+4. 解决方案：
+
+   - 互斥更新
+   - 随机退避
+   - 差异失效时间
+
+5. 解决方案一：差异失效时间，对于访问频繁的热点key，干脆就不设置过期时间
+
+6. 解决方案二：互斥更新，采用双检加锁策略
+
+   - 目的：多个线程同时去查询数据库的这条数据，那么我们可以在第一个查询数据的请求上使用一个互斥锁来锁住它。其他的线程走到这一步拿不到锁就等着，等第一个线程查询到了数据，然后做缓存。后面的线程进来发现已经有缓存了，就直接走缓存
+
+   - 需求：模拟高并发的天猫聚划算案例code 
+
+     - 100%高并发，绝对不可以用MySQL实现
+     - 先把MySQL里面参加活动的数据抽取进redis，一般采用定时器扫描来决定上线活动还是下线取消
+     - 支持分页功能，一页20条数据
+
+   - redis数据类型选择list
+
+   - 创建entity对象
+
+     ```java
+     @Data
+     @AllArgsConstructor
+     @NoArgsConstructor
+     @ApiModel(value="聚划算活动Product信息")
+     public class Product {
+     
+         // 产品id
+         private Long id;
+         // 产品名称
+         private String name;
+         // 产品价格
+         private Integer price;
+         // 产品详情
+         private String detail;
+     
+     }
+     ```
+
+   - JHSTaskService：采用定时器将参与聚划算活动的特价商品新增进入redis中
+
+     ```java
+     @Service
+     @Slf4j
+     public class JHSTaskService {
+     
+         public static final String JHS_KEY = "jhs";
+         public static final String JHS_KEY_A = "jhs:a";
+         public static final String JHS_KEY_B = "jhs:b";
+     
+         @Autowired
+         private RedisTemplate redisTemplate;
+     
+         /**
+          * 假设此处是从数据库读取，然后加载到redis
+          * @return
+          */
+         private List<Product> getProductsFromMysql() {
+             ArrayList<Product> list = new ArrayList<>();
+             for (int i = 0; i < 20; i++) {
+                 Random random = new Random();
+                 int id = random.nextInt(10000);
+                 Product product = new Product((long) id, "product" + i, i, "detail");
+                 list.add(product);
+             }
+             return list;
+         }
+     
+         @PostConstruct
+         public void initJHS() {
+             log.info("模拟定时任务从数据库中不断获取参加聚划算的商品");
+             // 1 用多线程模拟定时任务，将商品从数据库刷新到redis
+             new Thread(() -> {
+                 while(true) {
+                     // 2 模拟从数据库查询数据
+                     List<Product> list = this.getProductsFromMysql();
+                     // 3 删除原来的数据
+                     redisTemplate.delete(JHS_KEY);
+                     // 4 加入最新的数据给Redis参加活动
+                     redisTemplate.opsForList().leftPushAll(JHS_KEY, list);
+                     // 5 暂停1分钟，模拟聚划算参加商品下架上新等操作
+                     try {
+                         Thread.sleep(60000);
+                     } catch (InterruptedException e) {
+                         e.printStackTrace();
+                     }
+                 }
+             }, "t1").start();
+         }
+     }
+     ```
+
+   - JHSTaskController
+
+     ```java
+     @RestController
+     @Slf4j
+     public class JHSTaskController {
+     
+         public static final String JHS_KEY = "jhs";
+         public static final String JHS_KEY_A = "jhs:a";
+         public static final String JHS_KEY_B = "jhs:b";
+     
+         @Autowired
+         private RedisTemplate redisTemplate;
+     
+         @ApiOperation("聚划算案例，每次1页，每页5条数据")
+         @GetMapping("/product/find")
+         public List<Product> find(int page, int size) {
+             long start = (page - 1) * size;
+             long end = start + size - 1;
+             List list = redisTemplate.opsForList().range(JHS_KEY, start, end);
+             if (CollectionUtils.isEmpty(list)) {
+                 // todo Redis找不到，去数据库中查询
+             }
+             log.info("参加活动的商家: {}", list);
+             return list;
+         }
+     }
+     ```
+
+   - 异常问题：热点缓存Key突然失效导致可怕的缓存击穿。delete命令执行的一瞬间有空隙，其他请求线程继续找redis，但是结果为null，请求直接打到redis，暴击数据库
+
+     ![](../../../TyporaImage/8.%E7%83%AD%E7%82%B9key%E5%A4%B1%E6%95%88.png)
+
+     ![](../../../TyporaImage/9.%E7%BC%93%E5%AD%98%E7%A9%BF%E9%80%8F.png)
+
+   - 最终目的：2条命令原子性还是其次，主要是要防止热key突然失效
+
+     ![](../../../TyporaImage/10.%E7%BC%93%E5%AD%98%E9%97%AE%E9%A2%98%E8%A7%A3%E5%86%B3.png)
+
+   - 采用互斥更新、双检加锁策略以及差异失效时间策略
+
+     ![](../../../TyporaImage/11.%E5%B7%AE%E5%BC%82%E5%8C%96%E5%A4%B1%E6%95%88%E6%97%B6%E9%97%B4.png)
+
+   - 更新JHSTaskService
+
+     ```java
+     // 双缓存
+     @PostConstruct
+     public void initJHSAB() {
+         log.info("模拟定时任务从数据库中不断获取参加聚划算的商品");
+         // 1 用多线程模拟定时任务，将商品从数据库刷新到redis
+         new Thread(() -> {
+             while(true) {
+                 // 2 模拟从数据库查询数据
+                 List<Product> list = this.getProductsFromMysql();
+                 // 3 先更新B缓存且让B缓存过期时间超过A缓存，如果突然失效还有B兜底，防止击穿
+                 redisTemplate.delete(JHS_KEY_B);
+                 redisTemplate.opsForList().leftPushAll(JHS_KEY_B, list);
+                 // 设置过期时间为1天+10秒
+                 redisTemplate.expire(JHS_KEY_B, 86410L, TimeUnit.SECONDS);
+                 // 4 再更新缓存A
+                 redisTemplate.delete(JHS_KEY_A);
+                 redisTemplate.opsForList().leftPushAll(JHS_KEY_A, list);
+                 redisTemplate.expire(JHS_KEY_A, 86400L, TimeUnit.SECONDS);
+                 // 5 暂停1分钟，模拟聚划算参加商品下架上新等操作
+                 try {
+                     Thread.sleep(60000);
+                 } catch (InterruptedException e) {
+                     e.printStackTrace();
+                 }
+             }
+         }, "t1").start();
+     }
+     ```
+
+   - 更新JHSTaskController
+
+     ```java
+     @ApiOperation("聚划算案例，AB双缓存，防止热key突然失效")
+     @GetMapping("/product/findab")
+     public List<Product> findAB(int page, int size) {
+         List<Product> list = null;
+         long start = (page - 1) * size;
+         long end = start + size - 1;
+         list = redisTemplate.opsForList().range(JHS_KEY_A, start, end);
+         if (CollectionUtils.isEmpty(list)) {
+             //  Redis找不到，去数据库中查询
+             log.info("A缓存已经失效或活动已经结束");
+             list = redisTemplate.opsForList().range(JHS_KEY_B, start, end);
+             if (CollectionUtils.isEmpty(list)) {
+                 // todo Redis找不到，去数据库中查询
+             }
+         }
+         log.info("参加活动的商家: {}", list);
+         return list;
+     }
+     ```
+
+## 五、Redis缓存预热雪崩击穿穿透总结
+
+![](../../../TyporaImage/v2-817f2e6bde19b774cc7cd85d2d1e4b3a_r.jpg)
+
+# 八、Redis分布式锁
+
+## 一、锁的种类
+
+1. 单机版同一个虚拟机内，synchronized或者Lock接口
+2. 分布式多个不同jvm虚拟机，单机的线程锁机制不再起作用，资源类在不同的服务器之间共享了
+
+## 二、分布式锁需要具备的条件
+
+1. 独占性：任何时刻有且只能有一个线程持有
+
+2. 高可用
+
+   - 若为redis集群环境下，不能因为某一个节点挂了而出现获取锁和释放锁失败的情况
+
+
+   - 高并发请求下，依旧性能OK好使
+
+3. 防死锁：杜绝死锁，必须有超时控制机制或者撤销操作，有个兜底终止跳出方案
+
+4. 不乱抢：防止张冠李戴，不能私底下unlock别人的锁，只能自己加锁自己释放
+
+5. 重入性：同一个节点的同一个线程如果获得锁之后，它也可以再次获取这个锁
+
+## 三、分布式锁的实现
+
+### 一、set命令
+
+![](../../../TyporaImage/1.set%E5%91%BD%E4%BB%A4%E5%A4%8D%E4%B9%A0.png)
+
+- `setnx key value` + `exoire key time`为不安全命令，两条命令为非原子性命令
+
+### 二、分布式锁的逐步实现步骤
+
+1. JUC中AQS锁的规范落地参考
+
+2. 可重入锁
+
+3. Lua脚本
+
+4. Redis命令
+
+   ......一步步实现分布式锁
+
+### 三、Base案例
+
+1. 使用场景：多个服务间保证同一时间段内同一用户只能有一个请求（防止关键业务出现并发攻击）
+
+2. 创建Maven：新建redis_distributed_lock2、redis_distributed_lock3两个Module
+
+3. 修改pom
+
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+       <modelVersion>4.0.0</modelVersion>
+       <parent>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-starter-parent</artifactId>
+           <version>2.7.11</version>
+           <relativePath/> <!-- lookup parent from repository -->
+       </parent>
+       <groupId>com.luojia</groupId>
+       <artifactId>redis_distributed_lock2</artifactId>
+       <version>0.0.1-SNAPSHOT</version>
+       <name>redis_distributed_lock2</name>
+       <description>Demo project for Spring Boot</description>
+       <properties>
+           <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+           <java.version>1.8</java.version>
+           <maven.compiler.source>1.8</maven.compiler.source>
+           <maven.compiler.target>1.8</maven.compiler.target>
+           <lombok.version>1.16.18</lombok.version>
+       </properties>
+   
+       <dependencies>
+           <!--SpringBoot 通用依赖模块-->
+           <dependency>
+               <groupId>org.springframework.boot</groupId>
+               <artifactId>spring-boot-starter-web</artifactId>
+           </dependency>
+           <!-- SpringBoot 与Redis整合依赖 -->
+           <dependency>
+               <groupId>org.springframework.boot</groupId>
+               <artifactId>spring-boot-starter-data-redis</artifactId>
+           </dependency>
+           <dependency>
+               <groupId>org.apache.commons</groupId>
+               <artifactId>commons-pool2</artifactId>
+           </dependency>
+           <!-- swagger2 -->
+           <dependency>
+               <groupId>io.springfox</groupId>
+               <artifactId>springfox-swagger2</artifactId>
+               <version>2.9.2</version>
+           </dependency>
+           <dependency>
+               <groupId>io.springfox</groupId>
+               <artifactId>springfox-swagger-ui</artifactId>
+               <version>2.9.2</version>
+           </dependency>
+   
+           <dependency>
+               <groupId>cn.hutool</groupId>
+               <artifactId>hutool-all</artifactId>
+               <version>5.2.3</version>
+           </dependency>
+   
+           <!-- 通用基础配置 -->
+           <dependency>
+               <groupId>org.projectlombok</groupId>
+               <artifactId>lombok</artifactId>
+               <version>${lombok.version}</version>
+               <optional>true</optional>
+           </dependency>
+   
+           <dependency>
+               <groupId>org.springframework.boot</groupId>
+               <artifactId>spring-boot-starter-test</artifactId>
+               <scope>test</scope>
+           </dependency>
+       </dependencies>
+   
+       <build>
+           <plugins>
+               <plugin>
+                   <groupId>org.springframework.boot</groupId>
+                   <artifactId>spring-boot-maven-plugin</artifactId>
+               </plugin>
+           </plugins>
+       </build>
+   </project>
+   ```
+
+4. 修改yaml
+
+   ```properties
+   server.port=7777
+   spring.application.name=redis_distributed_lock2
+   # =====================swaqqer2=====================
+   # http://localhost:7777/swagger-ui.html
+   swagger2.enabled=true
+   spring.mvc.pathmatch.matching-strategy=ant_path_matcher
+   # =====================redis单机=====================
+   spring.redis.database=0
+   #修改为自己真实IP
+   spring.redis.host=127.0.0.1
+   spring.redis.port=6379
+   spring.redis.password=123456
+   spring.redis.lettuce.pool.max-active=8
+   spring.redis.1ettuce.pool.max-wait=-1ms
+   spring.redis.1ettuce.pool.max-idle=8
+   spring.redis.lettuce.pool.min-idle=0
+   ```
+
+5. 主启动类
+
+6. 业务类：InventoryService
+
+   ```java
+   package com.luojia.redislock.service;
+   
+   import lombok.extern.slf4j.Slf4j;
+   import org.springframework.beans.factory.annotation.Autowired;
+   import org.springframework.beans.factory.annotation.Value;
+   import org.springframework.data.redis.core.StringRedisTemplate;
+   import org.springframework.stereotype.Service;
+   
+   import java.util.concurrent.locks.Lock;
+   import java.util.concurrent.locks.ReentrantLock;
+   
+   @Service
+   @Slf4j
+   public class InventoryService {
+       
+       @Autowired
+       private StringRedisTemplate stringRedisTemplate;
+       @Value("${server.port}")
+       private String port;
+   
+       private Lock lock = new ReentrantLock();
+   
+       public String sale() {
+           String resMessgae = "";
+           lock.lock();
+           try {
+               // 1 查询库存信息
+               String result = stringRedisTemplate.opsForValue().get("inventory01");
+               // 2 判断库存是否足够
+               Integer inventoryNum = result == null ? 0 : Integer.parseInt(result);
+               // 3 扣减库存，每次减少一个库存
+               if (inventoryNum > 0) {
+                   stringRedisTemplate.opsForValue().set("inventory01", String.valueOf(--inventoryNum));
+                   resMessgae = "成功卖出一个商品，库存剩余：" + inventoryNum;
+                   log.info(resMessgae + "\t" + "，服务端口号：" + port);
+               } else {
+                   resMessgae = "商品已售罄。";
+                   log.info(resMessgae + "\t" + "，服务端口号：" + port);
+               }
+           } finally {
+               lock.unlock();
+           }
+           return resMessgae;
+       }
+   }
+   ```
+
+7. 业务类：InventoryController
+
+   ```java
+   package com.luojia.redislock.controller;
+   
+   import com.luojia.redislock.service.InventoryService;
+   import io.swagger.annotations.Api;
+   import io.swagger.annotations.ApiOperation;
+   import org.springframework.beans.factory.annotation.Autowired;
+   import org.springframework.web.bind.annotation.GetMapping;
+   import org.springframework.web.bind.annotation.RestController;
+   
+   @RestController
+   @Api(tags = "redis分布式锁测试")
+   public class InventoryController {
+       @Autowired
+       private InventoryService inventoryService;
+   
+       @GetMapping("/inventory/sale")
+       @ApiOperation("扣减库存，一次卖一个")
+       public void sale() {
+           inventoryService.sale();
+       }
+   }
+   ```
+
+### 四、Base案例升级版一
+
+1. 初始化版本简单添加：业务类，将上面7777的业务逻辑代码原样拷贝到8888，加上synchronized或者Lock
+
+2. nginx分布式微服务架构
+
+   - v2.0版本代码分布式部署后，单机锁还是出现超卖现象，需要分布式锁
+
+     ![](../../../TyporaImage/3.nginx%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1.png)
+
+   - Nginx配置负载均衡
+
+     - 命令地址：/usr/local/nginx/sbin
+
+     - 配置地址：/usr/local/nginx/conf
+
+     - 启动地址：/usr/local/nginx/sbin	执行./nginx
+
+     - 启动Nginx并测试通过，浏览器看到Nginx欢迎welcome页面
+
+     - /usr/local/nginx/conf目录下修改配置文件nginx.conf新增反向代理和负载均衡配置
+
+       ![](../../../TyporaImage/5.Nginx%E9%85%8D%E7%BD%AE%E8%B4%9F%E8%BD%BD%E5%9D%87%E8%A1%A1.png)
+
+     - 关闭：/usr/local/nginx/sbin  执行./nginx -s stop
+
+     - 指定配置启动：在/usr/local/nginx/sbin 路径下执行命令 ./nginx -c nginx.conf全路径
+
+       ![](../../../TyporaImage/4.Nginx%E5%90%AF%E5%8A%A8%E6%8C%87%E5%AE%9A%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6.png)
+
+     - 重启：在/usr/local/nginx/sbin  执行./nginx -s reload
+
+   - v2.0版本代码修改+启动两个微服务
+
+     - 通过Nginx访问，自己Linux服务器IP地址，反向代理+负载均衡
+     - 可以点击查看效果，可以看到一边一个，通过配置的权重来轮询
+     - 访问地址：http://1270.0.1/inventory/sale
+
+   - 上面纯手工点击验证OK，下面高并发模拟
+
+     - 使用jmeter进行压测
+
+     - 创建线程组Redis
+
+     - 创建一个http请求
+
+     - jmeter压测
+
+     - 查看报告
+
+     - 执行绿色执行按钮，开始并发请求程序
+
+     - 发现商品出现超卖
+
+       ![](../../../TyporaImage/12.%E5%B9%B6%E5%8F%91%E7%BB%93%E6%9E%9C.png)
+
+3. 出现问题的原因
+
+   - synchronized和ReentrantLock是单机锁，只能管住当前自己的jvm
+   - 在单机环境下，可以使用synchronized或Lock来实现
+   - 在分布式系统中，因为竞争的线程可能不在同一个节点上（同一个jvm中），所以需要一个让所有进程都能访问到的锁来实现（比如redis或者zookeeper来构建）
+   - 不同进程ivm层面的锁就不管用了，那么可以利用第三方的一个组件，来获取锁，未获取到锁，则阻塞当前想要运行的线程
+
+4. 分布式锁出现
+
+   - 跨进程+跨服务
+   - 解决超卖
+   - 防止缓存击穿
+
+5. 解决方案：上Redis分布式锁setnx。Redis具有极高的性能，且其命令对分布式锁支持友好，借助SET命令即可实现加锁处理
+
+   ![](../../../TyporaImage/13.%E5%88%86%E5%B8%83%E5%BC%8F%E9%94%81.jpg)
+
+### 五、Base案例升级版二
+
+1. 修改InventoryService：通过递归的方式来完成重试，不断获取锁。但是依旧有问题，手工设置5000个线程来抢占锁，压测OK，但是容易导致StackOverflowError，不推荐，需要进一步完善
+
+   ```java
+   public String sale() {
+       String resMessgae = "";
+       String key = "luojiaRedisLocak";
+       String uuidValue = IdUtil.simpleUUID() + ":" + Thread.currentThread().getId();
+   
+       Boolean flag = stringRedisTemplate.opsForValue().setIfAbsent(key, uuidValue);
+       // 抢不到的线程继续重试
+       if (!flag) {
+           // 线程休眠20毫秒，进行递归重试
+           try {
+               TimeUnit.MILLISECONDS.sleep(20);
+           } catch (InterruptedException e) {
+               e.printStackTrace();
+           }
+           sale();
+       } else {
+           try {
+               // 1 抢锁成功，查询库存信息
+               String result = stringRedisTemplate.opsForValue().get("inventory01");
+               // 2 判断库存是否足够
+               Integer inventoryNum = result == null ? 0 : Integer.parseInt(result);
+               // 3 扣减库存，每次减少一个库存
+               if (inventoryNum > 0) {
+                   stringRedisTemplate.opsForValue().set("inventory01", String.valueOf(--inventoryNum));
+                   resMessgae = "成功卖出一个商品，库存剩余：" + inventoryNum + "\t" + "，服务端口号：" + port;
+                   log.info(resMessgae);
+               } else {
+                   resMessgae = "商品已售罄。" + "\t" + "，服务端口号：" + port;
+                   log.info(resMessgae);
+               }
+           } finally {
+               stringRedisTemplate.delete(key);
+           }
+       }
+       return resMessgae;
+   }
+   ```
+
+2. 再次修改InventoryService：多线程判断想想JUC里面说过的虚假唤醒，用while替代if，用自旋锁代替递归重试
+
+   ```java
+   public String sale() {
+       String resMessgae = "";
+       String key = "luojiaRedisLocak";
+       String uuidValue = IdUtil.simpleUUID() + ":" + Thread.currentThread().getId();
+   
+       // 不用递归了，高并发容易出错，我们用自旋代替递归方法重试调用；也不用if，用while代替
+       while (!stringRedisTemplate.opsForValue().setIfAbsent(key, uuidValue)) {
+           // 线程休眠20毫秒，进行递归重试
+           try {TimeUnit.MILLISECONDS.sleep(20);} catch (InterruptedException e) {e.printStackTrace();}
+       }
+   
+       try {
+           // 1 抢锁成功，查询库存信息
+           String result = stringRedisTemplate.opsForValue().get("inventory01");
+           // 2 判断库存书否足够
+           Integer inventoryNum = result == null ? 0 : Integer.parseInt(result);
+           // 3 扣减库存，每次减少一个库存
+           if (inventoryNum > 0) {
+               stringRedisTemplate.opsForValue().set("inventory01", String.valueOf(--inventoryNum));
+               resMessgae = "成功卖出一个商品，库存剩余：" + inventoryNum + "\t" + "，服务端口号：" + port;
+               log.info(resMessgae);
+           } else {
+               resMessgae = "商品已售罄。" + "\t" + "，服务端口号：" + port;
+               log.info(resMessgae);
+           }
+       } finally {
+           stringRedisTemplate.delete(key);
+       }
+       return resMessgae;
+   }
+   ```
+
+### 六、Base案例升级版三
+
+1. 需要防止服务器突然宕机导致程序死锁：部署了微服务的Java程序机器挂了，代码层面根本没有走到finally这块，没办法保证解锁（无过期时间该key一直存在），这个key没有被删除，需要加入一个过期时间限定key
+
+2. 解决方案一：不可行，设置的key+过期时间分开了，必须要合并成一行使其具备原子性
+
+   ```java
+   while (!stringRedisTemplate.opsForValue().setIfAbsent(key, uuidValue)) {
+               // 线程休眠20毫秒，进行递归重试
+               try {TimeUnit.MILLISECONDS.sleep(20);} catch (InterruptedException e) {e.printStackTrace();}
+           }
+   
+           // 设置过期时间
+           stringRedisTemplate.expire(key, 30L, TimeUnit.SECONDS);
+   ```
+
+3. 解决方案二：可行，加锁和过期时间设置必须同一行，保证原子性
+
+   ```java
+   while (!stringRedisTemplate.opsForValue().setIfAbsent(key, uuidValue, 30L, TimeUnit.SECONDS)) {
+               // 线程休眠20毫秒，进行递归重试
+               try {TimeUnit.MILLISECONDS.sleep(20);} catch (InterruptedException e) {e.printStackTrace();}
+           }
+   ```
+
+### 七、Base案例升级版四
+
+1. 实际业务中，如果处理时间超过了设置的key的过期时间，那删除key的时候岂不是张冠李戴，删除了别人的锁
+
+   ![](../../../TyporaImage/14.%E9%94%81%E8%AF%AF%E5%88%A0.jpg)
+
+2. 解决方式：只能自己删除自己的，不允许删除别人的说
+
+   ```java
+   // v5.0 版本
+   public String sale() {
+       String resMessgae = "";
+       String key = "luojiaRedisLocak";
+       String uuidValue = IdUtil.simpleUUID() + ":" + Thread.currentThread().getId();
+   
+       // 不用递归了，高并发容易出错，我们用自旋代替递归方法重试调用；也不用if，用while代替
+       while (!stringRedisTemplate.opsForValue().setIfAbsent(key, uuidValue, 30L, TimeUnit.SECONDS)) {
+           // 线程休眠20毫秒，进行递归重试
+           try {TimeUnit.MILLISECONDS.sleep(20);} catch (InterruptedException e) {e.printStackTrace();}
+       }
+   
+       try {
+           // 1 抢锁成功，查询库存信息
+           String result = stringRedisTemplate.opsForValue().get("inventory01");
+           // 2 判断库存书否足够
+           Integer inventoryNum = result == null ? 0 : Integer.parseInt(result);
+           // 3 扣减库存，每次减少一个库存
+           if (inventoryNum > 0) {
+               stringRedisTemplate.opsForValue().set("inventory01", String.valueOf(--inventoryNum));
+               resMessgae = "成功卖出一个商品，库存剩余：" + inventoryNum + "\t" + "，服务端口号：" + port;
+               log.info(resMessgae);
+           } else {
+               resMessgae = "商品已售罄。" + "\t" + "，服务端口号：" + port;
+               log.info(resMessgae);
+           }
+       } finally {
+           // v5.0 改进点，判断加锁与解锁是不同客户端，自己只能删除自己的锁，不误删别人的锁
+           if (stringRedisTemplate.opsForValue().get(key).equalsIgnoreCase(uuidValue)) {
+               stringRedisTemplate.delete(key);
+           }
+       }
+       return resMessgae;
+   }
+   ```
+
+   
