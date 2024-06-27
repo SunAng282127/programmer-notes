@@ -543,3 +543,555 @@ wait      Block until a container stops, then print its exit code
 1. 安装镜像的文件地址，修改配置文件
 2. 外网访问Docker启动的容器
 3. 不使用`docker pull`命令，也能将需要的镜像放入Docker中
+
+# 四、Docker镜像
+
+## 一、Docker镜像概述
+
+- Docker镜像是一种轻量级、可执行的独立软件包，它包含运行某个软件所需的所有内容，我们把应用程序和配置依赖打包好形成一个可交付的运行环境（包括代码、运行时需要的库、环境变量和配置文件等），这个打包好的运行环境就是image镜像文件
+- 只有通过这个镜像文件才能生成Docker容器实例（类似Java中new出来一个对象）
+
+### 一、镜像的分层
+
+- 以我们的pull为例，在下载的过程中我们可以看到docker的镜像好像是在一层一层的在下载
+
+  ![](../../../TyporaImage/image-1719469425580.png)
+
+### 二、UnionFS（联合文件系统）
+
+1. UnionFS（联合文件系统）：Union文件系统（UnionFS）是一种分层、轻量级并且高性能的文件系统，它支持对文件系统的修改作为一次提交来一层层的叠加，同时可以将不同目录挂载到同一个虚拟文件系统下（unite several directories into a single virtual filesystem）。Union 文件系统是 Docker 镜像的基础。镜像可以通过分层来进行继承，基于基础镜像（没有父镜像），可以制作各种具体的应用镜像
+2. 特性：一次同时加载多个文件系统，但从外面看起来，只能看到一个文件系统，联合加载会把各层文件系统叠加起来，这样最终的文件系统会包含所有底层的文件和目录
+
+### 三、Docker镜像加载原理
+
+1. docker的镜像实际上由一层一层的文件系统组成，这种层级的文件系统UnionFS
+
+2. bootfs（boot file system）主要包含bootloader和kernel，bootloader主要是引导加载kernel，Linux刚启动时会加载bootfs文件系统，在Docker镜像的最底层是引导文件系统bootfs。这一层与我们典型的Linux/Unix系统是一样的，包含boot加载器和内核。当boot加载完成之后整个内核就都在内存中了，此时内存的使用权已由bootfs转交给内核，此时系统也会卸载bootfs
+
+3. rootfs (root file system) ，在bootfs之上。包含的就是典型 Linux 系统中的 /dev, /proc, /bin, /etc 等标准目录和文件。rootfs就是各种不同的操作系统发行版，比如Ubuntu，Centos等等
+
+   ![](../../../TyporaImage/image-1719469835620.png)
+
+4. 平时我们安装进虚拟机的CentOS都是好几个G，为什么docker这里才200M？？
+
+   ![](../../../TyporaImage/image-1719469872193.png)
+
+   - 对于一个精简的OS，rootfs可以很小，只需要包括最基本的命令、工具和程序库就可以了，因为底层直接用Host的kernel，自己只需要提供 rootfs 就行了。由此可见对于不同的linux发行版，bootfs基本是一致的，rootfs会有差别,，因此不同的发行版可以公用bootfs
+
+5. Docker镜像要采用分层结构的原因
+
+   - 镜像分层最大的一个好处就是共享资源，方便复制迁移，就是为了复用
+   - 比如说有多个镜像都从相同的 base 镜像构建而来，那么 Docker Host 只需在磁盘上保存一份 base 镜像
+   - 同时内存中也只需加载一份 base 镜像，就可以为所有容器服务了。而且镜像的每一层都可以被共享
+
+## 二、重点理解部分
+
+1. Docker镜像层都是只读的，容器层是可写的。当容器启动时，一个新的可写层被加载到镜像的顶部。 这一层通常被称作“容器层”，“容器层”之下的都叫“镜像层”
+
+2. 所有对容器的改动，无论添加、删除、还是修改文件都只会发生在容器层中。只有容器层是可写的，容器层下面的所有镜像层都是只读的
+
+   ![](../../../TyporaImage/image-1719470205377.png)
+
+## 三、Docker镜像commit操作案例
+
+- docker commit 提交容器副本使之成为一个新的镜像
+- 命令为：`docker commit -m="提交的描述信息" -a="作者" 容器ID 要创建的目标镜像名:[标签名]`
+
+### 一、案例演示ubuntu安装vim
+
+1. 从仓库上下载ubuntu镜像到本地并成功运行
+
+2. 原始的默认Ubuntu镜像是不带着vim命令的
+
+   ![](../../../TyporaImage/image-1719470575746.png)
+
+3. 外网连通的情况下，安装vim
+
+   ![](../../../TyporaImage/image-1719470598782.png)
+
+4. docker容器内执行上述两条命令：`apt-get update`、`apt-get -y install vim`
+
+   ![](../../../TyporaImage/image-1719470682207.png)
+
+   ![](../../../TyporaImage/image-1719470693308.png)
+
+5. 安装完成后，commit我们自己的新镜像
+
+   ![](../../../TyporaImage/image-1719470741956.png)
+
+   ![](../../../TyporaImage/image-1719470752119.png)
+
+6. 启动我们的新镜像并和原来的对比
+
+   ![](../../../TyporaImage/image-1719470909198.png)
+
+   - 官网是默认下载的Ubuntu没有vim命令
+   - 我们自己commit构建的镜像，新增加了vim功能，可以成功使用
+
+### 二、案例总结
+
+1. Docker中的镜像分层，支持通过扩展现有镜像，创建新的镜像。类似Java继承于一个Base基础类，自己再按需扩展
+
+2. 新镜像是从 base 镜像一层一层叠加生成的。每安装一个软件，就在现有镜像的基础上增加一层
+
+   ![](../../../TyporaImage/image-1719470996390.png)
+
+# 五、本地镜像发布到阿里云
+
+## 一、本地镜像发布到阿里云流程
+
+![](../../../TyporaImage/image-1719471583340.png)
+
+## 二、镜像的生成方法
+
+- 基于当前容器创建一个新的镜像，新功能增强 `docker commit [OPTIONS] 容器ID [REPOSITORY[:TAG]]`
+  - OPTIONS说明：-a为提交的镜像作者；-m为提交时的说明文字
+- 制作一个自定义的镜像
+
+![](../../../TyporaImage/image-1719471834573.png)
+
+![](../../../TyporaImage/image-1719471877113.png)
+
+## 三、将本地镜像推送到阿里云
+
+1. 本地镜像素材原型
+
+   ![](../../../TyporaImage/image-1719471951913.png)
+
+   ![](../../../TyporaImage/image-1719472036827.png)
+
+2. [阿里云开发者平台](https://promotion.aliyun.com/ntms/act/kubernetes.html)
+
+### 一、创建仓库镜像
+
+1. 选择控制台，进入容器镜像服务
+
+   ![](../../../TyporaImage/image-1719472123279.png)
+
+2. 选择个人实例
+
+   ![](../../../TyporaImage/image-1719472151745.png)
+
+3. 命令空间
+
+   ![](../../../TyporaImage/image-1719472183801.png)
+
+   ![](../../../TyporaImage/image-1719472210789.png)
+
+4. 仓库名称
+
+   ![](../../../TyporaImage/image-1719472245158.png)
+
+   ![](../../../TyporaImage/image-1719472257817.png)
+
+   ![](../../../TyporaImage/image-1719472272969.png)
+
+5. 进入管理界面获得脚本
+
+   ![](../../../TyporaImage/image-1719472301642.png)
+
+### 二、将镜像推送到阿里云
+
+1. 管理界面脚本
+
+   ![](../../../TyporaImage/image-1719472359656.png)
+
+2. 脚本实例
+
+   - `docker login --username=zzyybuy registry.cn-hangzhou.aliyuncs.com`
+   - `docker tag cea1bb40441c registry.cn-hangzhou.aliyuncs.com/atguiguwh/myubuntu:1.1`
+   - `docker push registry.cn-hangzhou.aliyuncs.com/atguiguwh/myubuntu:1.1`
+
+   ![](../../../TyporaImage/image-1719472476998.png)
+
+### 三、将阿里云上的镜像下载到本地
+
+- `docker pull registry.cn-hangzhou.aliyuncs.com/atguiguwh/myubuntu:1.1`
+
+![](../../../TyporaImage/image-1719472522562.png)
+
+# 六、本地镜像发布到私有库
+
+![](../../../TyporaImage/image-1719472581244.png)
+
+## 一、私有库概述
+
+1. 官方Docker Hub地址：https://hub.docker.com/，中国大陆访问太慢了且准备被阿里云取代的趋势，不太主流
+2. Dockerhub、阿里云这样的公共镜像仓库可能不太方便，涉及机密的公司不可能提供镜像给公网，所以需要创建一个本地私人仓库供给团队使用，基于公司内部项目构建镜像
+3. Docker Registry是官方提供的工具，可以用于构建私有镜像仓库
+
+## 二、将本地镜像推送到私有库
+
+### 一、下载镜像Docker Registry
+
+- `docker pull registry`
+
+  ![](../../../TyporaImage/image-1719472737028.png)
+
+  ![](../../../TyporaImage/image-1719472748068.png)
+
+### 二、运行私有库Registry，相当于本地有个私有Docker hub
+
+- `docker run -d -p 5000:5000  -v /zzyyuse/myregistry/:/tmp/registry --privileged=true registry`
+
+- 默认情况，仓库被创建在容器的/var/lib/registry目录下，建议自行用容器卷映射，方便于宿主机联调
+
+  ![](../../../TyporaImage/image-1719472989755.png)
+
+### 三、案例演示创建一个新镜像，ubuntu安装ifconfig命令
+
+1. 从Hub上下载ubuntu镜像到本地并成功运行
+
+2. 原始的Ubuntu镜像是不带着ifconfig命令的
+
+   ![](../../../TyporaImage/image-1719473091710.png)
+
+3. 外网连通的情况下，安装ifconfig命令并测试通过
+
+   - docker容器内执行上述两条命令：`apt-get update`、`apt-get install net-tools`
+
+   ![](../../../TyporaImage/image-1719473163015.png)
+
+   ![](../../../TyporaImage/image-1719473176587.png)
+
+4. 安装完成后，commit我们自己的新镜像
+
+   - 公式：`docker commit -m="提交的描述信息" -a="作者" 容器ID 要创建的目标镜像名:[标签名]`
+
+   - 在容器外执行命令：`docker commit -m="ifconfig cmd add" -a="zzyy" a69d7c825c4f zzyyubuntu:1.2`
+
+     ![](../../../TyporaImage/image-1719473296351.png)
+
+5. 启动我们的新镜像并和原来的对比
+
+   ![](../../../TyporaImage/image-1719473323639.png)
+
+   - 官网是默认下载的Ubuntu没有ifconfig命令
+   - 我们自己commit构建的新镜像，新增加了ifconfig功能，可以成功使用
+
+### 四、curl验证私服库上的镜像
+
+- `curl -XGET http://192.168.111.162:5000/v2/_catalog`。可以看到，目前私服库没有任何镜像上传过
+
+  ![](../../../TyporaImage/image-1719473497679.png)
+
+### 五、将新镜像zzyyubuntu:1.2修改符合私服规范的Tag
+
+1. 按照公式： `docker tag 镜像:Tag 自己Host:自己Port/Repository:Tag`
+
+2. 使用命令docker tag将zzyyubuntu:1.2 这个镜像修改为192.168.111.162:5000/zzyyubuntu:1.2。命令为：`docker tag  zzyyubuntu:1.2  192.168.111.162:5000/zzyyubuntu:1.2`
+
+   ![](../../../TyporaImage/image-1719473660884.png)
+
+### 六、修改配置文件使之支持http
+
+![](../../../TyporaImage/image-1719473757816.png)
+
+- 别无脑照着复制，registry-mirrors 配置的是国内阿里提供的镜像加速地址，不用加速的话访问官网的会很慢
+
+- 2个配置中间有个逗号`,`别漏了，这个配置是json格式的
+
+- Docker命令外执行：`vim /etc/docker/daemon.json`。docker默认不允许http方式推送镜像，通过配置选项来取消这个限制。====> 修改完后如果不生效，建议重启docker
+
+  ```json
+  {
+    "registry-mirrors": ["https://aa25jngu.mirror.aliyuncs.com"],
+    "insecure-registries": ["192.168.111.162:5000"]
+  }
+  ```
+
+### 七、push推送到私服库
+
+- `docker push 192.168.111.162:5000/zzyyubuntu:1.2`
+
+![](../../../TyporaImage/image-1719473878413.png)
+
+### 八、curl再次验证私服库上的镜像
+
+- `curl -XGET http://192.168.111.162:5000/v2/_catalog`
+
+![](../../../TyporaImage/image-1719473969170.png)
+
+### 九、pull到本地并运行
+
+- `docker pull 192.168.111.162:5000/zzyyubuntu:1.2`
+
+![](../../../TyporaImage/image-1719474026634.png)
+
+- `docker run -it 镜像ID /bin/bash`
+
+![](../../../TyporaImage/image-1719474047079.png)
+
+# 七、Docker容器数据卷
+
+## 一、参数--privileged
+
+1. 容器卷记得加入：`--privileged=true`
+2.  Docker挂载主机目录访问如果出现cannot open directory .: Permission denied
+3. 解决方法：在挂载目录后多加一个--privileged=true参数即可。如果是CentOS7安全模块会比之前系统版本加强，不安全的会先禁止，所以目录挂载的情况被默认为不安全的行为，在SELinux里面挂载目录被禁止掉了，如果要开启，我们一般使用--privileged=true命令，扩大容器的权限解决挂载目录没有权限的问题，也即使用该参数，container内的root拥有真正的root权限，否则，container内的root只是外部的一个普通用户权限
+
+## 二、参数V
+
+![](../../../TyporaImage/image-1719474585025.png)
+
+## 三、容器数据卷概述
+
+1. 卷就是目录或文件，存在于一个或多个容器中，由docker挂载到容器，但不属于联合文件系统，因此能够绕过Union File System提供一些用于持续存储或共享数据的特性：卷的设计目的就是数据的持久化，完全独立于容器的生存周期，因此Docker不会在容器删除时删除其挂载的数据卷
+2. 有点类似我们Redis里面的rdb和aof文件
+3. 将docker容器内的数据保存进宿主机的磁盘中，运行一个带有容器卷存储功能的容器实例。命令为：`docker run -it --privileged=true -v /宿主机绝对路径目录:/容器内目录 镜像名`
+
+## 四、容器数据卷作用
+
+1. 将运用与运行的环境打包镜像，run后形成容器实例运行 ，但是我们对数据的要求希望是持久化的
+2. Docker容器产生的数据，如果不备份，那么当容器实例删除后，容器内的数据自然也就没有了。为了能保存数据在docker中我们使用卷
+3. 特点
+   - 数据卷可在容器之间共享或重用数据
+   - 卷中的更改可以直接实时生效
+   - 数据卷中的更改不会包含在镜像的更新中
+   - 数据卷的生命周期一直持续到没有容器使用它为止
+
+## 五、数据卷案例
+
+### 一、宿主vs容器之间映射添加容器卷
+
+1. 直接命令添加`docker run -it --privileged=true -v /宿主机绝对路径目录:/容器内目录 镜像名`。公式为：`docker run -it -v /宿主机目录:/容器内目录 ubuntu /bin/bash`、`docker run -it --name myu3 --privileged=true -v /tmp/myHostData:/tmp/myDockerData ubuntu /bin/bash`
+
+   ![](../../../TyporaImage/image-1719475062900.png)
+
+2. 查看数据卷是否挂载成功
+
+   ![](../../../TyporaImage/image-1719475162042.png)
+
+3. 容器和宿主机之间数据共享
+
+   - docker修改，主机同步获得 
+
+   - 主机修改，docker同步获得
+
+   - docker容器stop，主机修改，docker容器重启看数据是否同步
+
+     ![](../../../TyporaImage/image-1719475305083.png)
+
+### 二、读写规则映射添加说明
+
+1. 默认读写：`docker run -it --privileged=true -v /宿主机绝对路径目录:/容器内目录:rw 镜像名`。rw = read + write
+
+   ![](../../../TyporaImage/image-1719475399725.png)
+
+2. 只读：容器实例内部被限制，只能读取不能写
+
+   ![](../../../TyporaImage/image-1719475438830.png)
+
+   - 容器目录:ro 镜像名：就能完成功能，此时容器自己只能读取不能写
+   - ro = read only
+   - 此时如果宿主机写入内容，可以同步给容器内，容器可以读取到
+   - `docker run -it --privileged=true -v /宿主机绝对路径目录:/容器内目录:ro 镜像名`
+
+### 三、卷的继承和共享
+
+1. 容器1完成和宿主机的映射，命令为：`docker run -it  --privileged=true -v /mydocker/u:/tmp --name u1 ubuntu`
+
+   ![](../../../TyporaImage/image-1719475584542.png)
+
+2. 容器2继承容器1的卷规则，命令为：`docker run -it  --privileged=true --volumes-from 父类  --name u2 ubuntu`
+
+   ![](../../../TyporaImage/image-1719475599098.png)
+
+# 八、Docker常规安装简介
+
+## 一、总体步骤
+
+1. 搜索镜像
+2. 拉取镜像
+3. 查看镜像
+4. 启动镜像 - 服务端口映射
+5. 停止容器
+6. 移除容器
+
+## 二、安装tomcat
+
+1. docker hub上面查找tomcat镜像：`docker search tomcat`
+
+   ![](../../../TyporaImage/image-1719476902330.png)
+
+2. 从docker hub上拉取tomcat镜像到本地：`docker pull tomcat`
+
+   ![](../../../TyporaImage/image-1719476982399.png)
+
+   ![](../../../TyporaImage/image-1719476996932.png)
+
+3. 查看是否有拉取到的tomcat：`docker images`
+
+   ![](../../../TyporaImage/image-1719477061691.png)
+
+4. 使用tomcat镜像创建容器实例：`docker run -it -p 8080:8080 tomcat`
+
+   ![](../../../TyporaImage/image-1719477108371.png)
+
+   - -p 小写，主机端口:docker容器端口
+   - -P 大写，随机分配端口
+   - -i 交互
+   - -t 终端
+   - -d 后台
+
+5. 访问猫首页
+
+   ![](../../../TyporaImage/image-1719477173910.png)
+
+   - 解决方案：可能没有映射端口或者没有关闭防火墙；把webapps.dist目录换成webapps
+
+   - 先成功启动tomcat
+
+     ![](../../../TyporaImage/image-1719477339637.png)
+
+   - 查看webapps文件夹查看为空
+
+     ![](../../../TyporaImage/image-1719477367163.png)
+
+6. 免修改版说明：`docker pull billygoo/tomcat8-jdk8`、`docker run -d -p 8080:8080 --name mytomcat8 billygoo/tomcat8-jdk8`
+
+   ![](../../../TyporaImage/image-1719477493820.png)
+
+## 三、安装mysql
+
+1. docker hub上面查找mysql镜像
+
+   ![](../../../TyporaImage/image-1719477567738.png)
+
+2. 从docker hub上（阿里云加速器）拉取mysql镜像到本地标签为5.7
+
+   ![](../../../TyporaImage/image-1719477620541.png)
+
+3. 使用mysql5.7镜像创建容器。命令出处
+
+   ![](../../../TyporaImage/image-1719477674047.png)
+
+4. 简单版使用mysql镜像
+
+   - 使用mysql镜像
+
+     ```shell
+     docker run -p 3306:3306 -e MYSQL_ROOT_PASSWORD=123456 -d mysql:5.7
+     docker ps
+     docker exec -it 容器ID /bin/bash
+     mysql -uroot -p
+     ```
+
+     ![](../../../TyporaImage/image-1719477961881.png)
+
+   - 建库建表插入数据
+
+     ![](../../../TyporaImage/image-1719477985007.png)
+
+     ![](../../../TyporaImage/image-1719477998675.png)
+
+   - 外部Win10也来连接运行在dokcer上的mysql容器实例服务
+
+     ![](../../../TyporaImage/image-1719478027693.png)
+
+   - 测试。插入中文数据。docker上默认字符集编码隐患，docker里面的mysql容器实例查看，内容如下：`SHOW VARIABLES LIKE 'character%'`
+
+     ![](../../../TyporaImage/image-1719478085823.png)
+
+     ![](../../../TyporaImage/image-1719478233722.png)
+
+5. 实战版使用mysql镜像
+
+   - 新建mysql容器实例
+
+     ```shell
+     docker run -d -p 3306:3306 
+     --privileged=true 
+     -v /zzyyuse/mysql/log:/var/log/mysql 
+     -v /zzyyuse/mysql/data:/var/lib/mysql 
+     -v /zzyyuse/mysql/conf:/etc/mysql/conf.d 
+     -eMYSQL_ROOT_PASSWORD=123456  
+     --name mysql mysql:5.7
+     ```
+
+     ![](../../../TyporaImage/image-1719478404362.png)
+
+   - 新建my.cnf，通过容器卷同步给mysql容器实例
+
+     ```shell
+     [client]
+     default_character_set=utf8
+     [mysqld]
+     collation_server = utf8_general_ci
+     character_set_server = utf8
+     ```
+
+     ![](../../../TyporaImage/image-1719478472287.png)
+
+   - 重新启动mysql容器实例再重新进入并查看字符编码
+
+     ![](../../../TyporaImage/image-1719478503324.png)
+
+     ![](../../../TyporaImage/image-1719478523329.png)
+
+   - 再新建库新建表再插入中文测试
+
+     ![](../../../TyporaImage/image-1719478544767.png)
+
+     ![](../../../TyporaImage/image-1719478557325.png)
+
+   - 之前的DB无效，修改字符集操作+重启mysql容器实例；之后的DB有效，需要新建。docker安装完MySQL并run出容器后，建议请先修改完字符集编码后再新建mysql库-表-插数据。假如将当前容器实例删除，再重新来一次，之前建的db01实例还有吗？try
+
+     ![](../../../TyporaImage/image-1719478637510.png)
+
+## 四、安装Redis
+
+1. 从docker hub上(阿里云加速器)拉取redis镜像到本地标签为6.0.8
+
+   ![](../../../TyporaImage/image-1719478705526.png)
+
+2. 入门命令
+
+   ![](../../../TyporaImage/image-1719478724265.png)
+
+3. 命令提醒：容器卷记得加入--privileged=true
+
+   - Docker挂载主机目录Docker访问出现cannot open directory .: Permission denied
+   - 解决办法：在挂载目录后多加一个--privileged=true参数即可
+
+4. 在CentOS宿主机下新建目录/app/redis：`mkdir -p /app/redis`
+
+   ![](../../../TyporaImage/image-1719478788166.png)
+
+5. 将一个redis.conf文件模板拷贝进/app/redis目录下。将准备好的redis.conf文件放进/app/redis目录下
+
+   ![](../../../TyporaImage/image-1719478842331.png)
+
+6. /app/redis目录下修改redis.conf文件。首先查看默认出厂的原始redis.conf
+
+7. 使用redis6.0.8镜像创建容器
+
+   ```shell
+   docker run  
+   -p 6379:6379 
+   --name myr3 
+   --privileged=true 
+   -v /app/redis/redis.conf:/etc/redis/redis.conf 
+   -v /app/redis/data:/data 
+   -d redis:6.0.8 redis-server /etc/redis/redis.conf
+   ```
+
+   ![](../../../TyporaImage/image-1719480533195.png)
+
+8. 测试redis-cli连接上来：`docker exec -it 运行着Rediis服务的容器ID redis-cli`
+
+   ![](../../../TyporaImage/image-1719480596418.png)
+
+9. 请证明docker启动使用了我们自己指定的配置文件
+
+   - 修改前：我们用的配置文件，数据库默认是16个
+
+     ![](../../../TyporaImage/image-1719480674479.png)
+
+   - 修改后：宿主机的修改会同步给docker容器里面的配置。记得重启服务
+
+     ![](../../../TyporaImage/image-1719480691501.png)
+
+10. 再次测试redis-cli连接上来
+
+    ![](../../../TyporaImage/image-1719480725396.png)
