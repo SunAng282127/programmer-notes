@@ -541,8 +541,22 @@ wait      Block until a container stops, then print its exit code
 ## 六、Docker使用注意事项
 
 1. 安装镜像的文件地址，修改配置文件
-2. 外网访问Docker启动的容器
-3. 不使用`docker pull`命令，也能将需要的镜像放入Docker中
+
+   - 如果想要通过主机的文件修改容器内的配置文件，可以通过容器卷挂载的方式，如
+
+     ```shell
+     docker run  
+     -p 6379:6379 
+     --name myr3 
+     --privileged=true 
+     -v /sunshapp/redis/redis.conf:/etc/redis/redis.conf 
+     -v /sunshapp/redis/data:/data 
+     -d redis:6.0.8 redis-server /etc/redis/redis.conf
+     ```
+
+   - 如果想要使用容器内的命令修改，可以运行命令`docker exec -it 容器ID /bin/bash`，与容器进行交互，修改内容等等操作
+
+2. 不使用`docker pull`命令，也能将需要的镜像放入Docker中
 
 # 四、Docker镜像
 
@@ -603,27 +617,55 @@ wait      Block until a container stops, then print its exit code
 
 2. 原始的默认Ubuntu镜像是不带着vim命令的
 
-   ![](../../../TyporaImage/image-1719470575746.png)
+   ```shell
+   [root@CentOS201 sunsh]# docker images
+   REPOSITORY    TAG       IMAGE ID       CREATED       SIZE
+   tomcat        latest    fb5657adc892   2 years ago   680MB
+   redis         latest    7614ae9453d1   2 years ago   113MB
+   ubuntu        latest    ba6acccedd29   2 years ago   72.8MB
+   hello-world   latest    feb5d9fea6a5   2 years ago   13.3kB
+   [root@CentOS201 sunsh]# docker run -it ubuntu /bin/bash
+   root@7d6818428038:/# ls     
+   bin  boot  dev  etc  home  lib  lib32  lib64  libx32  media  mnt  opt  proc  root  run  sbin  srv  sys  tmp  usr  var
+   root@7d6818428038:/# vim a.txt
+   bash: vim: command not found
+   ```
 
 3. 外网连通的情况下，安装vim
 
-   ![](../../../TyporaImage/image-1719470598782.png)
+   ```shell
+   # 先更新包管理工具
+   root@7d6818428038:/# apt-get update
+   
+   # 然后安装vim
+   root@7d6818428038:/# apt-get install vim
+   ```
 
 4. docker容器内执行上述两条命令：`apt-get update`、`apt-get -y install vim`
 
-   ![](../../../TyporaImage/image-1719470682207.png)
-
-   ![](../../../TyporaImage/image-1719470693308.png)
-
 5. 安装完成后，commit我们自己的新镜像
 
-   ![](../../../TyporaImage/image-1719470741956.png)
-
-   ![](../../../TyporaImage/image-1719470752119.png)
+   ```shell
+   # 940ca0751ce2为运行时容器的ID
+   [root@CentOS201 sunsh]# docker commit -m="add my ubuntu vim cmd" -a="sunsh" 940ca0751ce2 myubuntu:1.1
+   sha256:9f1f951606a4351b723242b4d846795e89e7c969790ba9d12aa7696d660305f4
+   
+   [root@CentOS201 sunsh]# docker images
+   REPOSITORY    TAG       IMAGE ID       CREATED         SIZE
+   myubuntu      1.1       9f1f951606a4   8 seconds ago   72.8MB
+   tomcat        latest    fb5657adc892   2 years ago     680MB
+   redis         latest    7614ae9453d1   2 years ago     113MB
+   ubuntu        latest    ba6acccedd29   2 years ago     72.8MB
+   hello-world   latest    feb5d9fea6a5   2 years ago     13.3kB
+   ```
 
 6. 启动我们的新镜像并和原来的对比
 
-   ![](../../../TyporaImage/image-1719470909198.png)
+   ```shell
+   [root@CentOS201 sunsh]# docker run -it 8d2447625e04
+   root@3cbe89632be6:/# vim a.txt
+   root@3cbe89632be6:/# 
+   ```
 
    - 官网是默认下载的Ubuntu没有vim命令
    - 我们自己commit构建的镜像，新增加了vim功能，可以成功使用
@@ -645,20 +687,42 @@ wait      Block until a container stops, then print its exit code
 ## 二、镜像的生成方法
 
 - 基于当前容器创建一个新的镜像，新功能增强 `docker commit [OPTIONS] 容器ID [REPOSITORY[:TAG]]`
+  
   - OPTIONS说明：-a为提交的镜像作者；-m为提交时的说明文字
+  
 - 制作一个自定义的镜像
 
-![](../../../TyporaImage/image-1719471834573.png)
-
-![](../../../TyporaImage/image-1719471877113.png)
+  ```shell
+  # 940ca0751ce2为运行时容器的ID
+  [root@CentOS201 sunsh]# docker commit -m="add my ubuntu vim cmd" -a="sunsh" 940ca0751ce2 myubuntu:1.1
+  sha256:9f1f951606a4351b723242b4d846795e89e7c969790ba9d12aa7696d660305f4
+  
+  [root@CentOS201 sunsh]# docker images
+  REPOSITORY    TAG       IMAGE ID       CREATED         SIZE
+  myubuntu      1.1       9f1f951606a4   8 seconds ago   72.8MB
+  tomcat        latest    fb5657adc892   2 years ago     680MB
+  redis         latest    7614ae9453d1   2 years ago     113MB
+  ubuntu        latest    ba6acccedd29   2 years ago     72.8MB
+  hello-world   latest    feb5d9fea6a5   2 years ago     13.3kB
+  
+  [root@CentOS201 sunsh]# docker run -it 9f1f951606a4
+  root@3cbe89632be6:/# vim a.txt
+  root@3cbe89632be6:/# 
+  
+  [root@CentOS201 sunsh]# docker ps
+  CONTAINER ID   IMAGE          COMMAND       CREATED          STATUS          PORTS     NAMES
+  9822d7d26858   9f1f951606a4   "/bin/bash"   11 seconds ago   Up 10 seconds             inspiring_montalcini
+  ```
 
 ## 三、将本地镜像推送到阿里云
 
 1. 本地镜像素材原型
 
-   ![](../../../TyporaImage/image-1719471951913.png)
-
-   ![](../../../TyporaImage/image-1719472036827.png)
+   ```shell
+   [root@CentOS201 sunsh]# docker images myubuntu
+   REPOSITORY   TAG       IMAGE ID       CREATED         SIZE
+   myubuntu     1.1       8d2447625e04   9 minutes ago   193MB
+   ```
 
 2. [阿里云开发者平台](https://promotion.aliyun.com/ntms/act/kubernetes.html)
 
@@ -692,23 +756,37 @@ wait      Block until a container stops, then print its exit code
 
 ### 二、将镜像推送到阿里云
 
-1. 管理界面脚本
+1. 管理界面脚本：创建镜像的时候，阿里云上都会有命令提示
 
-   ![](../../../TyporaImage/image-1719472359656.png)
+   ![image-20240627205839864](../../../TyporaImage/image-20240627205839864.png)
 
 2. 脚本实例
 
-   - `docker login --username=zzyybuy registry.cn-hangzhou.aliyuncs.com`
-   - `docker tag cea1bb40441c registry.cn-hangzhou.aliyuncs.com/atguiguwh/myubuntu:1.1`
-   - `docker push registry.cn-hangzhou.aliyuncs.com/atguiguwh/myubuntu:1.1`
-
-   ![](../../../TyporaImage/image-1719472476998.png)
+   ```shell
+   [root@CentOS201 sunsh]# docker login --username=sunang registry.cn-hangzhou.aliyuncs.com
+   Password: 
+WARNING! Your password will be stored unencrypted in /root/.docker/config.json.
+   Configure a credential helper to remove this warning. See
+   https://docs.docker.com/engine/reference/commandline/login/#credentials-store
+   Login Succeeded
+   
+   [root@CentOS201 sunsh]# docker tag 8d2447625e04 registry.cn-hangzhou.aliyuncs.com/sunshapp/myubuntu:1.1
+   
+   [root@CentOS201 sunsh]# docker push registry.cn-hangzhou.aliyuncs.com/sunshapp/myubuntu:1.1
+   The push refers to repository [registry.cn-hangzhou.aliyuncs.com/sunshapp/myubuntu]
+   0a0a282da008: Pushed 
+   9f54eef41275: Pushed 
+   1.1: digest: sha256:c060837dff9c5e81722272b25f1c8a856c8b2285cdcdd624a61202eb8ed3c962 size: 741
+   
+   [root@CentOS201 sunsh]# 
+   ```
 
 ### 三、将阿里云上的镜像下载到本地
 
-- `docker pull registry.cn-hangzhou.aliyuncs.com/atguiguwh/myubuntu:1.1`
-
-![](../../../TyporaImage/image-1719472522562.png)
+```shell
+[root@CentOS201 sunsh]# docker pull registry.cn-hangzhou.aliyuncs.com/sunshapp/myubuntu:1.1
+1.1: Pulling from sunshapp/myubuntu
+```
 
 # 六、本地镜像发布到私有库
 
@@ -724,19 +802,36 @@ wait      Block until a container stops, then print its exit code
 
 ### 一、下载镜像Docker Registry
 
-- `docker pull registry`
+```shell
+[root@CentOS201 sunsh]# docker pull registry
+Using default tag: latest
 
-  ![](../../../TyporaImage/image-1719472737028.png)
-
-  ![](../../../TyporaImage/image-1719472748068.png)
+[root@CentOS201 sunsh]# docker images
+REPOSITORY                                            TAG       IMAGE ID       CREATED          SIZE
+myubuntu                                              1.1       8d2447625e04   55 minutes ago   193MB
+registry.cn-hangzhou.aliyuncs.com/sunshapp/myubuntu   1.1       8d2447625e04   55 minutes ago   193MB
+tomcat                                                latest    fb5657adc892   2 years ago      680MB
+redis                                                 latest    7614ae9453d1   2 years ago      113MB
+registry                                              latest    b8604a3fe854   2 years ago      26.2MB
+ubuntu                                                latest    ba6acccedd29   2 years ago      72.8MB
+hello-world                                           latest    feb5d9fea6a5   2 years ago      13.3kB
+```
 
 ### 二、运行私有库Registry，相当于本地有个私有Docker hub
 
-- `docker run -d -p 5000:5000  -v /zzyyuse/myregistry/:/tmp/registry --privileged=true registry`
+```shell
+[root@CentOS201 /]# docker run -d -p 5000:5000  -v /sunshapp/myregistry/:/tmp/registry --privileged=true registry
+8abe1a3757d65f1ccad5557c8e8da9953b280a2cb9ae5af5ca0ce83e89c00624
+```
 
 - 默认情况，仓库被创建在容器的/var/lib/registry目录下，建议自行用容器卷映射，方便于宿主机联调
 
-  ![](../../../TyporaImage/image-1719472989755.png)
+```shell
+[root@CentOS201 /]# docker ps
+CONTAINER ID   IMAGE          COMMAND                   CREATED             STATUS             PORTS                                       NAMES
+8abe1a3757d6   registry       "/entrypoint.sh /etc…"   3 minutes ago       Up 3 minutes       0.0.0.0:5000->5000/tcp, :::5000->5000/tcp   sweet_hugle
+9822d7d26858   8d2447625e04   "/bin/bash"               About an hour ago   Up About an hour                                               inspiring_montalcini
+```
 
 ### 三、案例演示创建一个新镜像，ubuntu安装ifconfig命令
 
@@ -744,15 +839,49 @@ wait      Block until a container stops, then print its exit code
 
 2. 原始的Ubuntu镜像是不带着ifconfig命令的
 
-   ![](../../../TyporaImage/image-1719473091710.png)
+   ```shell
+   [root@CentOS201 /]# docker images
+   REPOSITORY                                            TAG       IMAGE ID       CREATED             SIZE
+   myubuntu                                              1.1       8d2447625e04   About an hour ago   193MB
+   registry.cn-hangzhou.aliyuncs.com/sunshapp/myubuntu   1.1       8d2447625e04   About an hour ago   193MB
+   tomcat                                                latest    fb5657adc892   2 years ago         680MB
+   redis                                                 latest    7614ae9453d1   2 years ago         113MB
+   registry                                              latest    b8604a3fe854   2 years ago         26.2MB
+   ubuntu                                                latest    ba6acccedd29   2 years ago         72.8MB
+   hello-world                                           latest    feb5d9fea6a5   2 years ago         13.3kB
+   
+   [root@CentOS201 /]# docker run -it 8d2447625e04
+   root@847fb8756e69:/# ifconfig
+   bash: ifconfig: command not found
+   root@847fb8756e69:/# 
+   ```
 
-3. 外网连通的情况下，安装ifconfig命令并测试通过
+3. 外网连通的情况下，安装ifconfig命令并测试通过。docker容器内执行上述两条命令：`apt-get update`、`apt-get install net-tools`
 
-   - docker容器内执行上述两条命令：`apt-get update`、`apt-get install net-tools`
-
-   ![](../../../TyporaImage/image-1719473163015.png)
-
-   ![](../../../TyporaImage/image-1719473176587.png)
+   ```shell
+   root@847fb8756e69:/# apt-get update
+   
+   root@847fb8756e69:/# apt-get install net-tools
+   
+   root@847fb8756e69:/# ifconfig
+   eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+           inet 172.17.0.2  netmask 255.255.0.0  broadcast 172.17.255.255
+           ether 02:42:ac:11:00:02  txqueuelen 0  (Ethernet)
+           RX packets 257  bytes 1698339 (1.6 MB)
+           RX errors 0  dropped 0  overruns 0  frame 0
+           TX packets 236  bytes 14227 (14.2 KB)
+           TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+   
+   lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+           inet 127.0.0.1  netmask 255.0.0.0
+           inet6 ::1  prefixlen 128  scopeid 0x10<host>
+           loop  txqueuelen 1000  (Local Loopback)
+           RX packets 0  bytes 0 (0.0 B)
+           RX errors 0  dropped 0  overruns 0  frame 0
+           TX packets 0  bytes 0 (0.0 B)
+           TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+   
+   ```
 
 4. 安装完成后，commit我们自己的新镜像
 
@@ -760,32 +889,89 @@ wait      Block until a container stops, then print its exit code
 
    - 在容器外执行命令：`docker commit -m="ifconfig cmd add" -a="zzyy" a69d7c825c4f zzyyubuntu:1.2`
 
-     ![](../../../TyporaImage/image-1719473296351.png)
+     ```shell
+     [root@CentOS201 sunsh]# docker commit -m="add net-tools" -a="sunsh" 847fb8756e69 myubuntu:1.2
+     sha256:900db28ad76304019341aa42a154a0e5e26518d37d29111e360f8ebd39104f59
+     
+     [root@CentOS201 /]# docker images
+     REPOSITORY                                            TAG       IMAGE ID       CREATED              SIZE
+     myubuntu                                              1.2       900db28ad763   About a minute ago   197MB
+     myubuntu                                              1.1       8d2447625e04   About an hour ago    193MB
+     registry.cn-hangzhou.aliyuncs.com/sunshapp/myubuntu   1.1       8d2447625e04   About an hour ago    193MB
+     tomcat                                                latest    fb5657adc892   2 years ago          680MB
+     redis                                                 latest    7614ae9453d1   2 years ago          113MB
+     registry                                              latest    b8604a3fe854   2 years ago          26.2MB
+     ubuntu                                                latest    ba6acccedd29   2 years ago          72.8MB
+     hello-world                                           latest    feb5d9fea6a5   2 years ago          13.3kB
+     ```
 
 5. 启动我们的新镜像并和原来的对比
 
-   ![](../../../TyporaImage/image-1719473323639.png)
+   ```shell
+   [root@CentOS201 /]# docker run -it myubuntu:1.2
+   root@5e14ffd7b9a9:/# ifconfig
+   eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+           inet 172.17.0.2  netmask 255.255.0.0  broadcast 172.17.255.255
+           ether 02:42:ac:11:00:02  txqueuelen 0  (Ethernet)
+           RX packets 6  bytes 516 (516.0 B)
+           RX errors 0  dropped 0  overruns 0  frame 0
+           TX packets 0  bytes 0 (0.0 B)
+           TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+   
+   lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+           inet 127.0.0.1  netmask 255.0.0.0
+           inet6 ::1  prefixlen 128  scopeid 0x10<host>
+           loop  txqueuelen 1000  (Local Loopback)
+           RX packets 0  bytes 0 (0.0 B)
+           RX errors 0  dropped 0  overruns 0  frame 0
+           TX packets 0  bytes 0 (0.0 B)
+           TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+   
+   ```
 
    - 官网是默认下载的Ubuntu没有ifconfig命令
    - 我们自己commit构建的新镜像，新增加了ifconfig功能，可以成功使用
 
 ### 四、curl验证私服库上的镜像
 
-- `curl -XGET http://192.168.111.162:5000/v2/_catalog`。可以看到，目前私服库没有任何镜像上传过
+- `curl -XGET http://192.168.35.201:5000/v2/_catalog`。可以看到，目前私服库没有任何镜像上传过
 
-  ![](../../../TyporaImage/image-1719473497679.png)
+  ```shell
+  [root@CentOS201 /]# curl -XGET http://192.168.35.201:5000/v2/_catalog
+  {"repositories":[]}
+  ```
 
-### 五、将新镜像zzyyubuntu:1.2修改符合私服规范的Tag
+### 五、将新镜像myubuntu:1.2修改符合私服规范的Tag
 
-1. 按照公式： `docker tag 镜像:Tag 自己Host:自己Port/Repository:Tag`
+1. 按照公式：`docker tag 镜像:Tag 自己Host:自己Port/Repository:Tag`
 
-2. 使用命令docker tag将zzyyubuntu:1.2 这个镜像修改为192.168.111.162:5000/zzyyubuntu:1.2。命令为：`docker tag  zzyyubuntu:1.2  192.168.111.162:5000/zzyyubuntu:1.2`
+2. 使用命令docker tag将mybuntu:1.2 这个镜像修改为192.168.35.201:5000/myubuntu:1.2。命令为：`docker tag  myubuntu:1.2  192.168.35.201:5000/myubuntu:1.2`
 
-   ![](../../../TyporaImage/image-1719473660884.png)
+   ```shell
+   [root@CentOS201 /]# docker tag  myubuntu:1.2  192.168.35.201:5000/myubuntu:1.2
+   [root@CentOS201 /]# docker images
+   REPOSITORY                                            TAG       IMAGE ID       CREATED             SIZE
+   myubuntu                                              1.2       900db28ad763   7 minutes ago       197MB
+   192.168.35.201:5000/myubuntu                          1.2       900db28ad763   7 minutes ago       197MB
+   myubuntu                                              1.1       8d2447625e04   About an hour ago   193MB
+   registry.cn-hangzhou.aliyuncs.com/sunshapp/myubuntu   1.1       8d2447625e04   About an hour ago   193MB
+   tomcat                                                latest    fb5657adc892   2 years ago         680MB
+   redis                                                 latest    7614ae9453d1   2 years ago         113MB
+   registry                                              latest    b8604a3fe854   2 years ago         26.2MB
+   ubuntu                                                latest    ba6acccedd29   2 years ago         72.8MB
+   hello-world                                           latest    feb5d9fea6a5   2 years ago         13.3kB
+   
+   ```
 
 ### 六、修改配置文件使之支持http
 
-![](../../../TyporaImage/image-1719473757816.png)
+```shell
+[root@CentOS201 /]# cat /etc/docker/daemon.json 
+{
+  "registry-mirrors": ["https://38h0dfa4.mirror.aliyuncs.com"],
+  "insecure-registries": ["192.168.35.201:5000"]
+}
+```
 
 - 别无脑照着复制，registry-mirrors 配置的是国内阿里提供的镜像加速地址，不用加速的话访问官网的会很慢
 
@@ -802,25 +988,67 @@ wait      Block until a container stops, then print its exit code
 
 ### 七、push推送到私服库
 
-- `docker push 192.168.111.162:5000/zzyyubuntu:1.2`
+- `docker push 192.168.35.201:5000/myubuntu:1.2`
 
-![](../../../TyporaImage/image-1719473878413.png)
+  ```shell
+  [root@CentOS201 /]# docker run -d -p 5000:5000  -v /sunshapp/myregistry/:/tmp/registry --privileged=true registry
+  b11ba738acd024d1934731f4d8727aaafdf658819d63cff01910cb4dadaa7959
+  [root@CentOS201 /]# docker push 192.168.35.201:5000/myubuntu:1.2
+  The push refers to repository [192.168.35.201:5000/myubuntu]
+  a3aa6c122976: Pushed 
+  0a0a282da008: Pushed 
+  9f54eef41275: Pushed 
+  1.2: digest: sha256:3f880c539de8488301023ec793c9a17c2e1126039383455151390a413ec19b56 size: 952
+  ```
 
 ### 八、curl再次验证私服库上的镜像
 
-- `curl -XGET http://192.168.111.162:5000/v2/_catalog`
+- `curl -XGET http://192.168.35.201:5000/v2/_catalog`。刚才push到本地的私服已经到位
 
-![](../../../TyporaImage/image-1719473969170.png)
+  ```shell
+  [root@CentOS201 /]# curl -XGET http://192.168.35.201:5000/v2/_catalog
+  {"repositories":["myubuntu"]}
+  ```
 
 ### 九、pull到本地并运行
 
-- `docker pull 192.168.111.162:5000/zzyyubuntu:1.2`
-
-![](../../../TyporaImage/image-1719474026634.png)
+- `docker pull 192.168.35.201:5000/myubuntu:1.2`
 
 - `docker run -it 镜像ID /bin/bash`
 
-![](../../../TyporaImage/image-1719474047079.png)
+  ```shell
+  [root@CentOS201 /]# docker images
+  REPOSITORY                                            TAG       IMAGE ID       CREATED          SIZE
+  192.168.35.201:5000/myubuntu                          1.2       900db28ad763   20 minutes ago   197MB
+  myubuntu                                              1.2       900db28ad763   20 minutes ago   197MB
+  myubuntu                                              1.1       8d2447625e04   2 hours ago      193MB
+  registry.cn-hangzhou.aliyuncs.com/sunshapp/myubuntu   1.1       8d2447625e04   2 hours ago      193MB
+  tomcat                                                latest    fb5657adc892   2 years ago      680MB
+  redis                                                 latest    7614ae9453d1   2 years ago      113MB
+  registry                                              latest    b8604a3fe854   2 years ago      26.2MB
+  ubuntu                                                latest    ba6acccedd29   2 years ago      72.8MB
+  hello-world                                           latest    feb5d9fea6a5   2 years ago      13.3kB
+  
+  [root@CentOS201 /]# docker run -it 900db28ad763
+  root@6a9137f05753:/# ifconfig
+  eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500
+          inet 172.17.0.3  netmask 255.255.0.0  broadcast 172.17.255.255
+          ether 02:42:ac:11:00:03  txqueuelen 0  (Ethernet)
+          RX packets 6  bytes 516 (516.0 B)
+          RX errors 0  dropped 0  overruns 0  frame 0
+          TX packets 0  bytes 0 (0.0 B)
+          TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+  
+  lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536
+          inet 127.0.0.1  netmask 255.0.0.0
+          inet6 ::1  prefixlen 128  scopeid 0x10<host>
+          loop  txqueuelen 1000  (Local Loopback)
+          RX packets 0  bytes 0 (0.0 B)
+          RX errors 0  dropped 0  overruns 0  frame 0
+          TX packets 0  bytes 0 (0.0 B)
+          TX errors 0  dropped 0 overruns 0  carrier 0  collisions 0
+  
+  ```
 
 # 七、Docker容器数据卷
 
@@ -868,7 +1096,7 @@ wait      Block until a container stops, then print its exit code
 
    - 主机修改，docker同步获得
 
-   - docker容器stop，主机修改，docker容器重启看数据是否同步
+   - docker容器stop，主机修改，docker容器重启后数据还是同步到docker中
 
      ![](../../../TyporaImage/image-1719475305083.png)
 
@@ -912,21 +1140,43 @@ wait      Block until a container stops, then print its exit code
 
 1. docker hub上面查找tomcat镜像：`docker search tomcat`
 
-   ![](../../../TyporaImage/image-1719476902330.png)
+   ```shell
+   [root@CentOS201 /]# docker search tomcat
+   NAME                                            DESCRIPTION                                      STARS     OFFICIAL
+   tomcat                                          Apache Tomcat is an open source implementati…   3676      [OK]
+   tomee                                           Apache TomEE is an all-Apache Java EE certif…   115       [OK]
+   ```
 
 2. 从docker hub上拉取tomcat镜像到本地：`docker pull tomcat`
 
-   ![](../../../TyporaImage/image-1719476982399.png)
-
-   ![](../../../TyporaImage/image-1719476996932.png)
+   ```shell
+   [root@CentOS201 /]# docker pull tomcat
+   Using default tag: latest
+   ```
 
 3. 查看是否有拉取到的tomcat：`docker images`
 
-   ![](../../../TyporaImage/image-1719477061691.png)
+   ```shell
+   [root@CentOS201 /]# docker images
+   REPOSITORY                                            TAG       IMAGE ID       CREATED          SIZE
+   192.168.35.201:5000/myubuntu                          1.2       900db28ad763   29 minutes ago   197MB
+   myubuntu                                              1.2       900db28ad763   29 minutes ago   197MB
+   registry.cn-hangzhou.aliyuncs.com/sunshapp/myubuntu   1.1       8d2447625e04   2 hours ago      193MB
+   myubuntu                                              1.1       8d2447625e04   2 hours ago      193MB
+   tomcat                                                latest    fb5657adc892   2 years ago      680MB
+   redis                                                 latest    7614ae9453d1   2 years ago      113MB
+   registry                                              latest    b8604a3fe854   2 years ago      26.2MB
+   ubuntu                                                latest    ba6acccedd29   2 years ago      72.8MB
+   hello-world                                           latest    feb5d9fea6a5   2 years ago      13.3kB
+   ```
 
 4. 使用tomcat镜像创建容器实例：`docker run -it -p 8080:8080 tomcat`
 
-   ![](../../../TyporaImage/image-1719477108371.png)
+   ```shell
+   [root@CentOS201 /]# docker run -it -p 8080:8080 tomcat
+   ```
+
+   ![image-20240627223012102](../../../TyporaImage/image-20240627223012102.png)
 
    - -p 小写，主机端口:docker容器端口
    - -P 大写，随机分配端口
@@ -934,33 +1184,101 @@ wait      Block until a container stops, then print its exit code
    - -t 终端
    - -d 后台
 
-5. 访问猫首页
-
-   ![](../../../TyporaImage/image-1719477173910.png)
+5. 第一次访问猫首页出现404
 
    - 解决方案：可能没有映射端口或者没有关闭防火墙；把webapps.dist目录换成webapps
 
    - 先成功启动tomcat
 
-     ![](../../../TyporaImage/image-1719477339637.png)
-
    - 查看webapps文件夹查看为空
 
-     ![](../../../TyporaImage/image-1719477367163.png)
+   - 把webapps.dist目录换成webapps
 
-6. 免修改版说明：`docker pull billygoo/tomcat8-jdk8`、`docker run -d -p 8080:8080 --name mytomcat8 billygoo/tomcat8-jdk8`
+   - 一旦tomcat关闭，再启动还是会恢复原来的文件，可以将修改后的Tomcat容器变成我们自己的容器
 
-   ![](../../../TyporaImage/image-1719477493820.png)
+     ```shell
+     [root@CentOS201 /]# docker run -d -p 8080:8080 tomcat:latest
+     3c439fcbeda8a8d1399f43ae4d1d48b1e799fb6511b4c28f3b580a81e3464ace
+     
+     [root@CentOS201 /]# docker ps
+     CONTAINER ID   IMAGE           COMMAND                   CREATED              STATUS              PORTS                                       NAMES
+     3c439fcbeda8   tomcat:latest   "catalina.sh run"         About a minute ago   Up About a minute   0.0.0.0:8080->8080/tcp, :::8080->8080/tcp   reverent_shtern
+     b11ba738acd0   registry        "/entrypoint.sh /etc…"   26 minutes ago       Up 26 minutes       0.0.0.0:5000->5000/tcp, :::5000->5000/tcp   angry_sanderson
+     
+     [root@CentOS201 /]# docker exec -it 3c439fcbeda8 /bin/bash
+     root@3c439fcbeda8:/usr/local/tomcat# ls
+     BUILDING.txt  CONTRIBUTING.md  LICENSE  NOTICE  README.md  RELEASE-NOTES  RUNNING.txt  bin  conf  lib  logs  native-jni-lib  temp  webapps  webapps.dist  work
+     
+     root@3c439fcbeda8:/usr/local/tomcat# ls -l
+     total 132
+     -rw-r--r--. 1 root root 18994 Dec  2  2021 BUILDING.txt
+     -rw-r--r--. 1 root root  6210 Dec  2  2021 CONTRIBUTING.md
+     -rw-r--r--. 1 root root 60269 Dec  2  2021 LICENSE
+     -rw-r--r--. 1 root root  2333 Dec  2  2021 NOTICE
+     -rw-r--r--. 1 root root  3378 Dec  2  2021 README.md
+     -rw-r--r--. 1 root root  6905 Dec  2  2021 RELEASE-NOTES
+     -rw-r--r--. 1 root root 16517 Dec  2  2021 RUNNING.txt
+     drwxr-xr-x. 2 root root  4096 Dec 22  2021 bin
+     drwxr-xr-x. 1 root root    22 Jun 27 14:37 conf
+     drwxr-xr-x. 2 root root  4096 Dec 22  2021 lib
+     drwxrwxrwx. 1 root root    80 Jun 27 14:37 logs
+     drwxr-xr-x. 2 root root   159 Dec 22  2021 native-jni-lib
+     drwxrwxrwx. 2 root root    30 Dec 22  2021 temp
+     drwxr-xr-x. 2 root root     6 Dec 22  2021 webapps
+     drwxr-xr-x. 7 root root    81 Dec  2  2021 webapps.dist
+     drwxrwxrwx. 2 root root     6 Dec  2  2021 work
+     
+     root@3c439fcbeda8:/usr/local/tomcat# cd webapps
+     
+     root@3c439fcbeda8:/usr/local/tomcat/webapps# ls
+     
+     root@3c439fcbeda8:/usr/local/tomcat/webapps# cd ..
+     
+     root@3c439fcbeda8:/usr/local/tomcat# cd webapps.dist/
+     
+     root@3c439fcbeda8:/usr/local/tomcat/webapps.dist# ls
+     ROOT  docs  examples  host-manager  manager
+     
+     root@3c439fcbeda8:/usr/local/tomcat/webapps.dist# cd ..
+     
+     root@3c439fcbeda8:/usr/local/tomcat# rm -rf webapps
+     
+     root@3c439fcbeda8:/usr/local/tomcat# mv webapps.dist webapps
+     
+     root@3c439fcbeda8:/usr/local/tomcat# ls
+     BUILDING.txt  CONTRIBUTING.md  LICENSE  NOTICE  README.md  RELEASE-NOTES  RUNNING.txt  bin  conf  lib  logs  native-jni-lib  temp  webapps  work
+     root@3c439fcbeda8:/usr/local/tomcat# 
+     ```
+
+6. 免修改版说明：`docker pull billygoo/tomcat8-jdk8`、`docker run -d -p 8080:8080 --name mytomcat8 billygoo/tomcat8-jdk8`。这个不用修改配置，现在完直接访问就可以用了
+
+   ```shell
+   [root@CentOS201 /]# docker pull billygoo/tomcat8-jdk8
+   Using default tag: latest
+   
+   [root@CentOS201 /]# docker images
+   REPOSITORY                                            TAG       IMAGE ID       CREATED          SIZE
+   mytomcat                                              1.1       1a0437135ab3   5 minutes ago    684MB
+   192.168.35.201:5000/myubuntu                          1.2       900db28ad763   54 minutes ago   197MB
+   myubuntu                                              1.2       900db28ad763   54 minutes ago   197MB
+   myubuntu                                              1.1       8d2447625e04   2 hours ago      193MB
+   registry.cn-hangzhou.aliyuncs.com/sunshapp/myubuntu   1.1       8d2447625e04   2 hours ago      193MB
+   tomcat                                                latest    fb5657adc892   2 years ago      680MB
+   redis                                                 latest    7614ae9453d1   2 years ago      113MB
+   registry                                              latest    b8604a3fe854   2 years ago      26.2MB
+   ubuntu                                                latest    ba6acccedd29   2 years ago      72.8MB
+   hello-world                                           latest    feb5d9fea6a5   2 years ago      13.3kB
+   billygoo/tomcat8-jdk8                                 latest    30ef4019761d   5 years ago      523MB
+   
+   [root@CentOS201 /]# docker run -d -p 8080:8080 --name mytomcat8 billygoo/tomcat8-jdk8
+   8d5ea44af3479efbea25d5eb09d93538015a58b8d11eebe3cf888bb4f5d671c5
+   ```
 
 ## 三、安装mysql
 
-1. docker hub上面查找mysql镜像
+1. docker hub上面查找mysql镜像：`docker search mysql`
 
-   ![](../../../TyporaImage/image-1719477567738.png)
-
-2. 从docker hub上（阿里云加速器）拉取mysql镜像到本地标签为5.7
-
-   ![](../../../TyporaImage/image-1719477620541.png)
+2. 从docker hub上（阿里云加速器）拉取mysql镜像到本地：`docker pull mysql`
 
 3. 使用mysql5.7镜像创建容器。命令出处
 
@@ -1002,11 +1320,11 @@ wait      Block until a container stops, then print its exit code
      ```shell
      docker run -d -p 3306:3306 
      --privileged=true 
-     -v /zzyyuse/mysql/log:/var/log/mysql 
-     -v /zzyyuse/mysql/data:/var/lib/mysql 
-     -v /zzyyuse/mysql/conf:/etc/mysql/conf.d 
+     -v /sunshapp/mysql/log:/var/log/mysql 
+     -v /sunshapp/mysql/data:/var/lib/mysql 
+     -v /sunshapp/mysql/conf:/etc/mysql/conf.d 
      -eMYSQL_ROOT_PASSWORD=123456  
-     --name mysql mysql:5.7
+     --name mysql mysql:sunshapp
      ```
 
      ![](../../../TyporaImage/image-1719478404362.png)
@@ -1041,7 +1359,7 @@ wait      Block until a container stops, then print its exit code
 
 ## 四、安装Redis
 
-1. 从docker hub上(阿里云加速器)拉取redis镜像到本地标签为6.0.8
+1. 从docker hub上（阿里云加速器）拉取redis镜像到本地标签为6.0.8
 
    ![](../../../TyporaImage/image-1719478705526.png)
 
@@ -1054,15 +1372,15 @@ wait      Block until a container stops, then print its exit code
    - Docker挂载主机目录Docker访问出现cannot open directory .: Permission denied
    - 解决办法：在挂载目录后多加一个--privileged=true参数即可
 
-4. 在CentOS宿主机下新建目录/app/redis：`mkdir -p /app/redis`
+4. 在CentOS宿主机下新建目录/app/redis：`mkdir -p /sunshapp/redis`
 
    ![](../../../TyporaImage/image-1719478788166.png)
 
-5. 将一个redis.conf文件模板拷贝进/app/redis目录下。将准备好的redis.conf文件放进/app/redis目录下
+5. 将一个redis.conf文件模板拷贝进/sunshapp/redis目录下。将准备好的redis.conf文件放进/sunshapp/redis目录下
 
    ![](../../../TyporaImage/image-1719478842331.png)
 
-6. /app/redis目录下修改redis.conf文件。首先查看默认出厂的原始redis.conf
+6. /sunshapp/redis目录下修改redis.conf文件。首先查看默认出厂的原始redis.conf
 
 7. 使用redis6.0.8镜像创建容器
 
@@ -1071,14 +1389,14 @@ wait      Block until a container stops, then print its exit code
    -p 6379:6379 
    --name myr3 
    --privileged=true 
-   -v /app/redis/redis.conf:/etc/redis/redis.conf 
-   -v /app/redis/data:/data 
+   -v /sunshapp/redis/redis.conf:/etc/redis/redis.conf 
+   -v /sunshapp/redis/data:/data 
    -d redis:6.0.8 redis-server /etc/redis/redis.conf
    ```
 
    ![](../../../TyporaImage/image-1719480533195.png)
 
-8. 测试redis-cli连接上来：`docker exec -it 运行着Rediis服务的容器ID redis-cli`
+8. 测试redis-cli连接上来：`docker exec -it 运行着Redis服务的容器ID redis-cli`
 
    ![](../../../TyporaImage/image-1719480596418.png)
 
