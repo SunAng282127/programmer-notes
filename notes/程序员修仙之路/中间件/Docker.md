@@ -1413,3 +1413,474 @@ CONTAINER ID   IMAGE          COMMAND                   CREATED             STAT
 10. 再次测试redis-cli连接上来
 
     ![](../../../TyporaImage/image-1719480725396.png)
+
+# 九、安装MySQL主从复制
+
+## 一、新建主服务器容器
+
+1. 新建主服务器容器实例3307
+
+   ```shell
+   docker run -p 3307:3306 --name mysql-master \
+   -v /mydata/mysql-master/log:/var/log/mysql \
+   -v /mydata/mysql-master/data:/var/lib/mysql \
+   -v /mydata/mysql-master/conf:/etc/mysql \
+   -e MYSQL_ROOT_PASSWORD=root  \
+   -d mysql:5.7
+   ```
+
+2. 进入主服务器中的/mydata/mysql-master/conf目录下新建my.cnf。`vim my.cnf`
+
+   ```shell
+   [mysqld]
+   ## 设置server_id，同一局域网中需要唯一
+   server_id=101 
+   ## 指定不需要同步的数据库名称
+   binlog-ignore-db=mysql  
+   ## 开启二进制日志功能
+   log-bin=mall-mysql-bin  
+   ## 设置二进制日志使用内存大小（事务）
+   binlog_cache_size=1M  
+   ## 设置使用的二进制日志格式（mixed,statement,row）
+   binlog_format=mixed  
+   ## 二进制日志过期清理时间。默认值为0，表示不自动清理。
+   expire_logs_days=7  
+   ## 跳过主从复制中遇到的所有错误或指定类型的错误，避免slave端复制中断。
+   ## 如：1062错误是指一些主键重复，1032错误是因为主从数据库数据不一致
+   slave_skip_errors=1062
+   ```
+
+3. 修改完配置后重启master实例：`docker restart mysql-master`
+
+4. 进入mysql-master容器：`docker exec -it mysql-master /bin/bash`、`mysql -uroot -proot`
+
+5. master容器实例内创建数据同步用户：`CREATE USER 'slave'@'%' IDENTIFIED BY '123456';`、`GRANT REPLICATION SLAVE, REPLICATION CLIENT ON *.* TO 'slave'@'%';`
+
+## 二、新建从服务器容器
+
+1. 新建从服务器容器实例3308
+
+   ```shell
+   docker run -p 3308:3306 --name mysql-slave \
+   -v /mydata/mysql-slave/log:/var/log/mysql \
+   -v /mydata/mysql-slave/data:/var/lib/mysql \
+   -v /mydata/mysql-slave/conf:/etc/mysql \
+   -e MYSQL_ROOT_PASSWORD=root  \
+   -d mysql:5.7
+   ```
+
+2. 进入/mydata/mysql-slave/conf目录下新建my.cnf。`vim my.cnf`
+
+   ```shell
+   [mysqld]
+   ## 设置server_id，同一局域网中需要唯一
+   server_id=102
+   ## 指定不需要同步的数据库名称
+   binlog-ignore-db=mysql  
+   ## 开启二进制日志功能，以备Slave作为其它数据库实例的Master时使用
+   log-bin=mall-mysql-slave1-bin  
+   ## 设置二进制日志使用内存大小（事务）
+   binlog_cache_size=1M  
+   ## 设置使用的二进制日志格式（mixed,statement,row）
+   binlog_format=mixed  
+   ## 二进制日志过期清理时间。默认值为0，表示不自动清理。
+   expire_logs_days=7  
+   ## 跳过主从复制中遇到的所有错误或指定类型的错误，避免slave端复制中断。
+   ## 如：1062错误是指一些主键重复，1032错误是因为主从数据库数据不一致
+   slave_skip_errors=1062  
+   ## relay_log配置中继日志
+   relay_log=mall-mysql-relay-bin  
+   ## log_slave_updates表示slave将复制事件写进自己的二进制日志
+   log_slave_updates=1  
+   ## slave设置为只读（具有super权限的用户除外）
+   read_only=1
+   ```
+
+3. 修改完配置后重启slave实例：`docker restart mysql-slave`
+
+4. 在主数据库中查看主从同步状态：`show master status;`
+
+5. 进入mysql-slave容器：`docker exec -it mysql-slave /bin/bash`、`mysql -uroot -proot`
+
+6. 在从数据库中配置主从复制
+
+   ```shell
+   change master to master_host='宿主机ip', master_user='slave', master_password='123456', 
+   master_port=3307, master_log_file='mall-mysql-bin.000001', master_log_pos=617, master_connect_retry=30;
+   ```
+
+   ![](../../../TyporaImage/image-1719554520623.png)
+
+   - 主从复制命令参数说明
+
+   ```tex
+   master_host：主数据库的IP地址；
+   master_port：主数据库的运行端口；
+   master_user：在主数据库创建的用于同步数据的用户账号；
+   master_password：在主数据库创建的用于同步数据的用户密码；
+   master_log_file：指定从数据库要复制数据的日志文件，通过查看主数据的状态，获取File参数；
+   master_log_pos：指定从数据库从哪个位置开始复制数据，通过查看主数据的状态，获取Position参数；
+   master_connect_retry：连接失败重试的时间间隔，单位为秒
+   ```
+
+7. 在从数据库中查看主从同步状态：`show slave status \G;`
+
+   ![](../../../TyporaImage/image-1719554673080.png)
+
+8. 在从数据库中开启主从同步：`start slave;`
+
+   ![](../../../TyporaImage/image-1719554710820.png)
+
+9. 查看从数据库状态发现已经同步
+
+   ![](../../../TyporaImage/image-1719554738277.png)
+
+10. 主从复制测试
+
+    - 主机新建库-使用库-新建表-插入数据，ok
+    - 从机使用库-查看记录，ok
+
+# 十、安装Redis集群
+
+## 一、Redis集群面试题
+
+1. 1~2亿条数据需要缓存，设计这个存储的方式为：单机单台100%不可能，肯定是分布式存储。Redis集群的3种解决方案
+
+2. 解决方案一：哈希取余分区
+
+   ![](../../../TyporaImage/image-1719555167136.png)
+
+   ```tex
+   2亿条记录就是2亿个k,v，我们单机不行必须要分布式多机，假设有3台机器构成一个集群，用户每次读写操作都是根据公式：
+   	hash(key) % N个机器台数，计算出哈希值，用来决定数据映射到哪一个节点上
+   	
+   优点：
+     简单粗暴，直接有效，只需要预估好数据规划好节点，例如3台、8台、10台，就能保证一段时间的数据支撑。使用Hash算法让固定的一部分请求落到同一台服务器上，这样每台服务器固定处理一部分请求（并维护这些请求的信息），起到负载均衡+分而治之的作用
+   
+   缺点：
+      原来规划好的节点，进行扩容或者缩容就比较麻烦了，不管扩缩，每次数据变动导致节点有变动，映射关系需要重新进行计算，在服务器个数固定不变时没有问题，如果需要弹性扩容或故障停机的情况下，原来的取模公式就会发生变化：Hash(key)/3会变成Hash(key) /?。此时地址经过取余运算的结果将发生很大变化，根据公式获取的服务器也会变得不可控。某个redis机器宕机了，由于台数数量变化，会导致hash取余全部数据重新洗牌
+   ```
+
+3. 解决方案二：一致性哈希算法分区
+
+   ```tex
+   1、一致性哈希算法分区概述：提出一致性Hash解决方案。 目的是当服务器个数发生变动时， 尽量减少影响客户端到服务器的映射关系
+   
+   2、三大步骤
+   	a.算法构建一致性哈希环：一致性哈希算法必然有个hash函数并按照算法产生hash值，这个算法的所有可能哈希值会构成一个全量集，这个集合可以成为一个hash空间[0,2^32-1]，这个是一个线性空间，但是在算法中，我们通过适当的逻辑控制将它首尾相连(0 = 2^32),这样让它逻辑上形成了一个环形空间。它也是按照使用取模的方法，前面介绍的节点取模法是对节点（服务器）的数量进行取模。而一致性Hash算法是对2^32取模，简单来说，一致性Hash算法将整个哈希值空间组织成一个虚拟的圆环，如假设某哈希函数H的值空间为0-2^32-1（即哈希值是一个32位无符号整形），整个哈希环如下图：整个空间按顺时针方向组织，圆环的正上方的点代表0，0点右侧的第一个点代表1，以此类推，2、3、4、……直到2^32-1，也就是说0点左侧的第一个点代表2^32-1， 0和2^32-1在零点中方向重合，我们把这个由2^32个点组成的圆环称为Hash环
+   	b.服务器IP节点映射：节点映射是将集群中各个IP节点映射到环上的某一个位置。将各个服务器使用Hash进行一个哈希，具体可以选择服务器的IP或主机名作为关键字进行哈希，这样每台机器就能确定其在哈希环上的位置。假如4个节点NodeA、B、C、D，经过IP地址的哈希函数计算(hash(ip))，使用IP地址哈希后在环空间的位置分别在圆环的3点、6点、9点、12点位置
+   	c.key落到服务器的落键规则：当我们需要存储一个kv键值对时，首先计算key的hash值，hash(key)，将这个key使用相同的函数Hash计算出哈希值并确定此数据在环上的位置，从此位置沿环顺时针“行走”，第一台遇到的服务器就是其应该定位到的服务器，并将该键值对存储在该节点上。如我们有Object A、Object B、Object C、Object D四个数据对象，经过哈希计算后，在环空间上的位置如下：根据一致性Hash算法，数据A会被定为到Node A上，B被定为到Node B上，C被定为到Node C上，D被定为到Node D上
+   	
+   3、优点
+   	a.一致性哈希算法的容错性：假设Node C宕机，可以看到此时对象A、B、D不会受到影响，只有C对象被重定位到Node D。一般的，在一致性Hash算法中，如果一台服务器不可用，则受影响的数据仅仅是此服务器到其环空间中前一台服务器（即沿着逆时针方向行走遇到的第一台服务器）之间数据，其它不会受到影响。简单说，就是C挂了，受到影响的只是B、C之间的数据，并且这些数据会转移到D进行存储
+   	b.一致性哈希算法的扩展性：数据量增加了，需要增加一台节点NodeX，X的位置在A和B之间，那收到影响的也就是A到X之间的数据，重新把A到X的数据录入到X上即可。不会导致hash取余全部数据重新洗牌
+   
+   4、缺点
+   	一致性哈希算法的数据倾斜问题：一致性Hash算法在服务节点太少时，容易因为节点分布不均匀而造成数据倾斜（被缓存的对象大部分集中缓存在某一台服务器上）问题
+   	
+   5、小总结
+   	为了在节点数目发生改变时尽可能少的迁移数据；
+   	将所有的存储节点排列在收尾相接的Hash环上，每个key在计算Hash后会顺时针找到临近的存储节点存放；
+   	将所有的存储节点排列在收尾相接的Hash环上，每个key在计算Hash后会顺时针找到临近的存储节点存放；
+   	优点：加入和删除节点只影响哈希环中顺时针方向的相邻的节点，对其他节点无影响
+   	缺点：数据的分布和节点的位置有关，因为这些节点不是均匀的分布在哈希环上的，所以数据在进行存储时达不到均匀分布的效果
+   ```
+
+   ![](../../../TyporaImage/image-1719556761807.png)
+
+   ![](../../../TyporaImage/image-1719556774785.png)
+
+   ![](../../../TyporaImage/image-1719556788363.png)
+
+   ![](../../../TyporaImage/image-1719556800668.png)
+
+   ![](../../../TyporaImage/image-1719556824597.png)
+
+   ![](../../../TyporaImage/image-1719556836438.png)
+
+4. 哈希槽分区
+
+   ```tex
+   1、哈希槽分区出现的原因：解决一致性哈希算法的数据倾斜问题。哈希槽实质就是一个数组，数组[0,2^14 -1]形成hash slot空间
+   
+   2、可以解决均匀分配的问题，在数据和节点之间又加入了一层，把这层称为哈希槽（slot），用于管理数据和节点之间的关系，现在就相当于节点上放的是槽，槽里放的是数据。槽解决的是粒度问题，相当于把粒度变大了，这样便于数据移动。哈希解决的是映射问题，使用key的哈希值来计算所在的槽，便于数据分配
+   
+   3、一个集群只能有16384个槽，编号0-16383（0-2^14-1）。这些槽会分配给集群中的所有主节点，分配策略没有要求。可以指定哪些编号的槽分配给哪个主节点。集群会记录节点和槽的对应关系。解决了节点和槽的关系后，接下来就需要对key求哈希值，然后对16384取余，余数是几key就落入对应的槽里。slot = CRC16(key) % 16384。以槽为单位移动数据，因为槽的数目是固定的，处理起来比较容易，这样数据移动问题就解决了
+   
+   4、Redis 集群中内置了 16384 个哈希槽，redis 会根据节点数量大致均等的将哈希槽映射到不同的节点。当需要在 Redis 集群中放置一个 key-value时，redis 先对 key 使用 crc16 算法算出一个结果，然后把结果对 16384 求余数，这样每个 key 都会对应一个编号在 0-16383 之间的哈希槽，也就是映射到某个节点上。如下代码，key之A 、B在Node2， key之C落在Node3上
+   ```
+
+   ![](../../../TyporaImage/image-1719557044909.png)
+
+   ![](../../../TyporaImage/image-1719557084164.png)
+
+   ![](../../../TyporaImage/image-1719557096902.png)
+
+## 二、搭建步骤
+
+1. 关闭防火墙+启动docker后台服务，`systemctl start docker`
+2. 新建6个docker容器redis实例。命令分步解释
+   - 创建并运行docker容器实例：`docker run`
+   - 容器名字：`--name redis-node-6`
+   - 使用宿主机的IP和端口，默认：`--net host`
+   - 获取宿主机root用户权限：`--privileged=true`
+   - 容器卷，宿主机地址:docker内部地址：`-v /data/redis/share/redis-node-6:/data`
+   - redis镜像和版本号：`redis:6.0.8`
+   - 开启redis集群：`--cluster-enabled yes`
+   - 开启持久化：`--appendonly yes`
+   - redis端口号：`--port 6386`
+3. 进入容器redis-node-1并为6台机器构建集群关系
+   - 进入容器：`docker exec -it redis-node-1 /bin/bash`
+   - 构建主从关系
+   - 链接进入6381作为切入点，查看集群状态：`cluster info`
+   - 链接进入6381作为切入点，查看节点状态：`cluster nodes`
+4. 主从容错切换迁移案例
+   - 数据读写存储，启动6机构成的集群并通过exec进入
+   - 对6381新增两个key，防止路由失效加参数-c并新增两个key
+   - 查看集群信息
+   - 容错切换迁移：主6381和从机切换，先停止主机6381；6381主机停了，对应的真实从机上位；6381作为1号主机分配的从机以实际情况为准，具体是几号机器就是几号
+   - 再次查看集群信息
+   - 先还原之前的3主3从
+   - 先启6381：`docker start redis-node-1`
+   - 再停6385：`docker stop redis-node-5`
+   - 再启6385：`docker start redis-node-5`
+   - 主从机器分配情况以实际情况为准
+   - 查看集群状态：`redis-cli --cluster check 自己IP:6381`
+5. 主从扩容案例
+   - 新建6387、6388两个节点+新建后启动+查看是否8节点
+   - 进入6387容器实例内部：`docker exec -it redis-node-7 /bin/bash`
+   - 将新增的6387节点（空槽号）作为master节点加入原集群
+   - 检查集群情况第1次
+   - 重新分派槽号
+   - 检查集群情况第2次
+   - 槽号分派说明
+   - 为主节点6387分配从节点6388
+   - 检查集群情况第3次
+6. 主从缩容案例
+   - 目的：6387和6388下线
+   - 检查集群情况1获得6388的节点ID
+   - 将6388删除：从集群中将4号从节点6388删除
+   - 将6387的槽号清空，重新分配，本例将清出来的槽号都给6381
+   - 检查集群情况第二次
+   - 将6387删除
+   - 检查集群情况第三次
+
+# 十一、DockerFile解析
+
+## 一、Dockerfile概述
+
+1. Dockerfile是用来构建Docker镜像的文本文件，是由一条条构建镜像所需的指令和参数构成的脚本
+
+   ![](../../../TyporaImage/image-1719558982468.png)
+
+2. 构建三步骤
+
+   - 编写Dockerfile文件
+   - docker build 命令构建镜像
+   - docker run 镜像 运行容器实例
+
+## 二、DockerFile构建过程解析
+
+### 一、 Dockerfile内容基础知识
+
+1. 每条保留字指令都必须为大写字母且后面要跟随至少一个参数
+2. 指令按照从上到下，顺序执行
+3. \#表示注释
+4. 每条指令都会创建一个新的镜像层并对镜像进行提交
+
+### 二、Docker执行Dockerfile的大致流程
+
+1. docker从基础镜像运行一个容器
+2. 执行一条指令并对容器作出修改
+3. 执行类似docker commit的操作提交一个新的镜像层
+4. docker再基于刚提交的镜像运行一个新容器
+5. 执行dockerfile中的下一条指令直到所有指令都执行完成
+
+### 三、Dockerfile基础内容总结
+
+1. 从应用软件的角度来看，Dockerfile、Docker镜像与Docker容器分别代表软件的三个不同阶段
+
+   - Dockerfile是软件的原材料
+   - Docker镜像是软件的交付品
+   - Docker容器则可以认为是软件镜像的运行态，也即依照镜像运行的容器实例
+
+2. Dockerfile面向开发，Docker镜像成为交付标准，Docker容器则涉及部署与运维，三者缺一不可，合力充当Docker体系的基石
+
+   ![](../../../TyporaImage/image-1719559470361.png)
+
+   - Dockerfile，需要定义一个Dockerfile，Dockerfile定义了进程需要的一切东西。Dockerfile涉及的内容包括执行代码或者是文件、环境变量、依赖包、运行时环境、动态链接库、操作系统的发行版、服务进程和内核进程（当应用进程需要和系统服务和内核进程打交道，这时需要考虑如何设计namespace的权限控制）等等
+   - Docker镜像，在用Dockerfile定义一个文件之后，docker build时会产生一个Docker镜像，当运行 Docker镜像时会真正开始提供服务
+   - Docker容器，容器是直接提供服务的
+
+## 三、DockerFile常用保留字指令
+
+1. FROM：基础镜像，当前新镜像是基于哪个镜像的，指定一个已经存在的镜像作为模板，第一条必须是from
+
+2. MAINTAINER：镜像维护者的姓名和邮箱地址
+
+3. RUN：容器构建时需要运行的命令。有两种格式
+
+   - shell格式：例如，`RUN yum -y install vim`
+
+     ![](../../../TyporaImage/image-1719559880582.png)
+
+   - exec格式
+
+     ![](../../../TyporaImage/image-1719559913468.png)
+
+   - RUN是在 docker build时运行
+
+4. EXPOSE：当前容器对外暴露出的端口
+
+5. WORKDIR：指定在创建容器后，终端默认登陆的进来工作目录，一个落脚点
+
+6. USER：指定该镜像以什么样的用户去执行，如果都不指定，默认是root
+
+7. ENV：用来在构建镜像过程中设置环境变量。例如，`ENV MY_PATH /usr/mytest`
+
+   - 这个环境变量可以在后续的任何RUN指令中使用，这就如同在命令前面指定了环境变量前缀一样
+   - 也可以在其它指令中直接使用这些环境变量吗，例如，`WORKDIR $MY_PATH`
+
+8. ADD：将宿主机目录下的文件拷贝进镜像且会自动处理URL和解压tar压缩包
+
+9. COPY：类似ADD，拷贝文件和目录到镜像中。将从构建上下文目录中 <源路径> 的文件/目录复制到新的一层的镜像内的 <目标路径> 位置
+
+   ```shell
+   COPY src dest
+   COPY ["src", "dest"]
+   <src源路径>：源文件或者源目录
+   <dest目标路径>：容器内的指定路径，该路径不用事先建好，路径不存在的话，会自动创建
+   ```
+
+10. VOLUME：容器数据卷，用于数据保存和持久化工作
+
+11. CMD：指定容器启动后的要干的事情
+
+    ![](../../../TyporaImage/image-1719560378761.png)
+
+    - Dockerfile 中可以有多个 CMD 指令，但只有最后一个生效，CMD 会被 docker run 之后的参数替换
+    - CMD和RUN命令的区别
+      - CMD是在 docker run 时运行
+      - RUN是在 docker build 时运行
+
+12. ENTRYPOINT：也是用来指定一个容器启动时要运行的命令。类似于 CMD 指令，但是ENTRYPOINT 不会被docker run后面的命令覆盖， 而且这些命令行参数会被当作参数送给 ENTRYPOINT 指令指定的程序
+
+    - 命令格式：ENTRYPOINT可以和CMD一起用，一般是变参才会使用 CMD ，这里的 CMD 等于是在给 ENTRYPOINT 传参
+
+      ![](../../../TyporaImage/image-1719561795304.png)
+
+    - 当指定了ENTRYPOINT后，CMD的含义就发生了变化，不再是直接运行其命令而是将CMD的内容作为参数传递给ENTRYPOINT指令，他两个组合会变成
+
+      ![](../../../TyporaImage/image-1719561856927.png)
+
+    - 案例如下：假设已通过 Dockerfile 构建了 nginx:test 镜像：
+
+      ![](../../../TyporaImage/image-1719561920719.png)
+
+      ![](../../../TyporaImage/image-1719561932700.png)
+
+    - 优点：在执行docker run的时候可以指定 ENTRYPOINT 运行所需的参数
+
+    - 注意：如果 Dockerfile 中如果存在多个 ENTRYPOINT 指令，仅最后一个生效
+
+13. 命令总结
+
+    ![](../../../TyporaImage/image-1719561970949.png)
+
+## 四、自定义镜像
+
+### 一、自定义镜像mycentosjava8
+
+1. 要求：Centos7镜像具备vim+ifconfig+jdk8
+
+   ![](../../../TyporaImage/image-1719563718788.png)
+
+2. [JDK的下载镜像地址](https://www.oracle.com/java/technologies/downloads/#java8)
+
+3. 准备编写Dockerfile文件
+
+   ```shell
+   FROM centos
+   MAINTAINER zzyy<zzyybs@126.com>
+   
+   ENV MYPATH /usr/local
+   WORKDIR $MYPATH
+   
+   #安装vim编辑器
+   RUN yum -y install vim
+   #安装ifconfig命令查看网络IP
+   RUN yum -y install net-tools
+   #安装java8及lib库
+   RUN yum -y install glibc.i686
+   RUN mkdir /usr/local/java
+   #ADD 是相对路径jar，把jdk-8u171-linux-x64.tar.gz添加到容器中，安装包必须要和Dockerfile文件在同一位置
+   ADD jdk-8u171-linux-x64.tar.gz /usr/local/java/
+   #配置java环境变量
+   ENV JAVA_HOME /usr/local/java/jdk1.8.0_171
+   ENV JRE_HOME $JAVA_HOME/jre
+   ENV CLASSPATH $JAVA_HOME/lib/dt.jar:$JAVA_HOME/lib/tools.jar:$JRE_HOME/lib:$CLASSPATH
+   ENV PATH $JAVA_HOME/bin:$PATH
+   
+   EXPOSE 80
+   
+   CMD echo $MYPATH
+   CMD echo "success--------------ok"
+   CMD /bin/bash
+   ```
+
+4. 构建命令：`docker build -t 新镜像名字:TAG .`。例如，`docker build -t centosjava8:1.5 .`。注意，上面TAG后面有个空格，有个点
+
+   ![](../../../TyporaImage/image-1719564848775.png)
+
+5. 运行命令：`docker run -it 新镜像名字:TAG`。例如，`docker run -it centosjava8:1.5 /bin/bash`
+
+   ![](../../../TyporaImage/image-1719564928403.png)
+
+### 二、虚悬镜像
+
+1. 虚悬镜像概述：仓库名、标签都是<none>的镜像，俗称dangling image
+
+2. 模拟一个虚悬镜像
+
+   - `vim Dockerfile`
+
+   - `docker build .`
+
+     ![](../../../TyporaImage/image-1719566272819.png)
+
+   - 查看：`docker image ls -f dangling=true`
+
+     ![](../../../TyporaImage/image-1719566298668.png)
+
+   - 删除：`docker image prune`。虚悬镜像已经失去存在价值，可以删除
+
+     ![](../../../TyporaImage/image-1719566404027.png)
+
+### 三、自定义镜像myubuntu
+
+1. 准备编写DockerFile文件
+
+   ![](../../../TyporaImage/image-1719566561268.png)
+
+   ```shell
+   FROM ubuntu
+   MAINTAINER zzyy<zzyybs@126.com>
+    
+   ENV MYPATH /usr/local
+   WORKDIR $MYPATH
+    
+   RUN apt-get update
+   RUN apt-get install net-tools
+   #RUN apt-get install -y iproute2
+   #RUN apt-get install -y inetutils-ping
+    
+   EXPOSE 80
+    
+   CMD echo $MYPATH
+   CMD echo "install inconfig cmd into ubuntu success--------------ok"
+   CMD /bin/bash
+   ```
+
+2. 构建：`docker build -t 新镜像名字:TAG .`
+
+3. 运行：`docker run -it 新镜像名字:TAG`
