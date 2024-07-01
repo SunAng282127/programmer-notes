@@ -1056,7 +1056,7 @@ CONTAINER ID   IMAGE          COMMAND                   CREATED             STAT
 
 1. 容器卷记得加入：`--privileged=true`
 2.  Docker挂载主机目录访问如果出现cannot open directory .: Permission denied
-3. 解决方法：在挂载目录后多加一个--privileged=true参数即可。如果是CentOS7安全模块会比之前系统版本加强，不安全的会先禁止，所以目录挂载的情况被默认为不安全的行为，在SELinux里面挂载目录被禁止掉了，如果要开启，我们一般使用--privileged=true命令，扩大容器的权限解决挂载目录没有权限的问题，也即使用该参数，container内的root拥有真正的root权限，否则，container内的root只是外部的一个普通用户权限
+3. 解决方法：在挂载目录后多加一个`--privileged=true`参数即可。如果是CentOS7安全模块会比之前系统版本加强，不安全的会先禁止，所以目录挂载的情况被默认为不安全的行为，在SELinux里面挂载目录被禁止掉了，如果要开启，一般使用`--privileged=true`命令，扩大容器的权限解决挂载目录没有权限的问题，也使用该参数，使得container内的root拥有真正的root权限，否则，container内的root只是外部的一个普通用户权限
 
 ## 二、参数V
 
@@ -1064,13 +1064,13 @@ CONTAINER ID   IMAGE          COMMAND                   CREATED             STAT
 
 ## 三、容器数据卷概述
 
-1. 卷就是目录或文件，存在于一个或多个容器中，由docker挂载到容器，但不属于联合文件系统，因此能够绕过Union File System提供一些用于持续存储或共享数据的特性：卷的设计目的就是数据的持久化，完全独立于容器的生存周期，因此Docker不会在容器删除时删除其挂载的数据卷
-2. 有点类似我们Redis里面的rdb和aof文件
+1. 卷就是目录或文件，存在于一个或多个容器中，由docker挂载到容器，但不属于联合文件系统，因此能够绕过Union File System提供一些用于持续存储或共享数据的特性。卷的设计目的就是数据的持久化，完全独立于容器的生存周期，因此Docker不会在容器删除时删除其挂载的数据卷
+2. 有点类似Redis里面的rdb和aof文件
 3. 将docker容器内的数据保存进宿主机的磁盘中，运行一个带有容器卷存储功能的容器实例。命令为：`docker run -it --privileged=true -v /宿主机绝对路径目录:/容器内目录 镜像名`
 
 ## 四、容器数据卷作用
 
-1. 将运用与运行的环境打包镜像，run后形成容器实例运行 ，但是我们对数据的要求希望是持久化的
+1. 将应用与运行的环境打包镜像，run后形成容器实例运行 ，但是我们对数据的要求希望是持久化的
 2. Docker容器产生的数据，如果不备份，那么当容器实例删除后，容器内的数据自然也就没有了。为了能保存数据在docker中我们使用卷
 3. 特点
    - 数据卷可在容器之间共享或重用数据
@@ -1080,7 +1080,7 @@ CONTAINER ID   IMAGE          COMMAND                   CREATED             STAT
 
 ## 五、数据卷案例
 
-### 一、宿主vs容器之间映射添加容器卷
+### 一、宿主和容器之间映射添加容器卷
 
 1. 直接命令添加`docker run -it --privileged=true -v /宿主机绝对路径目录:/容器内目录 镜像名`。公式为：`docker run -it -v /宿主机目录:/容器内目录 ubuntu /bin/bash`、`docker run -it --name myu3 --privileged=true -v /tmp/myHostData:/tmp/myDockerData ubuntu /bin/bash`
 
@@ -1280,7 +1280,7 @@ CONTAINER ID   IMAGE          COMMAND                   CREATED             STAT
 
 2. 从docker hub上（阿里云加速器）拉取mysql镜像到本地：`docker pull mysql`
 
-3. 使用mysql5.7镜像创建容器。命令出处
+3. 使用mysql镜像创建容器。命令出处
 
    ![](../../../TyporaImage/image-1719477674047.png)
 
@@ -1289,7 +1289,7 @@ CONTAINER ID   IMAGE          COMMAND                   CREATED             STAT
    - 使用mysql镜像
 
      ```shell
-     docker run -p 3306:3306 -e MYSQL_ROOT_PASSWORD=123456 -d mysql:5.7
+     docker run -p 3306:3306 -e MYSQL_ROOT_PASSWORD=123456 -d mysql:latest
      docker ps
      docker exec -it 容器ID /bin/bash
      mysql -uroot -p
@@ -1324,7 +1324,7 @@ CONTAINER ID   IMAGE          COMMAND                   CREATED             STAT
      -v /sunshapp/mysql/data:/var/lib/mysql 
      -v /sunshapp/mysql/conf:/etc/mysql/conf.d 
      -eMYSQL_ROOT_PASSWORD=123456  
-     --name mysql mysql:sunshapp
+     --name mysql mysql:latest
      ```
 
      ![](../../../TyporaImage/image-1719478404362.png)
@@ -1728,7 +1728,7 @@ CONTAINER ID   IMAGE          COMMAND                   CREATED             STAT
 
      ![](../../../TyporaImage/image-1719559913468.png)
 
-   - RUN是在 docker build时运行
+   - RUN是在 docker build 时运行
 
 4. EXPOSE：当前容器对外暴露出的端口
 
@@ -1813,7 +1813,8 @@ CONTAINER ID   IMAGE          COMMAND                   CREATED             STAT
    #安装java8及lib库
    RUN yum -y install glibc.i686
    RUN mkdir /usr/local/java
-   #ADD 是相对路径jar，把jdk-8u171-linux-x64.tar.gz添加到容器中，安装包必须要和Dockerfile文件在同一位置
+   #ADD 是相对路径jar，把jdk-8u171-linux-x64.tar.gz添加到容器中，
+   #安装包必须要和Dockerfile文件在同一位置
    ADD jdk-8u171-linux-x64.tar.gz /usr/local/java/
    #配置java环境变量
    ENV JAVA_HOME /usr/local/java/jdk1.8.0_171
@@ -2031,7 +2032,8 @@ CONTAINER ID   IMAGE          COMMAND                   CREATED             STAT
    FROM java:8
    # 作者
    MAINTAINER zzyy
-   # VOLUME 指定临时文件目录为/tmp，在主机/var/lib/docker目录下创建了一个临时文件并链接到容器的/tmp
+   # VOLUME 指定临时文件目录为/tmp，
+   # 在主机/var/lib/docker目录下创建了一个临时文件并链接到容器的/tmp
    VOLUME /tmp
    # 将jar包添加到容器中并更名为zzyy_docker.jar
    ADD docker_boot-0.0.1-SNAPSHOT.jar zzyy_docker.jar
