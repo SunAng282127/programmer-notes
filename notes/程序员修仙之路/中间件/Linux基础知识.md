@@ -423,7 +423,7 @@
 
        ![image-20220815200228608](../../../TyporaImage/d62e2bb3d5a15dc2dbca6d594b875cd1b62bd5e0.png)
 
-     	![image-20220815200238861](../../../TyporaImage/19e5972a9d9e6f888cf7f7997add7ecb5c989d22.png)
+       	![image-20220815200238861](../../../TyporaImage/19e5972a9d9e6f888cf7f7997add7ecb5c989d22.png)
 
     	![image-20220815200259125](../../../TyporaImage/a9468789e50fe61d80e12ee4a1cb73855533c1fc.png)
 
@@ -606,14 +606,16 @@
 ## 四、关于防火墙问题
 
 ```shell
-关闭防火墙
+# 关闭防火墙
 systemctl stop firewalld.service
-禁止防火墙开机启动
+# 禁止防火墙开机启动
 systemctl disable firewalld.service
-放行端口和http
+# 查询端口是否开放
+firewall-cmd --query-port=8080/tcp
+# 放行端口和http
 firewall-cmd --add-service=http --permanent 
 firewall-cmd --zone=public --add-port=80/tcp --permanent
-重启防火墙
+# 重启防火墙
 firewall-cmd --reload
 ```
 

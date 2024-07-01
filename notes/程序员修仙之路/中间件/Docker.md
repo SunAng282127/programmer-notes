@@ -1884,3 +1884,452 @@ CONTAINER ID   IMAGE          COMMAND                   CREATED             STAT
 2. 构建：`docker build -t 新镜像名字:TAG .`
 
 3. 运行：`docker run -it 新镜像名字:TAG`
+
+# 十二、Docker微服务实战
+
+## 一、构建微服务项目
+
+1. 创建maven以及新建Module，名称为docker_boot
+
+2. 修改pom
+
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+     <modelVersion>4.0.0</modelVersion>
+     <parent>
+       <groupId>org.springframework.boot</groupId>
+       <artifactId>spring-boot-starter-parent</artifactId>
+       <version>2.5.6</version>
+       <relativePath/>
+     </parent>
+     
+     <groupId>com.atguigu.docker</groupId>
+     <artifactId>docker_boot</artifactId>
+     <version>0.0.1-SNAPSHOT</version>
+     
+     <properties>
+       <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+       <maven.compiler.source>1.8</maven.compiler.source>
+       <maven.compiler.target>1.8</maven.compiler.target>
+       <junit.version>4.12</junit.version>
+       <log4j.version>1.2.17</log4j.version>
+       <lombok.version>1.16.18</lombok.version>
+       <mysql.version>5.1.47</mysql.version>
+       <druid.version>1.1.16</druid.version>
+       <mapper.version>4.1.5</mapper.version>
+       <mybatis.spring.boot.version>1.3.0</mybatis.spring.boot.version>
+     </properties>
+     
+     <dependencies>
+       <!--SpringBoot通用依赖模块-->
+       <dependency>
+         <groupId>org.springframework.boot</groupId>
+         <artifactId>spring-boot-starter-web</artifactId>
+       </dependency>
+       <dependency>
+         <groupId>org.springframework.boot</groupId>
+         <artifactId>spring-boot-starter-actuator</artifactId>
+       </dependency>
+       <!--test-->
+       <dependency>
+         <groupId>org.springframework.boot</groupId>
+         <artifactId>spring-boot-starter-test</artifactId>
+         <scope>test</scope>
+       </dependency>
+     </dependencies>
+     
+     <build>
+       <plugins>
+         <plugin>
+           <groupId>org.springframework.boot</groupId>
+           <artifactId>spring-boot-maven-plugin</artifactId>
+         </plugin>
+         <plugin>
+           <groupId>org.apache.maven.plugins</groupId>
+           <artifactId>maven-resources-plugin</artifactId>
+           <version>3.1.0</version>
+         </plugin>
+       </plugins>
+     </build>
+     
+   </project>
+   ```
+
+3. 修改YML
+
+   ```properties
+   server.port=6001
+   ```
+
+4. 主启动类
+
+   ```java
+   package com.atguigu.docker;
+   
+   import org.springframework.boot.SpringApplication;
+   import org.springframework.boot.autoconfigure.SpringBootApplication;
+   
+   @SpringBootApplication
+   public class DockerBootApplication
+   {
+       public static void main(String[] args)
+       {
+           SpringApplication.run(DockerBootApplication.class, args);
+       }
+       
+   }
+   ```
+
+5. 业务类
+
+   ```java
+   package com.atguigu.docker.controller;
+   
+   import org.springframework.beans.factory.annotation.Value;
+   import org.springframework.web.bind.annotation.RequestMapping;
+   import org.springframework.web.bind.annotation.RequestMethod;
+   import org.springframework.web.bind.annotation.RestController;
+   
+   import java.util.UUID;
+   
+   /**
+    * @auther zzyy
+    * @create 2021-10-25 17:43
+    */
+   @RestController
+   public class OrderController
+   {
+       @Value("${server.port}")
+       private String port;
+   
+       @RequestMapping("/order/docker")
+       public String helloDocker()
+       {
+           return "hello docker"+"\t"+port+"\t"+ UUID.randomUUID().toString();
+       }
+   
+       @RequestMapping(value ="/order/index",method = RequestMethod.GET)
+       public String index()
+       {
+           return "服务端口号: "+"\t"+port+"\t"+UUID.randomUUID().toString();
+       }
+   }
+   ```
+
+## 二、Dockerfile发布微服务
+
+1. IDEA工具里面搞定微服务jar包
+
+   ![](../../../TyporaImage/image-1719794610292.png)
+
+2. 编写Dockerfile
+
+   ```dockerfile
+   # 基础镜像使用java
+   FROM java:8
+   # 作者
+   MAINTAINER zzyy
+   # VOLUME 指定临时文件目录为/tmp，在主机/var/lib/docker目录下创建了一个临时文件并链接到容器的/tmp
+   VOLUME /tmp
+   # 将jar包添加到容器中并更名为zzyy_docker.jar
+   ADD docker_boot-0.0.1-SNAPSHOT.jar zzyy_docker.jar
+   # 运行jar包
+   RUN bash -c 'touch /zzyy_docker.jar'
+   ENTRYPOINT ["java","-jar","/zzyy_docker.jar"]
+   #暴露6001端口作为微服务
+   EXPOSE 6001
+   ```
+
+3. 将微服务jar包和Dockerfile文件上传到同一个目录下/mydocker，并运行构建命令将其打包成镜像文件`docker build -t zzyy_docker:1.6 .`
+
+   ![](../../../TyporaImage/image-1719794982037.png)
+
+4. 运行容器：`docker run -d -p 6001:6001 zzyy_docker:1.6`
+
+   ![](../../../TyporaImage/image-1719795144597.png)
+
+5. 访问测试
+
+   ![](../../../TyporaImage/image-1719795176385.png)
+
+# 十三、Docker网络
+
+## 一、Docekr网络概述
+
+1. Docker不启动时，默认网络情况
+
+   ![](../../../TyporaImage/image-1719795419576.png)
+
+   ```tex
+   在CentOS7的安装过程中如果有选择相关虚拟化的的服务安装系统后，启动网卡时会发现有一个以网桥连接的私网地址的virbr0网卡（virbr0网卡：它还有一个固定的默认IP地址192.168.122.1），是做虚拟机网桥的使用的，其作用是为连接其上的虚机网卡提供 NAT访问外网的功能
+    
+   我们之前学习Linux安装，勾选安装系统的时候附带了libvirt服务才会生成的一个东西，如果不需要可以直接将libvirtd服务卸载
+   
+   yum remove libvirt-libs.x86_64
+   ```
+
+2. Docker启动后，网络情况。会产生一个名为Docker0的虚拟网桥
+
+   ![](../../../TyporaImage/image-1719795602585.png)
+
+3. 查看docker网络模式命令，默认创建3大网络模式
+
+   ![](../../../TyporaImage/image-1719795637027.png)
+
+## 二、常用基本命令
+
+1. ALL命令
+
+   ![](../../../TyporaImage/image-1719795777502.png)
+
+2. 创建网络：` docker network create XXX网络名字 `
+
+3. 查看网络：`docker network inspect XXX网络名字 `
+
+4. 查看网络源数据：`docker network inspect XXX网络名字`
+
+5. 删除网络：`docker network rm XXX网络名字`
+
+6. 案例
+
+   ![](../../../TyporaImage/image-1719795921264.png)
+
+## 三、Docekr网络的作用
+
+1. 容器间的互联和通信以及端口映射， 可以使用容器的名称或IP地址来访问其他容器 
+2. 容器IP变动时候可以通过服务名直接网络通信而不受到影响
+
+## 四、网络模式
+
+### 一、总体介绍
+
+| 网络模式  | 描述                                                         |
+| --------- | ------------------------------------------------------------ |
+| bridge    | 为每一个容器分配、设置IP等，并将容器连接到一个docker0。虚拟网络，默认为此模式 |
+| host      | 容器不会虚拟出自己的网卡，配置自己的IP等，而是使用宿主机的IP和端口 |
+| none      | 容器有独立的Network Namespace，但并没有对其进行任何网络设置，如分配veth pair和网桥连接、IP等 |
+| container | 新创建的容器不会创建自己的网卡和配置自己的IP，而是和一个指定的容器共享IP、端口范围等 |
+
+- bridge模式：使用--network bridge指定，默认使用docker0
+- host模式：使用--network host指定
+- none模式：使用--network none指定
+- container模式：使用--network container:NAME或者容器ID指定
+
+### 二、容器实例内默认网络IP生产规则
+
+1. 先启动两个ubuntu容器实例
+
+   ![](../../../TyporaImage/image-1719797584728.png)
+
+2. docker inspect 容器ID or 容器名字
+
+   ![](../../../TyporaImage/image-1719797603018.png)
+
+3. 关闭u2实例，新建u3，查看ip变化
+
+   ![](../../../TyporaImage/image-1719797621096.png)
+
+4. 结论：docker容器内部的ip是有可能会发生改变的
+
+### 三、案例说明
+
+### 四、Docker平台架构图解
+
+1. 整体说明。从其架构和运行流程来看，Docker 是一个 C/S 模式的架构，后端是一个松耦合架构，众多模块各司其职。 Docker 运行的基本流程为：
+
+   - 用户是使用 Docker Client 与 Docker Daemon 建立通信，并发送请求给后者
+   - Docker Daemon 作为 Docker 架构中的主体部分，首先提供 Docker Server 的功能使其可以接受 Docker Client 的请求
+   - Docker Engine 执行 Docker 内部的一系列工作，每一项工作都是以一个 Job 的形式的存在
+   - Job 的运行过程中，当需要容器镜像时，则从 Docker Registry 中下载镜像，并通过镜像管理驱动 Graph driver将下载镜像以Graph的形式存储
+   - 当需要为 Docker 创建网络环境时，通过网络管理驱动 Network driver 创建并配置 Docker 容器网络环境
+   - 当需要限制 Docker 容器运行资源或执行用户指令等操作时，则通过 Execdriver 来完成
+   - Libcontainer是一项独立的容器管理包，Network driver以及Exec driver都是通过Libcontainer来实现具体对容器进行的操作
+
+2. 整体架构
+
+   ![](../../../TyporaImage/image-1719797867981.png)
+
+# 十四、Docker-compose容器编排
+
+## 一、Docker-compose容器编排概述
+
+1. Docker-Compose 是 Docker 官方的开源项目，负责实现对Docker容器集群的快速编排 、
+2. Docker-Compose 可以管理多个Docker容器组成一个应用。需要定义一个yaml格式的配置文件 docker-compose.yml，配置好多个容器之间的调用关系，然后只需要一个命令就能同时启动/关闭这些容器
+3. Docker建议我们每个容器中只运行一个服务，因为Docker容器本身占用资源极少，所以最好是将每个服务单独的分割开来。但是如果我们需要同时部署多个服务，每个服务单独构建镜像构建容器就会比较麻烦。所以 Docker 官方推出了 docker-compose 多服务部署的工具  
+4. Compose允许用户通过一个单独的 docker-compose.yml 模板文件来定义一组相关联的应用容器为一个项目（project）。可以很容易的用一个配置文件定义一个多容器的应用，然后使用一条指令安装这个应用的所有依赖，完成构建
+5. 核心概念
+   - 服务（service）：一个个应用容器实例
+   - 工程（project）：由一组关联的应用容器组成的一个完整业务单元，在docker-compose.yml中定义
+6. Compose使用的三个步骤
+   - 编写 Dockerfile 定义各个应用容器，并构建出对应的镜像文件
+   - 编写 docker-compose.yml，定义一个完整的业务单元，安排好整体应用中的各个容器服务
+   - 执行 docker-compose up 命令，其创建并运行整个应用程序，完成一键部署上线
+
+## 二、安装docker-compose
+
+1. Docker-Compose 的版本需要和 Docker 引擎版本对应，可以参照官网上的对应关系。https://docs.docker.com/compose/compose-file/compose-file-v3/ 
+
+   ![](../../../TyporaImage/1402725-20231129141644223-97583779.png)
+
+2. 安装Compose，可以参考官网：https://docs.docker.com/compose/install/standalone/ 
+
+3. 下载docker-compose后，需要添加执行权限，然后才可以使用 
+
+   ```shell
+   # 例如从github下载 2.23.3 版本的docker-compose
+   # 下载下来的文件放到 /usr/local/bin目录下，命名为 docker-compose
+   curl -SL https://github.com/docker/compose/releases/download/v2.23.3/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
+   
+   # 如果GitHub下载速度比较慢的话使用下面的地址：
+   curl -L https://get.daocloud.io/docker/compose/releases/download/1.25.0/docker-compose-`uname -s`-`uname -m` > /usr/local/bin/docker-compose
+   
+   # 添加权限
+   chmod +x /usr/local/bin/docker-compose
+   
+   # 验证
+   docker-compose version
+   ```
+
+4. 卸载Compose：直接删除 `usr/local/bin/docker-compose`文件即可 
+
+## 三、docker-compose常用命令
+
+1. 执行命令时，需要在对应的docker-compose.yml文件所在目录下执行。查看帮助： 
+
+   ```shell
+   docker-compose -h
+   ```
+
+2. 创建并启动docker-compose服务：（类似 docker run） 
+
+   ```shell
+   docker-compose up
+   # 后台运行
+   docker-compose up -d
+   ```
+
+3. 停止并删除容器、网络、卷、镜像：（类似 docker stop +  docker rm） 
+
+   ```shell
+   docker-compose down
+   ```
+
+4. 进入容器实例内部： 
+
+   ```shell
+   docker-compose exec <yml里面的服务id> /bin/bash
+   ```
+
+5. 展示当前docker-compose编排过的运行的所有容器： 
+
+   ```shell
+   docker-compose ps
+   ```
+
+6. 展示当前docker-compose编排过的容器进程： 
+
+   ```shell
+   docker-compose top
+   ```
+
+7. 查看容器输出日志：
+
+   ```shell
+   docker-compose log <yml里面的服务id>
+   ```
+
+8. 检查配置： 
+
+   ```shell
+   docker-compose config
+   # 有问题才输出
+   docker-compose config -q
+   ```
+
+9. 重启服务： 
+
+   ```shell
+   docker-compose restart
+   ```
+
+10. 启动服务：（类似 docker start） 
+
+    ```shell
+    docker-compose start
+    ```
+
+11. 停止服务： 
+
+    ```shell
+    docker-compose stop
+    ```
+
+## 四、docker-compose配置规则
+
+-  创建docker-compse.yml核心，参考官网地址：https://docs.docker.com/compose/compose-file/compose-file-v3/ 
+
+- 示例
+
+  ```yaml
+  version: '' # 版本
+  servers:  # 服务
+    服务1: web
+       # 服务的配置
+       build
+       network
+       images
+    服务2: redis
+    服务3:
+    服务4:
+    ...
+  # 其他配置 网络，全局的规则 数据卷
+  volumes:
+  configs:
+  networks:
+  ```
+
+## 五、部署案例
+
+[博客](https://www.cnblogs.com/auguse/articles/17865012.html)
+
+# 十五、Docker轻量级可视化工具Portainer
+
+1. Portainer概述：Portainer 是一款轻量级的应用，它提供了图形化界面，用于方便地管理Docker环境，包括单机环境和集群环境
+
+2. 安装
+
+   - [Portainer官网](https://www.portainer.io/)
+   - [官网介绍](https://docs.portainer.io/v/ce-2.9/start/install/server/docker/linux)
+
+3. 步骤
+
+   - docker命令安装
+
+     ```shell
+     docker run -d -p 8000:8000 -p 9000:9000 
+     --name portainer 
+     --restart=always 
+     -v /var/run/docker.sock:/var/run/docker.sock 
+     -v portainer_data:/data 
+     portainer/portainer 
+     ```
+
+   - 第一次登录需创建admin，访问地址：xxx.xxx.xxx.xxx:9000。用户名，直接用默认admin
+
+     密码记得8位，随便写
+
+     ![](../../../TyporaImage/image-1719823042644.png)
+
+   - 设置admin用户和密码后首次登陆
+
+     ![](../../../TyporaImage/image-1719823069220.png)
+
+   - 选择local选项卡后本地docker详细信息展示
+
+     ![](../../../TyporaImage/image-1719823092803.png)
+
+   - 对应的命令为`docker system df`
+
+# 十六、Docker容器监控之CAdvisor+InfluxDB+Granfana
