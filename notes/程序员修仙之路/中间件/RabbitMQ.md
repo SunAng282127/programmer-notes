@@ -107,15 +107,17 @@
 1. 上传到 `/usr/local/software` 目录下（如果没有 software 需要自己创建）
 
    ```shell
-   rpm -ivh erlang-21.3.8.21-1.el7.x86_64.rpm
-   yum install socat -y
-   rpm -ivh rabbitmq-server-3.8.8-1.el7.noarch.rpm
-   
-   
-   #或者
+   #erlang环境安装
    curl -s https://packagecloud.io/install/repositories/rabbitmq/erlang/script.rpm.sh | sudo bash
    
    sudo yum install erlang-21.3.8.21-1.el7.x86_64
+   
+   #rabbitmq安装
+   wget https://packagecloud.io/rabbitmq/rabbitmq-server/packages/el/7/rabbitmq-server-3.8.8-1.el7.noarch.rpm
+   yum install socat -y
+   
+   rpm -ivh rabbitmq-server-3.8.8-1.el7.noarch.rpm
+   
    ```
 
 2. 启动
