@@ -651,7 +651,7 @@
 
 ## 六、不公平分发
 
-1. 在最开始的时候我们学习到 RabbitMQ 分发消息采用的轮训分发，但是在某种场景下这种策略并不是很好，比方说有两个消费者在处理任务，其中有个消费者1处理任务的速度非常快，而另外一个消费者2处理速度却很慢，这个时候我们还是采用轮训分发的化就会到这处理速度快的这个消费者很大一部分时间处于空闲状态，而处理慢的那个消费者一直在干活，这种分配方式在这种情况下其实就不太好，但是 RabbitMQ 并不知道这种情况它依然很公平的进行分发 
+1. 在最开始的时候我们学习到 RabbitMQ 分发消息采用的轮训分发，但是在某种场景下这种策略并不是很好，比方说有两个消费者在处理任务，其中有个消费者1处理任务的速度非常快，而另外一个消费者2处理速度却很慢，这个时候我们还是采用轮训分发的话，就会导致处理速度快的这个消费者很大一部分时间处于空闲状态，而处理慢的那个消费者一直在干活，这种分配方式在这种情况下其实就不太好，但是 RabbitMQ 并不知道这种情况，它依然很公平的进行分发 
 
 2. 为了避免这种情况，在消费者中消费之前，我们可以设置参数`channel.basicQos(1);` 
 
@@ -675,14 +675,539 @@
 
 1. 带权的消息分布
 
-2. 本身消息的发送就是异步发送的，所以在任何时候，channel上肯定不止只有一个消息另外来自消费者的手动确认本质上也是异步的。因此这里就存在一个未确认的消息缓冲区，因此希望开发人员能限制此缓冲区的大小**，**以避免缓冲区里面无限制的未确认消息问题。这个时候就可以通过使用 basic.qos 方法设置“预取计数”值来完成的
+2. 本身消息的发送就是异步发送的，所以在任何时候，channel上肯定不止只有一个消息，另外来自消费者的手动确认本质上也是异步的。因此这里就存在一个未确认的消息缓冲区，因此希望开发人员能限制此缓冲区的大小**，**以避免缓冲区里面无限制的未确认消息问题。这个时候就可以通过使用 basic.qos 方法设置“预取计数”值来完成的
 
-3. 该值定义通道上允许的未确认消息的最大数量。一旦数量达到配置的数量，RabbitMQ 将停止在通道上传递更多消息，除非至少有一个未处理的消息被确认，例如，假设在通道上有未确认的消息 5、6、7，8，并且通道的预取计数设置为 4，此时RabbitMQ 将不会在该通道上再传递任何消息，除非至少有一个未应答的消息被 ack。比方说 tag=6 这个消息刚刚被确认 ACK，RabbitMQ 将会感知这个情况到并再发送一条消息。消息应答和 QoS 预取值对用户吞吐量有重大影响
+3. 该值定义通道上允许的未确认消息的最大数量。一旦数量达到配置的数量，RabbitMQ 将停止在通道上传递更多消息，除非至少有一个未处理的消息被确认，例如，假设在通道上有未确认的消息 5、6、7，8，并且通道的预取计数设置为 4（此时的4对应的是数量，并不是 4 这个传递的消息），此时 RabbitMQ 将不会在该通道上再传递任何消息，除非至少有一个未应答的消息被 ack。比方说 tag=6 这个消息刚刚被确认 ACK，RabbitMQ 将会感知这个情况并再发送一条消息。消息应答和 QoS 预取值对用户吞吐量有重大影响
 
-4. 通常，增加预取将提高向消费者传递消息的速度。虽然自动应答传输消息速率是最佳的，但是，在这种情况下已传递但尚未处理的消息的数量也会增加，从而增加了消费者的 RAM 消耗（随机存取存储器）应该小心使用具有无限预处理的自动确认模式或手动确认模式，消费者消费了大量的消息如果没有确认的话，会导致消费者连接节点的内存消耗变大，所以找到合适的预取值是一个反复试验的过程，不同的负载该值取值也不同 100 到 300 范围内的值通常可提供最佳的吞吐量，并且不会给消费者带来太大的风险
+4. 通常，增加预取将提高向消费者传递消息的速度。虽然自动应答传输消息速率是最佳的，但是，在这种情况下已传递但尚未处理的消息的数量也会增加，从而增加了消费者的 RAM 消耗（随机存取存储器），应该小心使用具有无限预处理的自动确认模式或手动确认模式，消费者消费了大量的消息如果没有确认的话，会导致消费者连接节点的内存消耗变大，所以找到合适的预取值是一个反复试验的过程，不同的负载该值取值也不同， 100 到 300 范围内的值通常可提供最佳的吞吐量，并且不会给消费者带来太大的风险
 
 5. 预取值为 1 是最保守的。当然这将使吞吐量变得很低，特别是消费者连接延迟很严重的情况下，特别是在消费者连接等待时间较长的环境中。对于大多数应用来说，稍微高一点的值将是最佳的
 
    ![](../../../TyporaImage/RabbitMQ-00000032.png)
 
 # 五、RabbitMQ发布确认
+
+## 一、发布确认逻辑
+
+- 生产者将信道设置成 confirm 模式，一旦信道进入 confirm 模式，所有在该信道上面发布的消息都将会被指派一个唯一的 ID（从 1 开始），一旦消息被投递到所有匹配的队列之后，broker 就会发送一个确认给生产者（包含消息的唯一 ID），这就使得生产者知道消息已经正确到达目的队列了，如果消息和队列是可持久化的，那么确认消息会在将消息写入磁盘之后发出，broker 回传给生产者的确认消息中 delivery-tag 域包含了确认消息的序列号，此外 broker 也可以设置 basic.ack 的 multiple 域，表示到这个序列号之前的所有消息都已经得到了处理
+- confirm 模式最大的好处在于它是异步的，一旦发布一条消息，生产者应用程序就可以在等信道返回确认的同时继续发送下一条消息，当消息最终得到确认之后，生产者应用便可以通过回调方法来处理该确认消息，如果 RabbitMQ 因为自身内部错误导致消息丢失，就会发送一条 nack 消息， 生产者应用程序同样可以在回调方法中处理该 nack 消息
+
+## 二、发布确认的策略
+
+1. 发布确认默认是没有开启的，如果要开启需要调用方法 confirmSelect，每当你要想使用发布确认，都需要在 channel 上调用该方法
+
+   ```java
+   //开启发布确认
+   channel.confirmSelect();
+   ```
+
+2. 单个确认发布
+
+   - 这是一种简单的确认方式，它是一种**同步确认发布**的方式，也就是发布一个消息之后只有它被确认发布，后续的消息才能继续发布，`waitForConfirmsOrDie(long)` 这个方法只有在消息被确认的时候才返回，如果在指定时间范围内这个消息没有被确认那么它将抛出异常
+   - 这种确认方式有一个最大的缺点就是：发布速度特别的慢，因为如果没有确认发布的消息就会阻塞所有后续消息的发布，这种方式最多提供每秒不超过数百条发布消息的吞吐量。当然对于某些应用程序来说这可能已经足够了
+
+   ```java
+   /**
+    * 单个发送
+    */
+   public static void publishMessageIndividually() throws Exception {
+       Channel channel = RabbitMqUtils.getChannel();
+       //队列声明
+       String queueName = UUID.randomUUID().toString();
+       channel.queueDeclare(queueName, true, false, false, null);
+       //开启发布确认
+       channel.confirmSelect();
+   
+       long begin = System.currentTimeMillis();
+   
+       for (int i = 0; i < MESSAGE_COUNT; i++) {
+           String message = i + "";
+           channel.basicPublish("", queueName, null, message.getBytes());
+           //服务端返回 false 或超时时间内未返回，生产者可以消息重发
+           boolean flag = channel.waitForConfirms();
+           if (flag) {
+               System.out.println("消息发送成功");
+           }
+       }
+   
+       long end = System.currentTimeMillis();
+       System.out.println("发布" + MESSAGE_COUNT + "个单独确认消息,耗时" + (end - begin) + "ms");
+   
+   }
+   
+   ```
+
+3. 批量确认发布
+
+   - 单个确认发布那种方式非常慢，与单个等待确认消息相比，先发布一批消息然后一起确认可以极大地提高吞吐量，当然这种方式的缺点就是：当发生故障导致发布出现问题时，不知道是哪个消息出问题了，我们必须将整个批处理保存在内存中，以记录重要的信息而后重新发布消息。当然这种方案仍然是**同步**的，也一样阻塞消息的发布 
+
+   ```java
+   /**
+    * 批量
+    */
+   public static void publishMessageBatch() throws Exception {
+       Channel channel = RabbitMqUtils.getChannel();
+       //队列声明
+       String queueName = UUID.randomUUID().toString();
+       channel.queueDeclare(queueName, true, false, false, null);
+       //开启发布确认
+       channel.confirmSelect();
+       //批量确认消息大小
+       int batchSize = 100;
+       //未确认消息个数
+       int outstandingMessageCount = 0;
+       long begin = System.currentTimeMillis();
+   
+       for (int i = 0; i < MESSAGE_COUNT; i++) {
+           String message = i + "";
+           channel.basicPublish("", queueName, null, message.getBytes());
+           outstandingMessageCount++;
+           if (outstandingMessageCount == batchSize) {
+               channel.waitForConfirms();
+               outstandingMessageCount = 0;
+           }
+       }
+       //为了确保还有剩余没有确认消息 再次确认
+       if (outstandingMessageCount > 0) {
+           channel.waitForConfirms();
+       }
+       long end = System.currentTimeMillis();
+       System.out.println("发布" + MESSAGE_COUNT + "个批量确认消息,耗时" + (end - begin) + "ms");
+   }
+   
+   ```
+
+4. 异步确认发布
+
+   - 异步确认虽然编程逻辑比上两个要复杂，但是性价比最高，无论是可靠性还是效率都没得说， 他是利用回调函数来达到消息可靠性传递的，这个中间件也是通过函数回调来保证是否投递成功 
+   - 处理异步未处理消息的解决方案：把未确认的消息放到一个基于内存的并且能被发布线程访问的队列， 比如说用 ConcurrentLinkedQueue 这个队列在 confirm callbacks 与发布线程之间进行消息的传递 
+
+   ![](../../../TyporaImage/RabbitMQ-00000034.png)
+
+5. 单个确认发布、批量确认发布以及异步确认发布速度对比
+
+   - 单个确认发布：同步等待确认，简单，但吞吐量非常有限
+   - 批量确认发布：批量同步等待确认，简单，合理的吞吐量，一旦出现问题但很难推断出是那条消息出现了问题
+   - 异步确认发布：最佳性能和资源使用，在出现错误的情况下可以很好地控制，但是实现起来稍微难些
+
+# 六、RabbitMQ交换机 
+
+## 一、Exchanges概述
+
+1. RabbitMQ 消息传递模型的核心思想是: **生产者生产的消息从不会直接发送到队列**。实际上，通常生产者甚至都不知道这些消息传递传递到了哪些队列中
+2. 相反，**生产者只能将消息发送到交换机（exchange）**，交换机工作的内容非常简单，一方面它接收来自生产者的消息，另一方面将它们推入队列。交换机必须确切知道如何处理收到的消息。是应该把这些消息放到特定队列还是说把它们到许多队列中还是说应该丢弃它们。这就的由交换机的类型来决定
+
+## 二、Exchanges类型
+
+1. Exchanges类型可分为：直接(direct)、主题(topic)、标题(headers)、扇出(fanout)
+
+2. 无名exchange：在前面部分我们对 exchange 一无所知，但仍然能够将消息发送到队列。之前能实现的原因是因为我们使用的是默认交换，我们通过空字符串(“”)进行标识   
+
+   ![](https://testingcf.jsdelivr.net/gh/oddfar/static/img/RabbitMQ/RabbitMQ-00000036.png)
+
+   - 第一个参数是交换机的名称。空字符串表示默认或无名称交换机：消息能路由发送到队列中其实是由 routingKey(bindingkey)，即将消息路由到指定队列的关键字绑定 key 指定的，如果它存在的话
+
+## 三、临时队列
+
+1. 之前的章节我们使用的是具有特定名称的队列（也就是使用过的 hello 和 ack_queue ）。队列的名称我们来说至关重要，我们需要指定我们的消费者去消费哪个队列的消息
+
+2. 每当我们连接到 Rabbit 时，我们都需要一个全新的空队列，为此我们可以创建一个具有**随机名称的队列**，或者能让服务器为我们选择一个随机队列名称那就更好了。其次一旦我们断开了消费者的连接，队列将被自动删除 
+
+3. 创建临时队列的方式如下：
+
+   ```java
+   String queueName = channel.queueDeclare().getQueue();
+   ```
+
+   ![](../../../TyporaImage/RabbitMQ-00000037.png)
+
+## 四、绑定bindings
+
+- binding 其实是 exchange 和 queue 之间的桥梁，它告诉我们 exchange 和哪个队列进行了绑定关系。比如说下面这张图告诉我们的就是 X 与 Q1 和 Q2 进行了绑定 
+
+  ![](../../../TyporaImage/RabbitMQ-00000038.png)
+
+  ![](../../../TyporaImage/image-20210627203918539.png)
+
+## 五、Fanout exchange
+
+### 一、Fanout介绍
+
+- Fanout 这种类型非常简单。正如从名称中猜到的那样，它是将接收到的所有消息广播到它知道的所有队列中。系统中默认有些 exchange 类型
+- Fanout 会把所有的消息发布到所有与之关联的队列，连接对应队列的消费者都会消费所有接收到的消息。也就是生产者可能会把所有的消息都传播出去，所有的消费者都可能消费所有的消息
+
+![](../../../TyporaImage/RabbitMQ-00000039.png)
+
+### 二、Fanout实战
+
+1. Fanout流程图
+
+   ![](../../../TyporaImage/RabbitMQ-00000040.png)
+
+2. Logs 和临时队列的绑定关系如下图
+
+   ![](../../../TyporaImage/RabbitMQ-00000041.png)
+
+3. 为了说明这种模式，我们将构建一个简单的日志系统。它将由两个程序组成:第一个程序将发出日志消 息，第二个程序是消费者。其中我们会启动两个消费者，其中一个消费者接收到消息后把日志存储在磁盘 
+
+4. ReceiveLogs01 将接收到的消息打印在控制台
+
+   ```java
+   import com.oddfar.utils.RabbitMqUtils;
+   import com.rabbitmq.client.Channel;
+   import com.rabbitmq.client.DeliverCallback;
+   
+   /**
+    * @author zhiyuan
+    */
+   public class ReceiveLogs01 {
+       private static final String EXCHANGE_NAME = "logs";
+   
+       public static void main(String[] args) throws Exception {
+   
+           Channel channel = RabbitMqUtils.getChannel();
+           channel.exchangeDeclare(EXCHANGE_NAME, "fanout");
+           /**
+            * 生成一个临时的队列 队列的名称是随机的
+            * 当消费者断开和该队列的连接时 队列自动删除
+            */
+           String queueName = channel.queueDeclare().getQueue();
+           //把该临时队列绑定我们的 exchange 其中 routingkey(也称之为 binding key)为空字符串
+           channel.queueBind(queueName, EXCHANGE_NAME, "");
+           System.out.println("等待接收消息,把接收到的消息打印在屏幕........... ");
+   
+           //发送回调
+           DeliverCallback deliverCallback = (consumerTag, delivery) -> {
+               String message = new String(delivery.getBody(), "UTF-8");
+               System.out.println("控制台打印接收到的消息" + message);
+           };
+           channel.basicConsume(queueName, true, deliverCallback, consumerTag -> {});
+   
+       }
+   }
+   
+   ```
+
+5. ReceiveLogs02 把消息写出到文件
+
+   ```java
+   public class ReceiveLogs02 {
+       private static final String EXCHANGE_NAME = "logs";
+   
+       public static void main(String[] args) throws Exception {
+   
+           Channel channel = RabbitMqUtils.getChannel();
+           channel.exchangeDeclare(EXCHANGE_NAME, "fanout");
+           /**
+            * 生成一个临时的队列 队列的名称是随机的
+            * 当消费者断开和该队列的连接时 队列自动删除
+            */
+           String queueName = channel.queueDeclare().getQueue();
+           //把该临时队列绑定我们的 exchange 其中 routingkey(也称之为 binding key)为空字符串
+           channel.queueBind(queueName, EXCHANGE_NAME, "");
+           System.out.println("等待接收消息,把接收到的消息写到文件........... ");
+   
+           //发送回调
+           DeliverCallback deliverCallback = (consumerTag, delivery) -> {
+               String message = new String(delivery.getBody(), "UTF-8");
+               File file = new File("D:\\test\\rabbitmq_info.txt");
+               FileUtils.writeStringToFile(file,message,"UTF-8");
+               System.out.println("数据写入文件成功");
+           };
+           channel.basicConsume(queueName, true, deliverCallback, consumerTag -> {});
+   
+       }
+   }
+   
+   ```
+
+6. EmitLog 发送消息给两个消费者接收
+
+   ```java
+   public class EmitLog {
+       private static final String EXCHANGE_NAME = "logs";
+   
+       public static void main(String[] args) throws Exception {
+           Channel channel = RabbitMqUtils.getChannel();
+   
+           /**
+            * 声明一个 exchange
+            * 1.exchange 的名称
+            * 2.exchange 的类型
+            */
+           channel.exchangeDeclare(EXCHANGE_NAME, "fanout");
+           Scanner sc = new Scanner(System.in);
+           System.out.println("请输入信息");
+           while (sc.hasNext()) {
+               String message = sc.nextLine();
+               channel.basicPublish(EXCHANGE_NAME, "", null, message.getBytes("UTF-8"));
+               System.out.println("生产者发出消息" + message);
+           }
+       }
+       
+   }
+   
+   ```
+
+## 六、Direct exchange
+
+### 一、Direct介绍
+
+1. 在 Fanout exchange 中，我们构建了一个简单的日志记录系统。我们能够向许多接收者广播日志消息。在 Direct exchange 中，我们将向其中添加一些特别的功能——让某个消费者订阅发布的部分消息。例如我们只把严重错误消息定向存储到日志文件（以节省磁盘空间），同时仍然能够在控制台上打印所有日志消息
+
+2. bindings，即是交换机和队列之间的桥梁关系。也可以这么理解：**队列只对它绑定的交换机的消息感兴趣**。绑定用参数：routingKey 来表示，也可称该参数为 binding key。创建绑定我们用代码：`channel.queueBind(queueName, EXCHANGE_NAME, "routingKey");  `
+
+3. 绑定之后的意义由其交换类型决定 
+
+4. Fanout exchange 中的我们的日志系统将所有消息广播给所有消费者，对此我们想做一些改变，例如我们希望将日志消息写入磁盘的程序仅接收严重错误（erros），而不存储哪些警告（warning）或信息（info）日志消息以此避免浪费磁盘空间。Fanout 这种交换类型并不能给我们带来很大的灵活性，它只能进行无意识的广播，在这里我们将使用 direct 这种类型来进行替换，这种类型的工作方式是，消息只去到它绑定的 routingKey 队列中去
+
+   ![](../../../TyporaImage/RabbitMQ-00000042.png)
+
+5. 在上面这张图中，我们可以看到 X 绑定了两个队列，绑定类型是 direct 。队列 Q1 绑定键为 orange，队列 Q2 绑定键有两个：一个绑定键为 black，另一个绑定键为 green。在这种绑定情况下，生产者发布消息到 exchange 上，绑定键为 orange 的消息会被发布到队列 Q1。绑定键为 black和green 的消息会被发布到队列 Q2，其他消息类型的消息将被丢弃
+
+### 二、多重绑定
+
+- 如果 exchange 的绑定类型是direct，**但是它绑定的多个队列的 key 如果都相同**，在这种情况下虽然绑定类型是 direct **但是它表现的就和 fanout 有点类似了**，就跟广播差不多，如上图所示 
+
+  ![](../../../TyporaImage/RabbitMQ-00000043.png)
+
+### 三、Direct实战
+
+1. 关系
+
+   ![](../../../TyporaImage/RabbitMQ-00000044.png)
+
+2. 交换机
+
+   ![](../../../TyporaImage/RabbitMQ-00000045.png)
+
+   - c1：绑定console，routingKey为info、warning 
+   - c2：绑定disk，routingKey为error 
+
+3. c1代码
+
+   ```java
+   public class ReceiveLogsDirect01 {
+       private static final String EXCHANGE_NAME = "direct_logs";
+   
+       public static void main(String[] args) throws Exception {
+           Channel channel = RabbitMqUtils.getChannel();
+           channel.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.DIRECT);
+   
+           String queueName = "console";
+           //队列声明
+           channel.queueDeclare(queueName, false, false, false, null);
+           //队列绑定
+           channel.queueBind(queueName, EXCHANGE_NAME, "info");
+           channel.queueBind(queueName, EXCHANGE_NAME, "warning");
+   
+           System.out.println("等待接收消息...");
+   
+           //发送回调
+           DeliverCallback deliverCallback = (consumerTag, delivery) -> {
+               String message = new String(delivery.getBody(), "UTF-8");
+               message = "接收绑定键:" + delivery.getEnvelope().getRoutingKey() + ",消息:" + message;
+               System.out.println("info和warning 消息已经接收：\n" + message);
+           };
+           channel.basicConsume(queueName, true, deliverCallback, consumerTag -> {
+           });
+       }
+   }
+   ```
+
+4. c2代码
+
+   ```java
+   public class ReceiveLogsDirect02 {
+       private static final String EXCHANGE_NAME = "direct_logs";
+   
+       public static void main(String[] args) throws Exception {
+           Channel channel = RabbitMqUtils.getChannel();
+           channel.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.DIRECT);
+   
+           String queueName = "disk";
+           //队列声明
+           channel.queueDeclare(queueName, false, false, false, null);
+           //队列绑定
+           channel.queueBind(queueName, EXCHANGE_NAME, "error");
+           System.out.println("等待接收消息...");
+   
+           //发送回调
+           DeliverCallback deliverCallback = (consumerTag, delivery) -> {
+               String message = new String(delivery.getBody(), "UTF-8");
+               message = "接收绑定键:" + delivery.getEnvelope().getRoutingKey() + ",消息:" + message;
+               System.out.println("error 消息已经接收：\n" + message);
+           };
+           channel.basicConsume(queueName, true, deliverCallback, consumerTag -> {
+           });
+       }
+   }
+   ```
+
+5. EmitLogDirect
+
+   ```java
+   public class EmitLogDirect {
+       private static final String EXCHANGE_NAME = "direct_logs";
+   
+       public static void main(String[] args) throws Exception {
+           Channel channel = RabbitMqUtils.getChannel();
+           channel.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.DIRECT);
+   
+           //创建多个 bindingKey
+           Map<String, String> bindingKeyMap = new HashMap<>();
+           bindingKeyMap.put("info", "普通 info 信息");
+           bindingKeyMap.put("warning", "警告 warning 信息");
+           bindingKeyMap.put("error", "错误 error 信息");
+           //debug 没有消费这接收这个消息 所有就丢失了
+           bindingKeyMap.put("debug", "调试 debug 信息");
+   
+           for (Map.Entry<String, String> bindingKeyEntry : bindingKeyMap.entrySet()) {
+               //获取 key value
+               String bindingKey = bindingKeyEntry.getKey();
+               String message = bindingKeyEntry.getValue();
+   
+               channel.basicPublish(EXCHANGE_NAME, bindingKey, null, message.getBytes("UTF-8"));
+               System.out.println("生产者发出消息:" + message);
+           }
+       }
+   }
+   
+   ```
+
+## 七、Topics exchange
+
+### 一、Topics exchange介绍
+
+1. 在上一个小节中，我们改进了日志记录系统。我们没有使用只能进行随意广播的 fanout 交换机，而是使用了 direct 交换机，从而有能实现有选择性地接收日志
+2. 尽管使用 direct 交换机改进了我们的系统，但是它仍然存在局限性——比方说我们想接收的日志类型有 info.base 和 info.advantage，某个队列只想 info.base 的消息，那这个时候direct 就办不到了。这个时候就只能使用 **topic** 类型的交换机
+
+### 二、Topic的要求 
+
+1. 发送到类型是 topic 交换机的消息的 routing_key 不能随意写，必须满足一定的要求，它必须是**一个单词列表**，**以点号分隔开**。这些单词可以是任意单词
+   - 比如说："stock.usd.nyse", "nyse.vmw", "quick.orange.rabbit".这种类型的
+   - 当然这个单词列表最多不能超过 255 个字节
+2.  在这个规则列表中，其中有两个替换符是大家需要注意的： 
+   - `*`可以代替一个单词
+   - `#`可以替代零个或多个单词
+
+### 三、Topic匹配案例
+
+1.  绑定关系如下 
+
+   ![](../../../TyporaImage/RabbitMQ-00000046.png)
+
+   - Q1-->绑定的是中间带 orange 带 3 个单词的字符串 `(*.orange.*)`
+   - Q2-->绑定的是最后一个单词是rabbit的3个单词 `(*.*.rabbit)`以及第一个单词是lazy的多个单词`(lazy.#)`
+
+2. Topic匹配注意点
+
+   - 当一个队列绑定键是#，那么这个队列将接收所有数据，就有点像 fanout 了
+   - 如果队列绑定键当中没有#和*出现，那么该队列绑定类型就是 direct 了
+
+### 四、Topic实战
+
+1. 图示
+
+   ![](../../../TyporaImage/RabbitMQ-00000047.png)
+
+2. EmitLogTopic
+
+   ```java
+   public class EmitLogTopic {
+       private static final String EXCHANGE_NAME = "topic_logs";
+   
+       public static void main(String[] args) throws Exception {
+           Channel channel = RabbitMqUtils.getChannel();
+           channel.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.TOPIC);
+   
+           /**
+            * Q1-->绑定的是
+            *      中间带 orange 带 3 个单词的字符串(*.orange.*)
+            * Q2-->绑定的是
+            *      最后一个单词是 rabbit 的 3 个单词(*.*.rabbit)
+            *      第一个单词是 lazy 的多个单词(lazy.#)
+            *
+            */
+           Map<String, String> bindingKeyMap = new HashMap<>();
+           bindingKeyMap.put("quick.orange.rabbit", "被队列 Q1Q2 接收到");
+           bindingKeyMap.put("lazy.orange.elephant", "被队列 Q1Q2 接收到");
+           bindingKeyMap.put("quick.orange.fox", "被队列 Q1 接收到");
+           bindingKeyMap.put("lazy.brown.fox", "被队列 Q2 接收到");
+           bindingKeyMap.put("lazy.pink.rabbit", "虽然满足两个绑定但只被队列 Q2 接收一次");
+           bindingKeyMap.put("quick.brown.fox", "不匹配任何绑定不会被任何队列接收到会被丢弃");
+           bindingKeyMap.put("quick.orange.male.rabbit", "是四个单词不匹配任何绑定会被丢弃");
+           bindingKeyMap.put("lazy.orange.male.rabbit", "是四个单词但匹配 Q2");
+           for (Map.Entry<String, String> bindingKeyEntry : bindingKeyMap.entrySet()) {
+               String bindingKey = bindingKeyEntry.getKey();
+               String message = bindingKeyEntry.getValue();
+   
+               channel.basicPublish(EXCHANGE_NAME, bindingKey, null, message.getBytes("UTF-8"));
+               System.out.println("生产者发出消息：" + message);
+           }
+       }
+   }
+   ```
+
+3. ReceiveLogsTopic01 
+
+   ```java
+   public class ReceiveLogsTopic01 {
+       private static final String EXCHANGE_NAME = "topic_logs";
+   
+       public static void main(String[] args) throws Exception {
+           Channel channel = RabbitMqUtils.getChannel();
+           channel.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.TOPIC);
+           //声明 Q1 队列与绑定关系
+           String queueName = "Q1";
+           //声明
+           channel.queueDeclare(queueName, false, false, false, null);
+           //绑定
+           channel.queueBind(queueName, EXCHANGE_NAME, "*.orange.*");
+           System.out.println("等待接收消息........... ");
+   
+           DeliverCallback deliverCallback = (consumerTag, delivery) -> {
+               String message = new String(delivery.getBody(), "UTF-8");
+               System.out.println(" 接收队列:" + queueName + " 绑定键:" + delivery.getEnvelope().getRoutingKey() + ",消息:" + message);
+           };
+           channel.basicConsume(queueName, true, deliverCallback, consumerTag -> {
+           });
+       }
+   }
+   
+   ```
+
+4. ReceiveLogsTopic02
+
+   ```java
+   public class ReceiveLogsTopic02 {
+       private static final String EXCHANGE_NAME = "topic_logs";
+   
+       public static void main(String[] args) throws Exception {
+           Channel channel = RabbitMqUtils.getChannel();
+           channel.exchangeDeclare(EXCHANGE_NAME, BuiltinExchangeType.TOPIC);
+           //声明 Q2 队列与绑定关系
+           String queueName = "Q2";
+           //声明
+           channel.queueDeclare(queueName, false, false, false, null);
+           //绑定
+           channel.queueBind(queueName, EXCHANGE_NAME, "*.*.rabbit");
+           channel.queueBind(queueName, EXCHANGE_NAME, "lazy.#");
+   
+           System.out.println("等待接收消息........... ");
+   
+           DeliverCallback deliverCallback = (consumerTag, delivery) -> {
+               String message = new String(delivery.getBody(), "UTF-8");
+               System.out.println(" 接收队列:" + queueName + " 绑定键:" + delivery.getEnvelope().getRoutingKey() + ",消息:" + message);
+           };
+           channel.basicConsume(queueName, true, deliverCallback, consumerTag -> {
+           });
+       }
+   }
+   
+   ```
+
+## 八、Headers exchange
+
+## 九、bindingKey和routingKey的区分
+
