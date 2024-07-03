@@ -834,6 +834,7 @@
 ### 一、Fanout介绍
 
 - Fanout 这种类型非常简单。正如从名称中猜到的那样，它是将接收到的所有消息广播到它知道的所有队列中。系统中默认有些 exchange 类型
+- Fanout 不需要路由键 routingKey 
 - Fanout 会把所有的消息发布到所有与之关联的队列，连接对应队列的消费者都会消费所有接收到的消息。也就是生产者可能会把所有的消息都传播出去，所有的消费者都可能消费所有的消息
 
 ![](../../../TyporaImage/RabbitMQ-00000039.png)
@@ -1059,7 +1060,7 @@
            bindingKeyMap.put("info", "普通 info 信息");
            bindingKeyMap.put("warning", "警告 warning 信息");
            bindingKeyMap.put("error", "错误 error 信息");
-           //debug 没有消费这接收这个消息 所有就丢失了
+           //debug 没有消费这接收这个消息 所以就丢失了
            bindingKeyMap.put("debug", "调试 debug 信息");
    
            for (Map.Entry<String, String> bindingKeyEntry : bindingKeyMap.entrySet()) {
@@ -1077,7 +1078,7 @@
 
 ## 七、Topics exchange
 
-### 一、Topics exchange介绍
+### 一、Topics介绍
 
 1. 在上一个小节中，我们改进了日志记录系统。我们没有使用只能进行随意广播的 fanout 交换机，而是使用了 direct 交换机，从而有能实现有选择性地接收日志
 2. 尽管使用 direct 交换机改进了我们的系统，但是它仍然存在局限性——比方说我们想接收的日志类型有 info.base 和 info.advantage，某个队列只想 info.base 的消息，那这个时候direct 就办不到了。这个时候就只能使用 **topic** 类型的交换机
@@ -1209,5 +1210,264 @@
 
 ## 八、Headers exchange
 
-## 九、bindingKey和routingKey的区分
+### 一、Headers介绍
+
+1. Headers exchange 类似于 Direct exchange。但是它是通过匹配 AMQP 消息的 heade 而非路由键 
+
+   ![](../../../TyporaImage/20191118174520878.png)
+
+2. Headers 交换机是通过 Headers 头部来将消息映射到队列的 ，有点像 HTTP 的 Headers 
+
+3. Hash结构中要求携带一个键 "x-match"，这个键的Value可以是any或者all，这代表消息携带的 Hash 是需要全部匹配（all），还是仅匹配一个键（any）就可以了
+
+4. 相比 Direct exchange ，Headers exchange 的优势是匹配的规则不被限定为 String 而是 Object 类型 
+
+   - all：在发布消息时携带的所有 Entry 必须和绑定在队列上的所有 Entry 完全匹配
+   - any：只要在发布消息时携带的有一对键值对 headers 满足队列定义的多个参数 arguments 的其中一个就能匹配上 ，注意这里是键值对的完全匹配，只匹配到键了，值却不—样是不行的
+
+5. 使用 Headers exchange 的时候匹配规则和当前的 routeKey 无关
+
+6. 这里的匹配，主要是消息携带的参数与消费者定义的参数比较，占据主动的是消费者，最终解释权归属消费者
+
+7. 需要注意的是：x- 开头的参数都不算匹配项；当消费者没有参数的时候，消息都会被路由到该消费者   
+
+### 二、Headers实战
+
+1. 消费者1
+
+   ```java
+    
+   /**
+    * 消费者1
+    * @Tag 主题交换Topic exchange
+    */
+   public class MQConsumerOne {
+    
+       public static void main(String[] args) {
+           try {
+               consumerMsg("header.exchange");
+           } catch (Exception e) {
+               e.printStackTrace();
+           }
+       }
+    
+       /**
+        * 构建参数
+        */
+       public static Map buildArgs()
+       {
+           HashMap<String,String> args = new HashMap<>();
+           args.put("name","张三");
+           args.put("age","32");
+           args.put("x-match","any");
+           return args;
+       }
+    
+       /**
+        * 消费者逻辑
+        * @param exchangeName
+        * @throws IOException
+        * @throws TimeoutException
+        */
+       public static void consumerMsg(String exchangeName) throws IOException, TimeoutException {
+           //创建连接工厂
+           ConnectionFactory connectionFactory = new ConnectionFactory();
+           //设置连接地址
+           connectionFactory.setHost("192.168.239.128");
+           //设置连接端口
+           connectionFactory.setPort(5672);
+           //设置连接的虚拟机
+           connectionFactory.setVirtualHost("mqtest");
+           //设置连接用户
+           connectionFactory.setUsername("mqtest");
+           //设置连接用户密码
+           connectionFactory.setPassword("test123");
+           //创建连接
+           Connection connection = connectionFactory.newConnection();
+           //创建通道
+           Channel channel = connection.createChannel();
+           //声明交换机
+           channel.exchangeDeclare(exchangeName, BuiltinExchangeType.HEADERS);
+           //声明队列(临时排它队列)
+           String queueName = channel.queueDeclare().getQueue();
+           //构建参数
+           Map args = buildArgs();
+           //绑定交换机
+           channel.queueBind(queueName,exchangeName,"",args);
+           //消费消息（主动确认）
+           channel.basicConsume(queueName,true,(tag,msg)->{
+               System.out.println(new String(msg.getBody(),"UTF-8"));
+           },(cancel)->{
+    
+           });
+          /* //关闭连接
+           channel.close();
+           connection.close();*/
+       }
+   }
+   ```
+
+2. 消费者2
+
+   ```java
+   /**
+    * 消费者2
+    * @Tag 主题交换Topic exchange
+    */
+   public class MQConsumerTwo {
+    
+       public static void main(String[] args) {
+           try {
+               consumerMsg("header.exchange");
+           } catch (Exception e) {
+               e.printStackTrace();
+           }
+       }
+    
+       /**
+        * 构建参数
+        */
+       public static Map buildArgs()
+       {
+           HashMap<String,String> args = new HashMap<>();
+           args.put("name","李四");
+           args.put("age","32");
+           args.put("x-match","all");
+           return args;
+       }
+    
+       /**
+        * 消费者逻辑
+        * @param exchangeName
+        * @throws IOException
+        * @throws TimeoutException
+        */
+       public static void consumerMsg(String exchangeName) throws IOException, TimeoutException {
+           //创建连接工厂
+           ConnectionFactory connectionFactory = new ConnectionFactory();
+           //设置连接地址
+           connectionFactory.setHost("192.168.239.128");
+           //设置连接端口
+           connectionFactory.setPort(5672);
+           //设置连接的虚拟机
+           connectionFactory.setVirtualHost("mqtest");
+           //设置连接用户
+           connectionFactory.setUsername("mqtest");
+           //设置连接用户密码
+           connectionFactory.setPassword("test123");
+           //创建连接
+           Connection connection = connectionFactory.newConnection();
+           //创建通道
+           Channel channel = connection.createChannel();
+           //声明交换机
+           channel.exchangeDeclare(exchangeName, BuiltinExchangeType.HEADERS);
+           //声明队列(临时排它队列)
+           String queueName = channel.queueDeclare().getQueue();
+           //构建标头参数
+           Map map = buildArgs();
+           //绑定交换机
+           channel.queueBind(queueName,exchangeName,"",map);
+           //消费消息（主动确认）
+           channel.basicConsume(queueName,true,(tag,msg)->{
+               System.out.println(new String(msg.getBody(),"UTF-8"));
+           },(cancel)->{
+    
+           });
+          /* //关闭连接
+           channel.close();
+           connection.close();*/
+       }
+   }
+   ```
+
+3. 生产者
+
+   ```java
+   /**
+    * 生产者
+    * @Tag 主题交换Topic exchange
+    */
+   public class MQProducer {
+    
+       public static void main(String[] args) {
+           try {
+               producerMsg("header.exchange","想要我的消息？就看你有没得这个本事！");
+           } catch (Exception e) {
+               e.printStackTrace();
+           }
+       }
+    
+       /**
+        * 构建参数
+        */
+       public static Map buildArgs()
+       {
+           HashMap<String,String> args = new HashMap<>();
+           args.put("name","李四");
+           args.put("age","32");
+           args.put("weight","180");
+           return args;
+       }
+    
+       /**
+        * 生产者
+        * @param exchangeName
+        * @param msg
+        * @throws IOException
+        * @throws TimeoutException
+        */
+       public static void producerMsg(String exchangeName,String msg) throws IOException, TimeoutException {
+           //创建连接工厂
+           ConnectionFactory connectionFactory = new ConnectionFactory();
+           //设置连接地址
+           connectionFactory.setHost("192.168.239.128");
+           //设置连接端口
+           connectionFactory.setPort(5672);
+           //设置连接的虚拟机
+           connectionFactory.setVirtualHost("mqtest");
+           //设置连接用户
+           connectionFactory.setUsername("mqtest");
+           //设置连接用户密码
+           connectionFactory.setPassword("test123");
+           //创建连接
+           Connection connection = connectionFactory.newConnection();
+           //创建通道
+           Channel channel = connection.createChannel();
+           //声明临时交换机
+           channel.exchangeDeclare(exchangeName, BuiltinExchangeType.HEADERS,false);
+           //构建标头参数
+           Map map = buildArgs();
+           AMQP.BasicProperties basicProperties = new AMQP.BasicProperties.Builder().headers(map).build();
+           //创建生产者
+           channel.basicPublish(exchangeName,"",basicProperties,msg.getBytes("UTF-8"));
+           //关闭连接
+           channel.close();
+           connection.close();
+       }
+   }
+   ```
+
+   - 完成代码逻辑过后，分别启动消费者1、消费者2和唯一的生产者，观察消息的收发情况。这里消费者1、消费者2都收到了消息
+
+     ![](../../../TyporaImage/20200728225603910.png)
+
+   - 消费者1的Headers中特殊参数 x-match 为 any，表示只要来的消息能任意匹配到Headers参数中任意一个参数与其值就可以了，满足一个就收了这个消息。生产者的Headers集合中刚好有一个age与消费者1的age参数匹配，消费者1该收到消息
+
+   - 消费者2的Headers中特殊参数 x-match 为 all，表示要全部满足消费者2的参数要求，它才会将对应的消息收下。这里生产者的Headers集合中有两个参数满足消费者2的要求，name和age两个的参数与值都匹配，看上去还差 x-match 没匹配到，但是上面提过，x- 开头的不算进匹配项，特殊参数匹配的时候略过，忽略 x-match 后这里全部匹配，消费者2该收到消息 
+
+
+## 九、BindingKey和RoutingKey的区别
+
+1. 路由键（Routingkey）：
+   - 定义：Routing Key 是在生产者发送消息时附加到消息的属性，用于路由消息到特定的交换机（Exchange）
+   - 作用：Routing Key 决定了消息将被发送到哪个交换机，它是交换机与队列之间的关键匹配条件
+   - 特点：Routing Key 通常是一个简单的字符串，它可以直接指定交换机将消息发送到哪个队列
+2. 绑定键（Bindingkey）：
+   - 定义：Binding Key 是在消费者创建队列与交换机之间的绑定时指定的条件。它告诉交换机如何将消息路由到与之绑定的队列
+   - 作用：Binding Key 用于交换机确定如何将消息发送到与之绑定的队列，它与交换机类型（direct、topic等）及其配置密切相关
+   - 特点：Binding Key 可以是一个模式（pattern），用于灵活地匹配消息的 Routing Key
+3. 总结：
+   - 用途：Routing Key 用于生产者确定消息发送的路由路径，而 Binding Key 用于消费者确定接收消息的路由路径
+   - 关联对象：Routing Key 用于消息和交换机直接关联，而 Binding Key 用于队列和交换机之间的绑定关联
+   - 灵活性：Routing Key 通常是直接的文本字符串，而 Binding Key 可以使用通配符进行模式匹配
 
