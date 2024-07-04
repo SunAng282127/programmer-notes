@@ -1,8 +1,9 @@
-# 一、MQ的相关概念
+# 一、MQ相关概念
 
 ## 一、MQ概述
 
 -  MQ（message queue），从字面意思上看，本质是个队列，FIFO 先入先出，只不过队列中存放的内容是 message 而已，还是一种跨进程的通信机制，用于上下游传递消息。在互联网架构中，MQ 是一种非常常见的上下游“逻辑解耦+物理解耦”的消息通信服务。使用了 MQ 之后，消息发送上游只需要依赖 MQ，不用依赖其他服务 
+-  AMQP（Advanced Message Queuing Protocol）即高级消息队列协议，是一个进程间传递异步消息的网络协议
 
 ## 二、MQ的作用
 
@@ -2080,3 +2081,557 @@
 
 1. 延时队列在需要延时处理的场景下非常有用，使用 RabbitMQ 来实现延时队列可以很好的利用 RabbitMQ 的特性，如：消息可靠发送、消息可靠投递、死信队列来保障消息至少被消费一次以及未被正确处理的消息不会被丢弃。另外，通过 RabbitMQ 集群的特性，可以很好的解决单点故障问题，不会因为单个节点挂掉导致延时队列不可用或者消息丢失
 2. 当然，延时队列还有很多其它选择，比如利用 Java 的 DelayQueue，利用 Redis 的 zset，利用 Quartz 或者利用 kafka 的时间轮，这些方式各有特点，看需要适用的场景
+
+# 九、RabbitMQ发布确认高级
+
+## 一、发布确认针对的故障
+
+- 在生产环境中由于一些不明原因，导致 RabbitMQ 重启，在 RabbitMQ 重启期间生产者消息投递失败， 导致消息丢失，需要手动处理和恢复 
+
+## 二、发布确认案例
+
+1. 确认机制方案
+
+   ![](../../../TyporaImage/RabbitMQ-00000068.png)
+
+2. 代码架构图
+
+   ![](../../../TyporaImage/RabbitMQ-00000069.png)
+
+3. 在配置文件当中需要添加 
+
+   ```properties
+   spring.rabbitmq.publisher-confirm-type=correlated
+   ```
+
+   - `NONE`是禁用发布确认模式，为默认值
+   - `CORRELATED`是发布消息成功到交换器后会触发回调方法
+   - `SIMPLE`其一效果和`CORRELATED`值一样会触发回调方法；其二在发布消息成功后使用 rabbitTemplate 调用 waitForConfirms 或 waitForConfirmsOrDie 方法等待 broker 节点返回发送结果，根据返回结果来判定下一步的逻辑，要注意的点是 waitForConfirmsOrDie 方法如果返回 false 则会关闭 channel，则接下来无法发送消息到 broker
+
+4. 添加配置类
+
+   ```java
+   @Configuration
+   public class ConfirmConfig {
+       public static final String CONFIRM_EXCHANGE_NAME = "confirm.exchange";
+       public static final String CONFIRM_QUEUE_NAME = "confirm.queue";
+   
+       // 声明业务Exchange
+       @Bean("confirmExchange")
+       public DirectExchange confirmExchange() {
+           return new DirectExchange(CONFIRM_EXCHANGE_NAME);
+       }
+   
+       // 声明确认队列
+       @Bean("confirmQueue")
+       public Queue confirmQueue() {
+           return QueueBuilder.durable(CONFIRM_QUEUE_NAME).build();
+       }
+   
+       // 声明确认队列绑定关系
+       @Bean
+       public Binding queueBinding(@Qualifier("confirmQueue") Queue queue,
+                                   @Qualifier("confirmExchange") DirectExchange exchange) {
+           return BindingBuilder.bind(queue).to(exchange).with("key1");
+       }
+   }
+   
+   ```
+
+5. 消息生产者的回调接口
+
+   ```java
+   @Component
+   @Slf4j
+   public class MyCallBack implements RabbitTemplate.ConfirmCallback {
+       /**
+        * 交换机不管是否收到消息的一个回调方法
+        *
+        * @param correlationData 消息相关数据
+        * @param ack             交换机是否收到消息
+        * @param cause           为收到消息的原因
+        */
+       @Override
+       public void confirm(CorrelationData correlationData, boolean ack, String cause) {
+           String id = correlationData != null ? correlationData.getId() : "";
+           if (ack) {
+               log.info("交换机已经收到 id 为:{}的消息", id);
+           } else {
+               log.info("交换机还未收到 id 为:{}消息，原因:{}", id, cause);
+           }
+       }
+   
+   }
+   
+   ```
+
+6. 消息生产者
+
+   ```java
+   @RestController
+   @RequestMapping("/confirm")
+   @Slf4j
+   public class ProducerController {
+       
+       public static final String CONFIRM_EXCHANGE_NAME = "confirm.exchange";
+       
+       @Autowired
+       private RabbitTemplate rabbitTemplate;
+       
+       @Autowired
+       private MyCallBack myCallBack;
+   
+       //依赖注入 rabbitTemplate 之后再设置它的回调对象
+       @PostConstruct
+       public void init() {
+           rabbitTemplate.setConfirmCallback(myCallBack);
+       }
+       
+       /**
+        * 消息回调和退回
+        *
+        * @param message
+        */
+       @GetMapping("sendMessage/{message}")
+       public void sendMessage(@PathVariable String message) {
+   
+           //指定消息 id 为 1
+           CorrelationData correlationData1 = new CorrelationData("1");
+           String routingKey = "key1";
+           rabbitTemplate.convertAndSend(CONFIRM_EXCHANGE_NAME, routingKey, message + routingKey, correlationData1);
+           log.info(routingKey + "发送消息内容:{}", message + routingKey);
+   
+           CorrelationData correlationData2 = new CorrelationData("2");
+           routingKey = "key2";
+           rabbitTemplate.convertAndSend(CONFIRM_EXCHANGE_NAME, routingKey, message + routingKey, correlationData2);
+           log.info(routingKey + "发送消息内容:{}", message + routingKey);
+   
+       }
+   
+   }
+   
+   ```
+
+7. 消息消费者
+
+   ```java
+   @Component
+   @Slf4j
+   public class ConfirmConsumer {
+       public static final String CONFIRM_QUEUE_NAME = "confirm.queue";
+   
+       @RabbitListener(queues = CONFIRM_QUEUE_NAME)
+       public void receiveMsg(Message message) {
+           String msg = new String(message.getBody());
+           log.info("接受到队列 confirm.queue 消息:{}", msg);
+       }
+   
+   }
+   
+   ```
+
+8. 访问：http://localhost:8080/confirm/sendMessage/你好 
+
+   ![](../../../TyporaImage/image-20210629135636990.png)
+
+9. 结果分析
+
+   - 可以看到，发送了两条消息，第一条消息的 RoutingKey 为 "key1"，第二条消息的 RoutingKey 为 "key2"，两条消息都成功被交换机接收，也收到了交换机的确认回调，但消费者只收到了一条消息，因为第二条消息的 RoutingKey 与队列的 BindingKey 不一致，也没有其它队列能接收这个消息，所有第二条消息被直接丢弃了
+   - 丢弃的消息交换机是不知道的，需要解决告诉生产者消息传送失败 
+
+## 三、回退消息
+
+1. 在仅开启了生产者确认机制的情况下，交换机接收到消息后，会直接给消息生产者发送确认消息，如果发现该消息不可路由，那么消息会被直接丢弃，此时生产者是不知道消息被丢弃这个事件的。那么如何让无法被路由的消息帮我想办法处理一下？最起码通知我一声，我好自己处理啊。通过设置 mandatory 参数可以在当消息传递过程中不可达目的地时将消息返回给生产者
+
+   ```java
+   rabbitTemplate.setReturnsCallback(myCallBack);
+   ```
+
+2. 修改配置
+
+   ```properties
+   #消息退回
+   spring.rabbitmq.publisher-returns=true
+   ```
+
+3. 修改回调接口
+
+   ```java
+   @Component
+   @Slf4j
+   public class MyCallBack implements RabbitTemplate.ConfirmCallback, RabbitTemplate.ReturnsCallback {
+   
+       /**
+        * 交换机不管是否收到消息的一个回调方法
+        *
+        * @param correlationData 消息相关数据
+        * @param ack             交换机是否收到消息
+        * @param cause           为收到消息的原因
+        */
+       @Override
+       public void confirm(CorrelationData correlationData, boolean ack, String cause) {
+           String id = correlationData != null ? correlationData.getId() : "";
+           if (ack) {
+               log.info("交换机已经收到 id 为:{}的消息", id);
+           } else {
+               log.info("交换机还未收到 id 为:{}消息，原因:{}", id, cause);
+           }
+       }
+   
+       //当消息无法路由的时候的回调方法
+       @Override
+       public void returnedMessage(ReturnedMessage returned) {
+   
+           log.error("消息：{}，被交换机 {} 退回，原因：{}，路由key：{},code:{}",
+                   new String(returned.getMessage().getBody()), returned.getExchange(),
+                   returned.getReplyText(), returned.getRoutingKey(),
+                   returned.getReplyCode());
+   
+       }
+   }
+   
+   ```
+
+4. 低版本可能没有`RabbitTemplate.ReturnsCallback`，可以使用 `RabbitTemplate.ReturnCallback`
+
+   ```java
+   @Override
+   public void returnedMessage(Message message, int replyCode, String replyText, String
+   exchange, String routingKey) {
+   	log.info("消息:{}被服务器退回，退回原因:{}, 交换机是:{}, 路由 key:{}",new String(message.getBody()),replyText, exchange, routingKey);
+   }
+   
+   ```
+
+5. 修改发送者 ProducerController
+
+   ```java
+   //依赖注入 rabbitTemplate 之后再设置它的回调对象
+   @PostConstruct
+   public void init() {
+       //消息回调
+       rabbitTemplate.setConfirmCallback(myCallBack);
+       /**
+        * true：交换机无法将消息进行路由时，会将该消息返回给生产者
+        * false：如果发现消息无法进行路由，则直接丢弃
+        */
+       rabbitTemplate.setMandatory(true);
+       //设置回退消息交给谁处理
+       rabbitTemplate.setReturnsCallback(myCallBack);
+     	//RabbitMQ版本低的是 rabbitTemplate.setReturnCallback(myCallBack);
+   
+   }
+   ```
+
+6. 访问：http://localhost:8080/confirm/sendMessage/你好 
+
+   ![](../../../TyporaImage/image-20210629143756078.png)
+
+## 四、备份交换机
+
+1. 备份交换机的使用原因
+
+   - 有了 mandatory 参数和回退消息，我们获得了对无法投递消息的感知能力，在生产者的消息无法被投递时发现并处理。但有时候，我们并不知道该如何处理这些无法路由的消息，最多打个日志，然后触发报警，再来手动处理。而通过日志来处理这些无法路由的消息是很不优雅的做法，特别是当生产者所在的服务有多台机器的时候，手动复制日志会更加麻烦而且容易出错。而且设置 mandatory 参数会增加生产者的复杂性，需要添加处理这些被退回的消息的逻辑。如果既不想丢失消息，又不想增加生产者的复杂性，该怎么做呢？
+   - 前面在设置死信队列的文章中，我们提到，可以为队列设置死信交换机来存储那些处理失败的消息，可是这些不可路由消息根本没有机会进入到队列，因此无法使用死信队列来保存消息。 在 RabbitMQ 中，有一种备份交换机的机制存在，可以很好的应对这个问题
+   - 什么是备份交换机呢？备份交换机可以理解为 RabbitMQ 中交换机的“备胎”，当我们为某一个交换机声明一个对应的备份交换机时，就是为它创建一个备胎，当交换机接收到一条不可路由消息时，将会把这条消息转发到备份交换机中，由备份交换机来进行转发和处理，通常备份交换机的类型为 Fanout ，这样就能把所有消息都投递到与其绑定的队列中，然后我们在备份交换机下绑定一个队列，这样所有那些原交换机无法被路由的消息，就会都进入这个队列了。当然，我们还可以建立一个报警队列，用独立的消费者来进行监测和报警
+
+2. 代码架构图
+
+   ![](../../../TyporaImage/RabbitMQ-00000072.png)
+
+3. 修改配置类
+
+   ```java
+   @Configuration
+   public class ConfirmConfig {
+       public static final String CONFIRM_EXCHANGE_NAME = "confirm.exchange";
+       public static final String CONFIRM_QUEUE_NAME = "confirm.queue";
+       //关于备份的
+       public static final String BACKUP_EXCHANGE_NAME = "backup.exchange";
+       public static final String BACKUP_QUEUE_NAME = "backup.queue";
+       public static final String WARNING_QUEUE_NAME = "warning.queue";
+   
+   
+       /*
+       // 声明业务Exchange
+       @Bean("confirmExchange")
+       public DirectExchange confirmExchange() {
+           return new DirectExchange(CONFIRM_EXCHANGE_NAME);
+       }
+       */
+   
+       // 声明确认队列
+       @Bean("confirmQueue")
+       public Queue confirmQueue() {
+           return QueueBuilder.durable(CONFIRM_QUEUE_NAME).build();
+       }
+   
+       // 声明确认队列绑定关系
+       @Bean
+       public Binding queueBinding(@Qualifier("confirmQueue") Queue queue,
+                                   @Qualifier("confirmExchange") DirectExchange exchange) {
+           return BindingBuilder.bind(queue).to(exchange).with("key1");
+       }
+   
+       //************************以下是关于备份的******************************
+   
+       //声明备份 Exchange
+       @Bean("backupExchange")
+       public FanoutExchange backupExchange() {
+           return new FanoutExchange(BACKUP_EXCHANGE_NAME);
+       }
+   
+       //声明确认 Exchange 交换机的备份交换机
+       @Bean("confirmExchange")
+       public DirectExchange confirmExchange() {
+           ExchangeBuilder exchangeBuilder = ExchangeBuilder.directExchange(CONFIRM_EXCHANGE_NAME)
+                   .durable(true)
+                   //设置该交换机的备份交换机
+                   .withArgument("alternate-exchange", BACKUP_EXCHANGE_NAME);
+           return exchangeBuilder.build();
+       }
+   
+   
+       // 声明警告队列
+       @Bean("warningQueue")
+       public Queue warningQueue() {
+           return QueueBuilder.durable(WARNING_QUEUE_NAME).build();
+       }
+   
+       // 声明报警队列绑定关系
+       @Bean
+       public Binding warningBinding(@Qualifier("warningQueue") Queue queue,
+                                     @Qualifier("backupExchange") FanoutExchange backupExchange) {
+           return BindingBuilder.bind(queue).to(backupExchange);
+       }
+   
+       // 声明备份队列
+       @Bean("backQueue")
+       public Queue backQueue() {
+           return QueueBuilder.durable(BACKUP_QUEUE_NAME).build();
+       }
+   
+       // 声明备份队列绑定关系
+       @Bean
+       public Binding backupBinding(@Qualifier("backQueue") Queue queue,
+                                    @Qualifier("backupExchange") FanoutExchange backupExchange) {
+           return BindingBuilder.bind(queue).to(backupExchange);
+       }
+   }
+   
+   ```
+
+4. 报警消费者
+
+   ```java
+   @Component
+   @Slf4j
+   public class WarningConsumer {
+       public static final String WARNING_QUEUE_NAME = "warning.queue";
+   
+       @RabbitListener(queues = WARNING_QUEUE_NAME)
+       public void receiveWarningMsg(Message message) {
+           String msg = new String(message.getBody());
+           log.error("报警发现不可路由消息：{}", msg);
+       }
+   }
+   
+   ```
+
+5. 之前已写过`confirm.exchange`交换机，由于更改配置，需要删掉，不然会报错
+
+   ![](../../../TyporaImage/RabbitMQ-00000073.png)
+
+6. 访问： http://localhost:8080/confirm/sendMessage/你好 
+
+   ![](../../../TyporaImage/image-20210629152752935.png)
+
+# 十、RabbitMQ幂等性、优先级、惰性
+
+## 一、幂等性
+
+1. 幂等性概述：用户对于同一操作发起的一次请求或者多次请求的结果是一致的，不会因为多次点击而产生了副作用。 举个最简单的例子，那就是支付，用户购买商品后支付，支付扣款成功，但是返回结果的时候网络异常，此时钱已经扣了，用户再次点击按钮，此时会进行第二次扣款，返回结果成功，用户查询余额发现多扣钱 了，流水记录也变成了两条。在以前的单应用系统中，我们只需要把数据操作放入事务中即可，发生错误立即回滚，但是再响应客户端的时候也有可能出现网络中断或者异常等等 
+2. 消息重复消费：消费者在消费 MQ 中的消息时，MQ 已把消息发送给消费者，消费者在给 MQ 返回 ack 时网络中断， 故 MQ 未收到确认信息，该条消息会重新发给其他的消费者，或者在网络重连后再次发送给该消费者，但实际上该消费者已成功消费了该条消息，造成消费者消费了重复的消息 
+3. 解决思路：MQ 消费者的幂等性的解决一般使用全局 ID 或者写个唯一标识比如时间戳 或者 UUID 或者订单消费者消费 MQ 中的消息也可利用 MQ 的该 id 来判断，或者可按自己的规则生成一个全局唯一 id，每次消费消息时用该 id 先判断该消息是否已消费过
+4. 消费端的幂等性保障：在海量订单生成的业务高峰期，生产端有可能就会重复发生了消息，这时候消费端就要实现幂等性， 这就意味着我们的消息永远不会被消费多次，即使我们收到了一样的消息。业界主流的幂等性有两种操作：唯一ID + 指纹码机制，利用数据库主键去重；利用 redis 的原子性去实现 
+   - 唯一ID + 指纹码机制：我们的一些规则或者时间戳加别的服务给到的唯一信息码，它并不一定是我们系统生成的，基本都是由我们的业务规则拼接而来，但是一定要保证唯一性，然后就利用查询语句进行判断这个 id 是否存在数据库中，优势就是实现简单就一个拼接，然后查询判断是否重复；劣势就是在高并发时，如果是单个数据库就会有写入性能瓶颈当然也可以采用分库分表提升性能，但也不是我们最推荐的方式
+   - note redis 原子性：利用 redis 执行 setnx 命令，天然具有幂等性。从而实现不重复消费
+
+##  二、优先级队列
+
+### 一、优先级概述
+
+1. 使用场景
+
+   - 在我们系统中有一个订单催付的场景，我们的客户在天猫下的订单，淘宝会及时将订单推送给我们，如果在用户设定的时间内未付款那么就会给用户推送一条短信提醒，很简单的一个功能对吧
+   - 但是，tmall 商家对我们来说，肯定是要分大客户和小客户的对吧，比如像苹果，小米这样大商家一年起码能给我们创造很大的利润，所以理应当然，他们的订单必须得到优先处理，而曾经我们的后端系统是使用 redis 来存放的定时轮询，大家都知道 redis 只能用 List 做一个简简单单的消息队列，并不能实现一个优先级的场景，所以订单量大了后采用 RabbitMQ 进行改造和优化，如果发现是大客户的订单给一个相对比较高的优先级， 否则就是默认优先级
+
+2. 添加方式
+
+   - 控制台页面添加
+
+     ![](../../../TyporaImage/RabbitMQ-00000076.png)
+
+   - 队列中代码添加优先级
+
+     ```java
+     Map<String, Object> params = new HashMap();
+     params.put("x-max-priority", 10);
+     channel.queueDeclare("hello", true, false, false, params);
+     ```
+
+   - 消息中代码添加优先级
+
+     ```java
+     AMQP.BasicProperties properties = new AMQP.BasicProperties().builder().priority(10).build();
+     ```
+
+   - 注意事项：要让队列实现优先级需要的前提条件为队列需要设置为优先级队列；消息需要设置消息的优先级。消费者需要等待消息已经发送到队列中才去消费，因为这样才有机会对消息进行排序 
+
+### 二、优先级案例实战
+
+1. 生产者
+
+   ```java
+   public class PriorityProducer {
+       private static final String QUEUE_NAME = "hello";
+   
+       public static void main(String[] args) throws Exception {
+           Channel channel = RabbitMqUtils.getChannel();
+   
+           //给消息赋予一个 priority 属性
+           AMQP.BasicProperties properties = new AMQP.BasicProperties().builder().priority(10).build();
+   
+           for (int i = 1; i < 11; i++) {
+               String message = "info" + i;
+               if (i == 5) {
+                   channel.basicPublish("", QUEUE_NAME, properties, message.getBytes());
+               } else {
+                   channel.basicPublish("", QUEUE_NAME, null, message.getBytes());
+               }
+               System.out.println("发送消息完成:" + message);
+           }
+       }
+   }
+   ```
+
+2. 消费者
+
+   ```java
+   public class PriorityConsumer {
+       private final static String QUEUE_NAME = "hello";
+   
+       public static void main(String[] args) throws Exception {
+           Channel channel = RabbitMqUtils.getChannel();
+   
+           //设置队列的最大优先级 最大可以设置到 255 官网推荐 1-10 如果设置太高比较吃内存和 CPU
+           Map<String, Object> params = new HashMap();
+           params.put("x-max-priority", 10);
+           channel.queueDeclare(QUEUE_NAME, true, false, false, params);
+   
+           //推送的消息如何进行消费的接口回调
+           DeliverCallback deliverCallback = (consumerTag, delivery) -> {
+               String message = new String(delivery.getBody());
+               System.out.println(message);
+           };
+           //取消消费的一个回调接口 如在消费的时候队列被删除掉了
+           CancelCallback cancelCallback = (consumerTag) -> {
+               System.out.println("消息消费被中断");
+           };
+   
+           channel.basicConsume(QUEUE_NAME, true, deliverCallback, cancelCallback);
+       }
+   
+   }
+   ```
+
+3. 展示效果
+
+   ![](../../../TyporaImage/image-20210629163922085.png)
+
+## 三、惰性队列
+
+1. 使用场景
+
+   - RabbitMQ 从 3.6.0 版本开始引入了惰性队列的概念。惰性队列会尽可能的将消息存入磁盘中，而在消费者消费到相应的消息时才会被加载到内存中，它的一个重要的设计目标是能够支持更长的队列，即支持更多的消息存储。当消费者由于各种各样的原因（比如消费者下线、宕机亦或者是由于维护而关闭等）而致使长时间内不能消费消息造成堆积时，惰性队列就很有必要了
+   - 默认情况下，当生产者将消息发送到 RabbitMQ 的时候，队列中的消息会尽可能的存储在内存之中， 这样可以更加快速的将消息发送给消费者。即使是持久化的消息，在被写入磁盘的同时也会在内存中驻留一份备份。当 RabbitMQ 需要释放内存的时候，会将内存中的消息换页至磁盘中，这个操作会耗费较长的时间，也会阻塞队列的操作，进而无法接收新的消息。虽然 RabbitMQ 的开发者们一直在升级相关的算法， 但是效果始终不太理想，尤其是在消息量特别大的时候
+
+2. 两种模式
+
+   - 队列具备两种模式：default 和 lazy。默认的为 default 模式，在 3.6.0 之前的版本无需做任何变更。lazy 模式即为惰性队列的模式，可以通过调用 channel.queueDeclare 方法的时候在参数中设置，也可以通过 Policy 的方式设置，如果一个队列同时使用这两种方式设置的话，那么 Policy 的方式具备更高的优先级。 如果要通过声明的方式改变已有队列的模式的话，那么只能先删除队列，然后再重新声明一个新的。
+
+   - 在队列声明的时候可以通过“x-queue-mode”参数来设置队列的模式，取值为“default”和“lazy”。下面示例中演示了一个惰性队列的声明细节：
+
+     ```java
+     Map<String, Object> args = new HashMap<String, Object>();
+     args.put("x-queue-mode", "lazy");
+     channel.queueDeclare("myqueue", false, false, false, args);
+     ```
+
+3. 内存开销对比：在发送 1 百万条消息，每条消息大概占 1KB 的情况下，普通队列占用内存是 1.2GB，而惰性队列仅仅 占用 1.5MB 
+
+   ![](../../../TyporaImage/RabbitMQ-00000077.png)
+
+# 十一、RabbitMQ集群
+
+## 一、基础概念
+
+1. 元数据：指的是包括队列名字属性、交换机的类型名字属性、绑定信息、vhost等基础信息，不包括队列中的消息数据。RabbitMQ 内部有各种基础构件，包括队列、交换器、绑定、虚拟主机等，他们组成了 AMQP 协议消息通信的基础，而这些构件以元数据的形式存在，它始终记录在 RabbitMQ 内部，它们分别是：
+   - 队列元数据：队列名称和它们的属性
+   - 交换器元数据：交换器名称、类型和属性
+   - 绑定元数据：一张简单的表格展示了如何将消息路由到队列
+   - vhost 元数据：为 vhost 内的队列、交换器和绑定提供命名空间和安全属性
+2. RabbitMQ存储数据的两种方案
+   - 内存模式：这种模式会将数据存储在内存当中，如果服务器突然宕机重启之后，那么附加在该节点上的队列和其关联的绑定都会丢失，并且消费者可以重新连接集群并重新创建队列
+   - 磁盘模式：这种模式会将数据存储磁盘当中，如果服务器突然宕机重启，数据会自动恢复，该队列又可以进行传输数据了，并且在恢复故障磁盘节点之前，不能在其它节点上让消费者重新连到集群并重新创建队列，如果消费者继续在其它节点上声明该队列，会得到一个 404 NOT_FOUND 错误，这样确保了当故障节点恢复后加入集群，该节点上的队列消息不会丢失，也避免了队列会在一个节点以上出现冗余的问题
+3. 在单节点 RabbitMQ 上，仅允许该节点是磁盘节点，这样确保了节点发生故障或重启节点之后，所有关于系统的配置与元数据信息都会从磁盘上恢复。而在 RabbitMQ 集群上，至少有一个磁盘节点，也就是在集群环境中需要添加 2 台及以上的磁盘节点，这样其中一台发生故障了，集群仍然可以保持运行。其它节点均设置为内存节点，这样会让队列和交换器声明之类的操作会更加快速，元数据同步也会更加高效
+
+## 二、集群节点类型
+
+1. 在单个节点上，RabbitMQ 存储数据有两种方案
+
+   - 内存模式：这种模式会将数据存储在内存当中，如果服务器突然宕机重启之后，那么附加在该节点上的队列和其关联的绑定都会丢失，并且消费者可以重新连接集群并重新创建队列
+   - 磁盘模式：这种模式会将数据存储磁盘当中，如果服务器突然宕机重启，数据会自动恢复，该队列又可以进行传输数据了，并且在恢复故障磁盘节点之前，不能在其它节点上让消费者重新连到集群并重新创建队列，如果消费者继续在其它节点上声明该队列，会得到一个 404 NOT_FOUND 错误，这样确保了当故障节点恢复后加入集群，该节点上的队列消息不会丢失，也避免了队列会在一个节点以上出现冗余的问题
+
+2. 如下图所示，三个节点的集群，有两个磁盘模式，一个内存模式 
+
+   ![](../../../TyporaImage/025fba1890a242d4aaaf015397170982.png)
+
+3. 在集群中的每个节点，要么是内存节点，要么是磁盘节点，如果是内存节点，会将所有的元数据信息仅存储到内存中，而磁盘节点则不仅会将所有元数据存储到内存上， 还会将其持久化到磁盘
+
+4. 在单节点 RabbitMQ 上，仅允许该节点是磁盘节点，这样确保了节点发生故障或重启节点之后，所有关于系统的配置与元数据信息都会从磁盘上恢复。而在 RabbitMQ 集群上，至少有一个磁盘节点，也就是在集群环境中需要添加 2 台及以上的磁盘节点，这样其中一台发生故障了，集群仍然可以保持运行。其它节点均设置为内存节点，这样会让队列和交换器声明之类的操作会更加快速，元数据同步也会更加高效
+
+## 三、集群的模式
+
+### 一、主备模式（Warren）
+
+1. 基本特征
+
+   - 交换机和队列的元数据存在于所有的节点上
+   - queue 队列中的完整数据只存在于创建该队列的节点上
+   - 其他节点只保存队列的元数据信息以及指向当前队列的 owner node 的指针
+
+   ![](../../../TyporaImage/a75060a388dc4682b9405f672dd0f322.png)
+
+2. 数据消费：进行数据消费时随机连接到一个节点，当队列不是当前节点创建的时候，需要有一个从创建队列的实例拉取队列数据的开销。此外由于需要固定从单实例获取数据，因此会出现单实例的瓶颈 
+
+3. 优点：可以由多个节点消费单个队列的数据，提高了吞吐量 
+
+4. 缺点：节点实例需要拉取数据，因此集群内部存在大量的数据传输可用性保障低，一旦创建队列的节点宕机，只有等到该节点恢复其他节点才能继续消费消息 
+
+### 二、镜像模式（Mirror）
+
+1. 基本特征：创建的 queue，不论是元数据还是完整数据都会在每一个节点上保存一份
+   向 queue 中写消息时，都会自动同步到每一个节点上 
+
+   ![](../../../TyporaImage/3a0faa7a92b14fbd9c746f3cb55a2d04.png)
+
+2. 优点
+
+   - 保障了集群的高可用
+   - 配置方便，只需要在后台配置相应的策略，就可以将指定数据同步到指定的节点或者全部节点
+
+3. 缺点
+
+   - 性能开销较大，网络带宽压力和消耗很严重，所以镜像队列的吞吐量会低于主备模式
+   - 无法线性扩展，例如单个 queue 的数据量很大，每台机器都要存储同样大量的数据
