@@ -78,7 +78,7 @@
 
 ### 一、安装注意事项
 
-- ElasticSearch 是使用 java 开发的，且本版本的 es 需要的 jdk 版本要是 1.8 以上，所以安装
+- ElasticSearch 是使用 java 开发的，且本版本的 es 需要的 JDK 版本要是 1.8 以上，所以安装
 - ElasticSearch 之前保证 JDK1.8+ ，并正确的配置好JDK环境变量，否则会启动ElasticSearch失败 
 
 ### 二、Windows版本安装
@@ -161,9 +161,8 @@
 
    ```shell
    curl -O https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-7.6.1-linux-x86_64.tar.gz
-   
    ```
-
+   
 2. 解压
 
    ```shell
@@ -180,9 +179,8 @@
    BAD PASSWORD: The password contains the user name in some form
    Retype new password: 
    passwd: all authentication tokens updated successfully.
-   
    ```
-
+   
 4. 修改目录权限至新增的 elasticsearch 用户。没权限启动会报错，需要在 root 用户下执行命令
 
    ```shell
@@ -355,5 +353,1341 @@
 
 # 四、ES索引和文档的基本操作
 
-  
+## 一、索引简单操作
 
+### 一、创建索引
+
+1. 通过 postman 创建索引，调用接口：`http://localhost:9200/shopping’
+
+   ![](../../../TyporaImage/image-20210620230253506.png)
+
+   ```json
+   {
+       //响应结果
+       "acknowledged": true,
+       //分片结果
+       "shards_acknowledged": true,
+       //索引名称
+       "index": "shopping"
+   }
+   ```
+
+2. 注意点：创建索引库的分片数默认 1 片，在 7.0.0 之前的 Elasticsearch 版本中，默认 5 片 
+
+3. 使用 Kibana的 dev tool 进行测试。如果重复添加索引，会返回错误信息 
+
+   ![](../../../TyporaImage/image-20210620231434956.png)
+
+### 二、查看索引
+
+1. 查看所有索引：`GET /_cat/indices?v`
+
+   ![](../../../TyporaImage/image-20210620231732554.png)
+
+   - 查看字段解释。这里请求路径中的`_cat`表示查看的意思，`indices`表示索引，所以整体含义就是查看当前 ES 服务器中的所有索引 
+
+   - 返回字段含义
+
+     | 字段           | 含义                                                         |
+     | -------------- | ------------------------------------------------------------ |
+     | health         | 当前服务器健康状态：<br/>green(集群完整)；yellow(单点正常、集群不完整)；red(单点不正常) |
+     | status         | 索引打开、关闭状态                                           |
+     | index          | 索引名                                                       |
+     | uuid           | 索引统一编号                                                 |
+     | pri            | 主分片数量                                                   |
+     | rep            | 副本数量                                                     |
+     | docs.count     | 可用文档数量                                                 |
+     | docs.deleted   | 文档删除状态（逻辑删除）                                     |
+     | store.size     | 主分片和副分片整体占空间大小                                 |
+     | pri.store.size | 主分片占空间大小                                             |
+
+2. 查看单个索引：`GET /shopping`
+
+   - 查看索引向 ES 服务器发送的请求路径和创建索引是一致的。但是 HTTP 方法不一致 
+
+   - 响应结果
+
+     ```json
+     {
+       "shopping" : {//【索引名】
+         "aliases" : { },//【别名】
+         "mappings" : { },//"【映射】
+         "settings" : {
+           "index" : {
+             "creation_date" : "1624201817578",//【创建时间】
+             "number_of_shards" : "1",//【主分片数量】
+             "number_of_replicas" : "1",//【副分片数量】
+             "uuid" : "5fPfnRjcTuyxReq7AFKQnw",//【唯一标识】
+             "version" : {
+               "created" : "7060199"//【版本】
+             },
+             "provided_name" : "shopping"
+           }
+         }
+       }
+     }
+     
+     ```
+
+3. mappting 和 setting
+
+   - mappings是修改字段和类型的。mappings就是对索引库中索引的字段名称及其数据类型进行定义，类似于mysql中的表结构信息。不过es的mapping比数据库灵活很多，它可以动态识别字段。一般不需要指定mapping都可以，因为es会自动根据数据格式识别它的类型，如果你需要对某些字段添加特殊属性（如：定义使用其它分词器、是否分词、是否存储等），就必须手动添加mapping。在es中添加索引数据时不需要指定数据类型，es中有自动影射机制，字符串映射为string，数字映射为long。通过mappings可以指定数据类型是否存储等属性 
+   - settings是修改分片和副本数的 
+
+### 三、删除索引
+
+- 删除索引命令：`DELETE /shopping`
+
+  ```json
+  {
+    "acknowledged" : true
+  }
+  ```
+
+### 四、批量索引文档_bulk
+
+1. ES 还提供了批量操作，比如这里我们可以使用批量操作来插入一些数据。使用批量来批处理文档操作比单独提交请求要快得多，因为它减少了网络往返 
+
+2. [下载测试数据](https://download.elastic.co/demos/kibana/gettingstarted/accounts.zip)
+
+3. 数据格式如下
+
+   ```json
+   {
+     "account_number": 0,
+     "balance": 16623,
+     "firstname": "Bradshaw",
+     "lastname": "Mckenzie",
+     "age": 29,
+     "gender": "F",
+     "address": "244 Columbus Place",
+     "employer": "Euron",
+     "email": "bradshawmckenzie@euron.com",
+     "city": "Hobucken",
+     "state": "CO"
+   }
+   
+   ```
+
+4. 把文件复制到 ES 的 data 目录下
+
+   ```shell
+   docker cp /home/accounts.json  06c5914709a5:/usr/share/elasticsearch/data/
+   
+   #然后执行
+   curl -H "Content-Type: application/json" -XPOST "localhost:9200/bank/_bulk?pretty&refresh" --data-binary @accounts.json
+   
+   #如果在其他目录，例如 /opt/accounts.json
+   curl -H "Content-Type: application/json" -XPOST "localhost:9200/bank/_bulk?pretty&refresh" --data-binary "@/opt/accounts.json"
+   ```
+
+5. 使用postman运行请求方式为POST的接口`http://localhost:9200/bank/_bulk` 
+
+   -  两行为一个整体，index代表索引，也就是保存操作，下面一行为保存的数据 
+
+     ```json
+     {"index":{"_id":"1"}}
+     {"name":"a"}
+     {"index":{"_id":"2"}}
+     {"name":"b"}
+     ```
+
+   - 语法格式：`action`即执行的动作，新增，修改，删除等；`metadata`即要操作的数据，比如id是多少
+
+     ```json
+     {action:{metadata}}
+     {request body  }
+     
+     {action:{metadata}}
+     {request body  }
+     ```
+
+   - 这里的批量操作，当发生某一条执行发生失败时，其他的数据仍然能够接着执行，也就是说彼此之间是独立的 
+
+6. bulk API 以此按顺序执行所有的 action（动作）。如果一个单个的动作因任何原因而失败， 它将继续处理它后面剩余的动作。当 bulk API 返回时，它将提供每个动作的状态（与发送的顺序相同），所以可以检查是否一个指定的动作是不是失败了
+
+7. bulk 案例
+
+   - 案例说明：对于整个索引执行批量操作（需在kibana里Dev Tools执行）。当没指定任何索引时，就是对整个作批量操作 
+
+   - 代码
+
+     ```shell
+     POST /_bulk
+     {"delete":{"_index":"website","_id":"123"}}
+     {"create":{"_index":"website","_id":"123"}}
+     {"title":"my first blog post"}
+     {"index":{"_index":"website"}}
+     {"title":"my second blog post"}
+     {"update":{"_index":"website","_id":"123"}}
+     {"doc":{"title":"my updated blog post"}}
+     ```
+
+## 二、文档基本操作
+
+### 一、添加数据PUT
+
+1. 添加用户1
+
+   ```json
+   PUT /stars/_doc/1
+   {
+     "name": "蔡徐坤",
+     "age": "22",
+     "desc": "鸡你太美",
+     "tags": ["唱","跳","rap","篮球"]
+   }
+   ```
+
+2. 添加用户2
+
+   ```shell
+   PUT /stars/_doc/2
+   {
+     "name": "吴亦凡",
+     "age": "29",
+     "desc": "大碗宽面",
+     "tags": ["加拿大","电鳗","说唱","嘻哈"]
+   }
+   ```
+
+3. 添加用户3
+
+   ```json
+   PUT /stars/_doc/3
+   {
+     "name": "吴小凡",
+     "age": "10",
+     "desc": "一个吴小凡",
+     "tags": ["帅哥","干饭"]
+   }
+   ```
+
+### 二、查询数据GET
+
+1. 简单查询
+
+   ```shell
+   GET /stars/_doc/1
+   ```
+
+   ```json
+   {
+     "_index" : "stars",
+     "_type" : "_doc",
+     "_id" : "1",
+     "_version" : 1,
+     "_seq_no" : 0,
+     "_primary_term" : 1,
+     "found" : true,
+     "_source" : {
+       "name" : "蔡徐坤",
+       "age" : "22",
+       "desc" : "鸡你太美",
+       "tags" : [
+         "唱",
+         "跳",
+         "rap",
+         "篮球"
+       ]
+     }
+   }
+   
+   ```
+
+2. 条件查询`_search?q=`
+
+   ```shell
+   GET /stars/_search?q=name:吴小凡
+   ```
+
+   ```json
+   {
+     "took" : 996,
+     "timed_out" : false,
+     "_shards" : {
+       "total" : 1,
+       "successful" : 1,
+       "skipped" : 0,
+       "failed" : 0
+     },
+     "hits" : {
+       "total" : {
+         "value" : 2,
+         "relation" : "eq"
+       },
+       "max_score" : 2.5902672,
+       "hits" : [
+         {
+           "_index" : "stars",
+           "_type" : "_doc",
+           "_id" : "3",
+           "_score" : 2.5902672,
+           "_source" : {
+             "name" : "吴小凡",
+             "age" : "10",
+             "desc" : "一个吴小凡",
+             "tags" : [
+               "帅哥",
+               "干饭"
+             ]
+           }
+         },
+         {
+           "_index" : "stars",
+           "_type" : "_doc",
+           "_id" : "2",
+           "_score" : 1.3862942,
+           "_source" : {
+             "name" : "吴亦凡",
+             "age" : "29",
+             "desc" : "大碗宽面",
+             "tags" : [
+               "加拿大",
+               "电鳗",
+               "说唱",
+               "嘻哈"
+             ]
+           }
+         }
+       ]
+     }
+   }
+   ```
+
+3. 查询所有
+
+   ```shell
+   GET /stars/_search
+   {
+     "query": { 
+       "match_all": {} 
+     }
+   }
+   ```
+
+4. 相关字段解释 
+
+   - `took`：Elasticsearch运行查询所花费的时间（以毫秒为单位）
+   - `timed_out`：搜索请求是否超时
+   - `_shards`：搜索了多少个碎片，以及成功，失败或跳过了多少个碎片的细目分类
+   - `max_score`：找到的最相关文档的分数
+   - `hits.total.value`：找到了多少个匹配的文档
+   - `hits.sort`：文档的排序位置（不按相关性得分排序时）
+   - `hits._score`：文档的相关性得分（使用match_all时不适用）
+
+### 三、更新数据POST
+
+1. 使用POST方式
+
+   ```shell
+   POST /stars/_update/1
+   {
+     "doc": {
+       "name": "坤坤"
+     }
+   }
+   ```
+
+   ```json
+   {
+     "_index" : "stars",
+     "_type" : "_doc",
+     "_id" : "1",
+     "_version" : 2,
+     "result" : "updated",
+     "_shards" : {
+       "total" : 2,
+       "successful" : 1,
+       "failed" : 0
+     },
+     "_seq_no" : 3,
+     "_primary_term" : 1
+   }
+   
+   ```
+
+   - `_version`：版本，也就是更新次数
+   - `result`：操作结果为更新
+
+2. 使用PUT方式也可覆盖数据
+
+   ```shell
+   PUT /stars/_doc/1
+   {
+     "name": "蔡坤坤",
+     "age": "22",
+     "desc": "鸡你太美",
+     "tags": ["唱","跳","rap","篮球"]
+   }
+   ```
+
+### 四、删除数据
+
+1. 删除一个文档不会立即从磁盘上移除，它只是被标记成已删除（逻辑删除） 
+
+2. 根据 ID 删除数据
+
+   ```shell
+   DELETE /stars/_doc/1
+   ```
+
+3. 条件删除文档：一般删除数据都是根据文档的唯一性标识进行删除，实际操作时，也可以根据条件对多条数据进行删除 
+
+   ```shell
+   POST /stars/_delete_by_query
+   {
+    "query":{
+      "match":{
+        "age": 22
+      }
+    }
+   }
+   ```
+
+### 五、索引的自动创建
+
+1. 添加数据时，没有索引会自动创建索引和字段
+
+   ```shell
+   PUT /customer/_doc/1
+   {
+     "name": "John Doe"
+   }
+   ```
+
+2. 可以查看下这个索引的 mapping => `GET /customer/_mapping` 
+
+   ```json
+   {
+     "customer" : {
+       "mappings" : {
+         "properties" : {
+           "name" : {
+             "type" : "text",
+             "fields" : {
+               "keyword" : {
+                 "type" : "keyword",
+                 "ignore_above" : 256
+               }
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+3. 那么如果我们需要对这个建立索引的过程做更多的控制：比如想要确保这个索引有数量适中的主分片，并且在我们索引任何数据之前，分析器和映射已经被建立好。那么就会引入两点：第一个禁止自动创建索引，第二个是手动创建索引
+
+4. 禁止自动创建索引：可以通过在 config/elasticsearch.yml 的每个节点下添加`action.auto_create_index: false` 
+
+### 六、索引的格式
+
+1.  在请求体里面传入设置或类型映射，如下所示：
+
+   ```shell
+   PUT /my_index
+   {
+       "settings": { ... any settings ... },
+       "mappings": {
+           "properties": { ... any properties ... }
+       }
+   }
+   
+   ```
+
+2. settings：用来设置分片、副本等配置信息
+
+3. mappings：字段映射、类型等
+
+   - properties：由于 type 在后续版本中会被 Deprecated，所以无需被 type 嵌套
+
+## 三、索引管理操作
+
+### 一、创建索引
+
+1. 创建一个 user 索引`test-index-users`，其中包含三个属性：name，age，remarks；存储在一个分片一个副本上 
+
+   ```shell
+   PUT /test-index-users
+   {
+     "settings": {
+   		"number_of_shards": 1,
+   		"number_of_replicas": 1
+   	},
+     "mappings": {
+       "properties": {
+         "name": {
+           "type": "text",
+           "fields": {
+             "keyword": {
+               "type": "keyword",
+               "ignore_above": 256
+             }
+           }
+         },
+         "age": {
+           "type": "long"
+         },
+         "remarks": {
+           "type": "text"
+         }
+       }
+     }
+   }
+   ```
+
+2. 执行结果
+
+   ![](../../../TyporaImage/es-index-manage-1.png)
+
+3. 插入测试数据
+
+   ![](../../../TyporaImage/es-index-manage-2.png)
+
+4. 查看数据
+
+   ![](../../../TyporaImage/es-index-manage-3.png)
+
+5. 测试下不匹配的数据类型（age）：可以看到无法类型不匹配的错误
+
+   ```shell
+   POST /test-index-users/_doc
+   {
+     "name": "test user",
+     "age": "error_age",
+     "remarks": "hello eeee"
+   }
+   ```
+
+   ![](../../../TyporaImage/es-index-manage-4.png)
+
+### 二、修改索引
+
+1. 查看刚才的索引` curl 'localhost:9200/_cat/indices?v' | grep users `  
+
+2. 我们注意到刚创建的索引的状态是 yellow 的，因为此时是单点环境，无法创建副本，但是在上述`number_of_replicas`配置中设置了副本数是1；所以在这个时候我们需要修改索引的配置。修改副本数量为0
+
+   ```shell
+   PUT /test-index-users/_settings
+   {
+     "settings": {
+       "number_of_replicas": 0
+     }
+   }
+   ```
+
+   ![](../../../TyporaImage/es-index-manage-5.png)
+
+3.  再次查看状态
+
+   ```shell
+   green open test-index-users                          LSaIB57XSC6uVtGQHoPYxQ 1 1     1    0   4.4kb   4.4kb
+   ```
+
+### 三、关闭索引
+
+1. 一旦索引被关闭，那么这个索引只能显示元数据信息，不能够进行读写操作
+
+   ![](../../../TyporaImage/es-index-manage-7.png)
+
+2.  当关闭以后，再插入数据时
+
+   ![](../../../TyporaImage/es-index-manage-8.png)
+
+### 四、打开索引
+
+1. 打开索引
+
+   ![](../../../TyporaImage/es-index-manage-9.png)
+
+2. 打开后，又可以重新写数据了
+
+   ![](../../../TyporaImage/es-index-manage-10.png)
+
+### 五、删除索引
+
+- 将创建的  test-index-users 删除：`DELETE /test-index-users`
+
+  ![](../../../TyporaImage/es-index-manage-11.png)
+
+### 六、查看索引
+
+1. mapping：`GET /bank/_mapping`
+
+   ![](../../../TyporaImage/es-index-manage-12.png)
+
+2. setting：`GET /bank/_settings`
+
+   ![](../../../TyporaImage/es-index-manage-13.png)
+
+# 五、ES高级查询操作
+
+## 一、SearchAPI概述
+
+1. ES支持两种基本方式检索
+
+   - 通过REST request uri 发送搜索参数（uri +检索参数）
+   - 通过REST request body 来发送它们（uri+请求体）
+
+2. 检索示例
+
+   ```shell
+   GET bank/_search?q=*&sort=account_number:asc
+   
+   #等价于
+   GET bank/_search 
+   {
+       "query":{
+           "match_all":{ }
+       },
+       "sort":[
+           {
+               "account_number":{
+                   "order":"desc"
+               }
+           }
+       ]
+   }
+   ```
+
+## 二、查询数据Query DSL
+
+### 一、指定字段查询match
+
+-  查询 name 中含有坤或小
+
+  ```shell
+  GET /stars/_search
+  {
+    "query": {
+      "match": {
+        "name": "坤 小"
+      }
+    }
+  }
+  ```
+
+### 二、查询短语匹配match_phrase
+
+- 如果我们希望查询的条件是某字段中包含 "坤 小"，也就是将需要匹配的值当成一个整体单词（不分词）进行检索，使用`match_phrase`
+
+  ```shell
+  GET /stars/_search
+  {
+    "query": {
+      "match_phrase": {
+        "name": "坤 小"
+      }
+    }
+  }
+  ```
+
+### 三、多字段匹配multi_match
+
+- 查询 state 或者 address 包含`mill` 
+
+  ```shell
+   GET bank/_search 
+  {
+      "query":{
+          "multi_match":{
+              "query":"mill",
+              "fields":[
+                  "state",
+                  "address"
+              ]
+          }
+      }
+  }
+  ```
+
+### 四、查询结果显示指定字段
+
+- 查询结果只显示 age 和 desc 
+
+  ```shell
+  GET /stars/_search
+  {
+    "query": {
+      "match": {
+        "name": "凡"
+      }
+    },
+    "_source":["age", "desc"] 
+  }
+  ```
+
+### 五、排序
+
+- asc 升序、desc 降序
+
+  ```shell
+  GET /stars/_search
+  {
+    "query": { "match_all": {} },
+    "sort": [
+      {
+        "age.keyword": {
+          "order": "desc"
+        }
+      }
+    ]
+  }
+  ```
+
+### 六、分页查询
+
+- 本质上就是 from（开始位置）和 size（返回数据数目）两个字段
+
+  ```shell
+  GET /stars/_search
+  {
+    "query": { "match_all": {} },
+    "from": 0,
+    "size": 2
+  }
+  ```
+
+### 七、多条件查询
+
+1. must：相当于关系型数据库 and
+
+   ```shell
+   GET /stars/_search
+   {
+     "query": {
+       "bool": {
+         "must": [
+           {
+             "match": {
+               "name": "吴亦凡"
+             }
+           },
+           {
+             "match": {
+               "age": "29"
+             }
+           }
+         ]
+       }
+     }
+   }
+   
+   ```
+
+2. should：相当于关系型数据库 or 
+
+   ```shell
+   GET /stars/_search
+   {
+     "query": {
+       "bool": {
+         "should": [
+           {
+             "match": {
+               "name": "吴亦凡"
+             }
+           },
+           {
+             "match": {
+               "age": "19"
+             }
+           }
+         ]
+       }
+     }
+   }
+   ```
+
+3. must_not：相当于关系型数据库 not 
+
+### 八、结果过滤查询filter
+
+- 查询 10岁<=age=<30岁 
+
+  ```shell
+  GET /stars/_search
+  {
+    "query": {
+      "bool": {
+        "filter": [
+          {
+            "range": {
+              "age": {
+                "gte": 10, 
+                "lte": 30 
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+  ```
+
+### 九、匹配多个条件查询
+
+- 多个条件使用空格隔开 
+
+- 查询 tags 有 唱跳 的 
+
+  ```shell
+  GET /stars/_search
+  {
+    "query": {
+      "match": {
+        "tags": "唱 跳"
+      }
+    }
+  }
+  ```
+
+### 十、精确查询term
+
+#### 一、关于分词
+
+1. term：直接通过倒排索引指定的词条进行精确查询
+
+   ```shell
+   GET stars/_search
+   {
+     "query": {
+       "bool": {
+         "must": [
+           {
+             "term": {
+               "name": "吴亦凡"
+             }
+           }
+         ]
+       }
+     }
+   }
+   ```
+
+   ```json
+   {
+     "took" : 0,
+     "timed_out" : false,
+     "_shards" : {
+       "total" : 1,
+       "successful" : 1,
+       "skipped" : 0,
+       "failed" : 0
+     },
+     "hits" : {
+       "total" : {
+         "value" : 0,
+         "relation" : "eq"
+       },
+       "max_score" : null,
+       "hits" : [ ]
+     }
+   }
+   ```
+
+2. match：先分析文档，再通过分析的文档进行查询。吴小凡 也会被查出来 
+
+   ![](../../../TyporaImage/image-20210621113807698.png)
+
+#### 二、两个字段类型
+
+- text：会被分词器解析
+- keyword：不会被分词器解析
+
+1. 创建索引，用`mappings`指明类型，并插入数据
+
+   ```shell
+   PUT testdb
+   {
+       "mappings": {
+           "properties": {
+               "name": {
+                   "type": "text"
+               }, 
+               "desc": {
+                   "type": "keyword"
+               }
+           }
+       }
+   }
+   
+   
+   PUT testdb/_doc/1
+   {
+     "name": "赵深宸 name",
+     "desc": "致远 desc"
+   }
+   
+   PUT testdb/_doc/2
+   {
+     "name": "赵深宸 name2",
+     "desc": "致远 desc2"
+   }
+   ```
+
+2. 上述中 testdb 索引中，字段name在被查询时会被分析器进行分析后匹配查询。而属于keyword类型不会被分析器处理 
+
+   - keyword
+
+     ```shell
+     GET _analyze
+     {
+       "analyzer": "keyword",
+       "text": "赵深宸 name"
+     }
+     ```
+
+     ```json
+     {
+       "tokens" : [
+         {
+           "token" : "赵深宸 name",
+           "start_offset" : 0,
+           "end_offset" : 8,
+           "type" : "word",
+           "position" : 0
+         }
+       ]
+     }
+     
+     ```
+
+   - standard
+
+     ```shell
+     GET _analyze
+     {
+       "analyzer": "standard",
+       "text": "赵深宸 name"
+     }
+     ```
+
+     ```json
+     {
+       "tokens" : [
+         {
+           "token" : "赵",
+           "start_offset" : 0,
+           "end_offset" : 1,
+           "type" : "<IDEOGRAPHIC>",
+           "position" : 0
+         },
+         {
+           "token" : "深",
+           "start_offset" : 1,
+           "end_offset" : 2,
+           "type" : "<IDEOGRAPHIC>",
+           "position" : 1
+         },
+         {
+           "token" : "宸",
+           "start_offset" : 2,
+           "end_offset" : 3,
+           "type" : "<IDEOGRAPHIC>",
+           "position" : 2
+         },
+         {
+           "token" : "name",
+           "start_offset" : 4,
+           "end_offset" : 8,
+           "type" : "<ALPHANUM>",
+           "position" : 3
+         }
+       ]
+     }
+     
+     ```
+
+   - 测试查询：只返回一条数据，查询结果没有 “致远 desc2” 
+
+     ```shell
+     GET testdb/_search
+     {
+       "query": {
+         "match": {
+          "desc": "致远 desc"
+         }
+       }
+     }
+     ```
+
+#### 三、指定字段类型进行查询
+
+```shell
+GET stars/_search
+{
+  "query": {
+    "bool": {
+      "must": [
+        {
+          "match": {
+            "name.keyword": "吴亦凡"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+#### 四、查找多个精确值 
+
+- [官方介绍](https://www.elastic.co/guide/cn/elasticsearch/guide/current/_finding_multiple_exact_values.html)
+
+### 十一、高亮查询
+
+1. 默认高亮标签
+
+   ```shell
+   GET stars/_search
+   {
+     "query": {
+       "match": {
+         "name": "吴亦凡"
+       }
+     },
+     "highlight": {
+       "fields": {
+         "name": {}
+       }
+     }
+   }
+   ```
+
+   ```json
+   {
+     "took" : 160,
+     "timed_out" : false,
+     "_shards" : {
+       "total" : 1,
+       "successful" : 1,
+       "skipped" : 0,
+       "failed" : 0
+     },
+     "hits" : {
+       "total" : {
+         "value" : 1,
+         "relation" : "eq"
+       },
+       "max_score" : 2.9424872,
+       "hits" : [
+         {
+           "_index" : "stars",
+           "_type" : "_doc",
+           "_id" : "2",
+           "_score" : 2.9424872,
+           "_source" : {
+             "name" : "吴亦凡",
+             "age" : "29",
+             "desc" : "大碗宽面",
+             "tags" : [
+               "加拿大",
+               "电鳗",
+               "说唱",
+               "嘻哈"
+             ]
+           },
+           "highlight" : {
+             "name" : [
+               "<em>吴</em><em>亦</em><em>凡</em>"
+             ]
+           }
+         }
+       ]
+     }
+   }
+   ```
+
+2. 自定义高亮标签
+
+   ```shell
+   GET stars/_search
+   {
+     "query": {
+       "match": {
+         "name": "吴亦凡"
+       }
+     },
+     "highlight": {
+       "pre_tags": "<p class='key' style='color:red'>",
+       "post_tags": "</p>", 
+       "fields": {
+         "name": {}
+       }
+     }
+   }
+   ```
+
+   ```json
+   "highlight" : {
+             "name" : [
+               "<p class='key' style='color:red'>吴</p><p class='key' style='color:red'>亦</p><p class='key' style='color:red'>凡</p>"
+             ]
+           }
+   
+   "highlight" : {
+             "name" : [
+               "<p class='key' style='color:red'>吴</p>小<p class='key' style='color:red'>凡</p>"
+             ]
+           }
+   
+   ```
+
+## 三、聚合查询
+
+- SQL 中有 group by，在 ES 中它叫 Aggregation，即聚合运算 
+
+### 一、简单聚合
+
+1. 比如我们希望计算出每个州的统计数量， 使用`aggs`关键字对`state`字段聚合，被聚合的字段无需对分词统计，所以使用`state.keyword`对整个字段统计
+
+2. group_by_state 为取的名字，根据自己需求取名
+
+   ```shell
+   GET /bank/_search
+   {
+     "size": 0,
+     "aggs": {
+       "group_by_state": {
+         "terms": {
+           "field": "state.keyword"
+         }
+       }
+     }
+   }
+   ```
+
+   ```json
+   {
+     "took" : 1,
+     "timed_out" : false,
+     "_shards" : {
+       "total" : 1,
+       "successful" : 1,
+       "skipped" : 0,
+       "failed" : 0
+     },
+     "hits" : {
+       "total" : {
+         "value" : 1000,
+         "relation" : "eq"
+       },
+       "max_score" : null,
+       "hits" : [ ]
+     },
+     "aggregations" : {
+       "group_by_state" : {
+         "doc_count_error_upper_bound" : 0,
+         "sum_other_doc_count" : 743,
+         "buckets" : [
+           {
+             "key" : "TX",
+             "doc_count" : 30
+           },
+           {
+             "key" : "MD",
+             "doc_count" : 28
+           },
+           {
+             "key" : "ID",
+             "doc_count" : 27
+           },
+           {
+             "key" : "AL",
+             "doc_count" : 25
+           },
+           {
+             "key" : "ME",
+             "doc_count" : 25
+           },
+           {
+             "key" : "TN",
+             "doc_count" : 25
+           },
+           {
+             "key" : "WY",
+             "doc_count" : 25
+           },
+           {
+             "key" : "DC",
+             "doc_count" : 24
+           },
+           {
+             "key" : "MA",
+             "doc_count" : 24
+           },
+           {
+             "key" : "ND",
+             "doc_count" : 24
+           }
+         ]
+       }
+     }
+   }
+   
+   ```
+
+3. 因为无需返回条件的具体数据, 所以设置size=0，返回hits为空。`doc_count`表示bucket中每个州的数据条数 
+
+### 二、嵌套聚合
+
+1. 比如承接上个例子，计算每个州的平均结余。涉及到的就是在对state分组的基础上，嵌套计算avg(balance)
+
+   ```shell
+   GET /bank/_search
+   {
+     "size": 0,
+     "aggs": {
+       "group_by_state": {
+         "terms": {
+           "field": "state.keyword"
+         },
+         "aggs": {
+           "average_balance": {
+             "avg": {
+               "field": "balance"
+             }
+           }
+         }
+       }
+     }
+   }
+   
+   ```
+
+2. 返回结果
+
+   ```json
+   {
+     "took" : 49,
+     "timed_out" : false,
+     "_shards" : {
+       "total" : 1,
+       "successful" : 1,
+       "skipped" : 0,
+       "failed" : 0
+     },
+     "hits" : {
+       "total" : {
+         "value" : 1000,
+         "relation" : "eq"
+       },
+       "max_score" : null,
+       "hits" : [ ]
+     },
+     "aggregations" : {
+       "group_by_state" : {
+         "doc_count_error_upper_bound" : 0,
+         "sum_other_doc_count" : 743,
+         "buckets" : [
+           {
+             "key" : "TX",
+             "doc_count" : 30,
+             "average_balance" : {
+               "value" : 26073.3
+             }
+           },
+           {
+             "key" : "MD",
+             "doc_count" : 28,
+             "average_balance" : {
+               "value" : 26161.535714285714
+             }
+           },
+           {
+             "key" : "ID",
+             "doc_count" : 27,
+             "average_balance" : {
+               "value" : 24368.777777777777
+             }
+           },
+           {
+             "key" : "AL",
+             "doc_count" : 25,
+             "average_balance" : {
+               "value" : 25739.56
+             }
+           },
+           {
+             "key" : "ME",
+             "doc_count" : 25,
+             "average_balance" : {
+               "value" : 21663.0
+             }
+           },
+           {
+             "key" : "TN",
+             "doc_count" : 25,
+             "average_balance" : {
+               "value" : 28365.4
+             }
+           },
+           {
+             "key" : "WY",
+             "doc_count" : 25,
+             "average_balance" : {
+               "value" : 21731.52
+             }
+           },
+           {
+             "key" : "DC",
+             "doc_count" : 24,
+             "average_balance" : {
+               "value" : 23180.583333333332
+             }
+           },
+           {
+             "key" : "MA",
+             "doc_count" : 24,
+             "average_balance" : {
+               "value" : 29600.333333333332
+             }
+           },
+           {
+             "key" : "ND",
+             "doc_count" : 24,
+             "average_balance" : {
+               "value" : 26577.333333333332
+             }
+           }
+         ]
+       }
+     }
+   }
+   
+   ```
+
+### 三、对聚合结果排序
+
+1. 可以通过在aggs中对嵌套聚合的结果进行排序 
+
+2. 比如承接上个例子， 对嵌套计算出的avg(balance)，这里是average_balance，进行排序
+
+   ```shell
+   GET /bank/_search
+   {
+     "size": 0,
+     "aggs": {
+       "group_by_state": {
+         "terms": {
+           "field": "state.keyword",
+           "order": {
+             "average_balance": "desc"
+           }
+         },
+         "aggs": {
+           "average_balance": {
+             "avg": {
+               "field": "balance"
+             }
+           }
+         }
+       }
+     }
+   }
+   ```
+
+# 六、索引管理
