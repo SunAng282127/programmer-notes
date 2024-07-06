@@ -1691,3 +1691,236 @@ GET stars/_search
    ```
 
 # 六、索引管理
+
+## 一、Mapping
+
+### 一、字段类型
+
+1. [官方文档](https://www.elastic.co/guide/en/elasticsearch/reference/7.17/mapping-types.html)
+2. 核心数据类型
+   - 字符串：text ⽤于全⽂索引，搜索时会自动使用分词器进⾏分词再匹配；keyword 不分词，搜索时需要匹配完整的值 
+   - 数值型：整型有byte、short、integer、long；浮点型有float、half_float、scaled_float、double 
+   - 日期类型：date
+   - 范围型
+     - integer_range、long_range、float_range、double_range、date_range
+     - gt是大于；lt是小于；e是equals等于
+     - age_limit的区间包含了此值的文档都算是匹配
+   - 布尔：boolean 
+   - 二进制：binary 会把值当做经过 base64 编码的字符串，默认不存储，且不可搜索 
+   - 对象：object 一个对象中可以嵌套对象 
+   - 数组
+     - Array：嵌套类型
+     - nested：用于json对象数组
+
+### 二、映射
+
+1. Mapping（映射）是用来定义一个文档（document），以及它所包含的属性（field）是如何存储和索引的 
+2. 查看mapping信息：`GET /bank/_mapping`
+
+## 二、索引管理操作
+
+1. 创建索引并指定映射
+
+   ```shell
+   PUT /my_index
+   {
+     "mappings": {
+       "properties": {
+         "age": {
+           "type": "integer"
+         },
+         "email": {
+           "type": "keyword" # 指定为keyword
+         },
+         "name": {
+           "type": "text" # 全文检索。保存时候分词，检索时候进行分词匹配
+         }
+       }
+     }
+   }
+   ```
+
+2. 查看映射
+
+   ```shell
+   GET /my_index
+   ```
+
+3. 添加新的字段映射
+
+   ```shell
+   PUT /my_index/_mapping
+   {
+     "properties": {
+       "employee-id": {
+         "type": "keyword",
+         "index": false # 字段不能被检索。检索
+       }
+     }
+   ```
+
+   - 该`index`选项控制字段值是否被索引。它接受`true` or`false`并默认为`true`。未编入索引的字段不可查询 
+
+4. 修改映射
+
+   - 不能更新映射，对于已经存在的字段映射不能更新
+   - 更新必须创建新的索引，进行数据迁移
+
+## 三、数据迁移
+
+1. [官方文档](https://www.elastic.co/guide/en/elasticsearch/reference/7.16/docs-reindex.html)
+
+2. 先创建new_twitter的正确映射 
+
+3. 然后使用如下方式进行数据迁移，把`twitter`迁移到`new_twitters` 
+
+   ```shell
+   POST _reindex
+   {
+     "source":{
+         "index":"twitter"
+      },
+     "dest":{
+         "index":"new_twitters"
+      }
+   }
+   ```
+
+# 七、分词
+
+## 一、分词概述
+
+1. 一个tokenizer（分词器）接收一个字符流，将之分割为独立的 tokens（词元，通常是独立的单词），然后输出 tokens流 
+
+2. 例如：whitespace tokenizer 遇到空白字符时分割文本。它会将文本`"Quick brown fox!"`分割为`[Quick,brown,fox!]`
+
+3. ElasticSearch提供了很多内置的分词器（标准分词器），可以用来构建 custom analyzers（自定义分词器）  
+
+4. [官方文档](https://www.elastic.co/guide/en/elasticsearch/reference/7.17/analysis.html)
+
+   ```shell
+   POST _analyze
+   {
+     "analyzer": "standard",
+     "text": "The 2 Brown-Foxes bone."
+   }
+   ```
+
+   ```
+   {
+     "tokens" : [
+       {
+         "token" : "the",
+         "start_offset" : 0,
+         "end_offset" : 3,
+         "type" : "<ALPHANUM>",
+         "position" : 0
+       },
+       {
+         "token" : "2",
+         "start_offset" : 4,
+         "end_offset" : 5,
+         "type" : "<NUM>",
+         "position" : 1
+       },
+       {
+         "token" : "brown",
+         "start_offset" : 6,
+         "end_offset" : 11,
+         "type" : "<ALPHANUM>",
+         "position" : 2
+       },
+       {
+         "token" : "foxes",
+         "start_offset" : 12,
+         "end_offset" : 17,
+         "type" : "<ALPHANUM>",
+         "position" : 3
+       },
+       {
+         "token" : "bone",
+         "start_offset" : 18,
+         "end_offset" : 22,
+         "type" : "<ALPHANUM>",
+         "position" : 4
+       }
+     ]
+   }
+   ```
+
+## 二、安装IK分词器插件
+
+1. [下载地址（需要对应版本号）](https://github.com/medcl/elasticsearch-analysis-ik/releases)
+
+2. 创建目录`elasticsearch/plugins/ik`，并在目录下解压，之后重启
+
+3. 在命令行执行`elasticsearch-plugin list`命令，确认ik插件安装成功
+
+4. 测试分词器
+
+   - 使用默认分词器
+
+     ```shell
+     GET _analyze
+     {
+        "text":"我是中国人"
+     }
+     ```
+
+   - 使用分词器
+
+     ```shell
+     GET _analyze
+     {
+        "analyzer": "ik_smart", 
+        "text":"我是中国人"
+     }
+     ```
+
+   - 使用另一个分词器
+
+     ```shell
+     GET _analyze
+     {
+        "analyzer": "ik_max_word", 
+        "text":"我是中国人"
+     }
+     ```
+
+## 三、自定义分词器
+
+1. 修改/elasticsearch/plugins/ik/config中的`IKAnalyzer.cfg.xml`
+
+2. 根据自己需求修改，如果是配置自己的扩展字典（本地），则在`ik/config`目录下新建文件 
+
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+   <properties>
+   	<comment>IK Analyzer 扩展配置</comment>
+   	<!--用户可以在这里配置自己的扩展字典 -->
+   	<entry key="ext_dict"></entry>
+   	 <!--用户可以在这里配置自己的扩展停止词字典-->
+   	<entry key="ext_stopwords"></entry>
+   	<!--用户可以在这里配置远程扩展字典 -->
+   	<entry key="remote_ext_dict">http://192.168.56.10/es/fenci.txt</entry> 
+   	<!--用户可以在这里配置远程扩展停止词字典-->
+   	<!-- <entry key="remote_ext_stopwords">words_location</entry> -->
+   </properties>
+   
+   ```
+
+3. 修改完成后，需要重启elasticsearch容器，否则修改不生效
+
+4. 更新完成后，es只会对于新增的数据用更新分词；历史数据是不会重新分词的，如果想要历史数据重新分词，需要执行：
+
+   ```shell
+   POST my_index/_update_by_query?conflicts=proceed
+   ```
+
+## 四、Elasticsearch-Rest-Client
+
+1. [java-rest-high](https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/java-rest-high.html)
+2. [安装](https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/java-rest-high-getting-started-initialization.html)
+3. [API](https://www.elastic.co/guide/en/elasticsearch/client/java-rest/current/java-rest-high-document-index.html)
+
